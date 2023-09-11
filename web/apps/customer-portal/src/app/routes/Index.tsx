@@ -1,5 +1,5 @@
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import { useGetCustomerQuery } from "@/api/customerApi";
+import { useGetCustomerQuery } from "@/api";
 import { Link, Alert, Grid, Paper, Stack, Typography, AlertTitle } from "@mui/material";
 import { Loading } from "@stustapay/components";
 import * as React from "react";

@@ -29,7 +29,7 @@
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// This can be used to network with other containers or the host.
-	// "forwardPorts": [5000, 5432],
+	"forwardPorts": [5000, 5432, 9002, 8081, 8082, 4200],
 
 	 "postCreateCommand": "./.devcontainer/setup-dev-env.sh"
 

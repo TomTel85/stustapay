@@ -210,6 +210,8 @@ class CustomerService(DBService):
             uid,
             pin,
         )
+
+        print(uid, pin)
         if customer is None:
             raise AccessDenied("Invalid user tag uid or pin")
 

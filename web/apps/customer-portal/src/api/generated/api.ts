@@ -1,3 +1,4 @@
+import { Order } from "../../../../../libs/models/src/lib";
 import { emptySplitApi as api } from "./emptyApi";
 export const addTagTypes = ["auth", "base", "sumup"] as const;
 const injectedRtkApi = api
@@ -6,6 +7,23 @@ const injectedRtkApi = api
   })
   .injectEndpoints({
     endpoints: (build) => ({
+      // login: build.mutation<LoginApiResponse, LoginApiArg>({
+      //   query: (queryArg) => {
+      //     const formData = new URLSearchParams();
+      //     formData.append("username", queryArg.bodyLoginAuthLoginPost.username);
+      //     formData.append("password", queryArg.bodyLoginAuthLoginPost.password);
+      
+      //     return {
+      //       url: `/auth/login`,
+      //       method: "POST",
+      //       body: formData.toString(),
+      //       headers: {
+      //         "Content-Type": "application/x-www-form-urlencoded",
+      //       },
+      //     };
+      //   },
+      //   invalidatesTags: ["auth"],
+      // }), 
       login: build.mutation<LoginApiResponse, LoginApiArg>({
         query: (queryArg) => ({ url: `/auth/login`, method: "POST", body: queryArg.bodyLoginAuthLoginPost }),
         invalidatesTags: ["auth"],
@@ -19,7 +37,11 @@ const injectedRtkApi = api
         providesTags: ["base"],
       }),
       getOrders: build.query<GetOrdersApiResponse, GetOrdersApiArg>({
-        query: () => ({ url: `/orders_with_bon` }),
+        query: () => ({ url: `/orders` }),
+        providesTags: ["base"],
+      }),
+      getOrdersWithBon: build.query<OrderWithBon[], void>({
+        query: () => "/orders_with_bon",
         providesTags: ["base"],
       }),
       updateCustomerInfo: build.mutation<UpdateCustomerInfoApiResponse, UpdateCustomerInfoApiArg>({
@@ -57,8 +79,10 @@ export type LogoutApiResponse = unknown;
 export type LogoutApiArg = void;
 export type GetCustomerApiResponse = /** status 200 Successful Response */ Customer;
 export type GetCustomerApiArg = void;
-export type GetOrdersApiResponse = /** status 200 Successful Response */ OrderWithBon[];
+export type GetOrdersApiResponse = /** status 200 Successful Response */ Order[];
 export type GetOrdersApiArg = void;
+export type GetOrdersWithBonApiResponse = /** status 200 Successful Response */ OrderWithBon[];
+export type GetOrdersWithBonApiArg = void;
 export type UpdateCustomerInfoApiResponse = /** status 204 Successful Response */ undefined;
 export type UpdateCustomerInfoApiArg = {
   customerBank: CustomerBank;
@@ -91,6 +115,7 @@ export type Customer = {
   balance: number;
   vouchers: number;
   user_tag_uid: number | null;
+  user_tag_uid_hex: string | null;
   user_tag_comment?: string | null;
   restriction: ProductRestriction | null;
   tag_history: UserTagHistoryEntry[];
@@ -154,6 +179,7 @@ export type LineItem = {
   tax_rate: number;
   item_id: number;
   total_tax: number;
+  total_price: number;
 };
 export type OrderWithBon = {
   id: number;
@@ -208,6 +234,7 @@ export const {
   useLogoutMutation,
   useGetCustomerQuery,
   useGetOrdersQuery,
+  useGetOrdersWithBonQuery,
   useUpdateCustomerInfoMutation,
   useUpdateCustomerInfoDonateAllMutation,
   useGetCustomerConfigQuery,

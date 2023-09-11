@@ -108,10 +108,29 @@ const injectedRtkApi = api
         query: (queryArg) => ({ url: `/tax-rates/${queryArg.taxRateName}`, method: "DELETE" }),
         invalidatesTags: ["tax-rates"],
       }),
+     // login: build.mutation<LoginApiResponse, LoginApiArg>({
+      //   query: (queryArg) => ({ url: `/auth/login`, method: "POST", body: queryArg.bodyLoginAuthLoginPost, headers: {
+      //     "Content-Type": "application/x-www-form-urlencoded", // Enforce the desired header
+      //   }  }),
+      //   invalidatesTags: ["auth"],
+      // }),
       login: build.mutation<LoginApiResponse, LoginApiArg>({
-        query: (queryArg) => ({ url: `/auth/login`, method: "POST", body: queryArg.bodyLoginAuthLoginPost }),
+        query: (queryArg) => {
+          const formData = new URLSearchParams();
+          formData.append("username", queryArg.bodyLoginAuthLoginPost.username);
+          formData.append("password", queryArg.bodyLoginAuthLoginPost.password);
+      
+          return {
+            url: `/auth/login`,
+            method: "POST",
+            body: formData.toString(),
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+          };
+        },
         invalidatesTags: ["auth"],
-      }),
+      }),      
       changePassword: build.mutation<ChangePasswordApiResponse, ChangePasswordApiArg>({
         query: (queryArg) => ({ url: `/auth/change-password`, method: "POST", body: queryArg.changePasswordPayload }),
         invalidatesTags: ["auth"],

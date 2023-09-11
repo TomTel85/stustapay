@@ -1,4 +1,4 @@
-import { useGetOrdersWithBonQuery } from "@/api/customerApi";
+import { useGetOrdersWithBonQuery, OrderWithBon } from "@/api";
 import {
   Accordion,
   AccordionDetails,
@@ -17,7 +17,7 @@ import { Loading } from "@stustapay/components";
 import * as React from "react";
 import { ExpandMore as ExpandMoreIcon } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
-import { Order } from "@stustapay/models";
+// import { Order, OrderWithBon } from "@stustapay/models";
 import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
 
 export const OrderList: React.FC = () => {
@@ -33,7 +33,7 @@ export const OrderList: React.FC = () => {
     return <Alert severity="error">{t("order.loadingError")}</Alert>;
   }
 
-  const orderTotal = (order: Order) => {
+  const orderTotal = (order: OrderWithBon) => {
     if (order.order_type !== "top_up") {
       return -order.total_price;
     }

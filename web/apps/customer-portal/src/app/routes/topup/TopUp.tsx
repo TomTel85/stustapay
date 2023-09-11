@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useGetCustomerQuery } from "@/api/customerApi";
+import { useGetCustomerQuery } from "@/api";
 import { Loading, NumericInput } from "@stustapay/components";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -9,7 +9,7 @@ import { Formik, FormikHelpers } from "formik";
 import { toFormikValidationSchema } from "@stustapay/utils";
 import { z } from "zod";
 import { usePublicConfig } from "@/hooks/usePublicConfig";
-import { useCreateCheckoutMutation, useUpdateCheckoutMutation } from "@/api/topupApi";
+import { useCreateCheckoutMutation, useCheckCheckoutMutation } from "@/api";
 import i18n from "@/i18n";
 import type { SumUpCard, SumUpResponseType } from "./SumUpCard";
 import { Cancel as CancelIcon, CheckCircle as CheckCircleIcon } from "@mui/icons-material";
@@ -80,7 +80,7 @@ export const TopUp: React.FC = () => {
 
   const { data: customer, error: customerError, isLoading: isCustomerLoading } = useGetCustomerQuery();
   const [createCheckout] = useCreateCheckoutMutation();
-  const [updateCheckout] = useUpdateCheckoutMutation();
+  const [updateCheckout] = useCheckCheckoutMutation();
 
   const sumupCard = React.useRef<any | undefined>(undefined);
   const handleSumupCardResp = React.useRef<any | undefined>(undefined);
@@ -106,7 +106,7 @@ export const TopUp: React.FC = () => {
 
       if (type === "error" || type === "success") {
         console.log("updating checkout");
-        updateCheckout({ checkoutId: state.checkoutId })
+        updateCheckout({ checkCheckoutPayload: {checkout_id: state.checkoutId }})
           .unwrap()
           .then((resp) => {
             console.log("update checkout returned with resp", resp);
@@ -171,7 +171,7 @@ export const TopUp: React.FC = () => {
 
   const onSubmit = (values: FormVal, { setSubmitting }: FormikHelpers<FormVal>) => {
     setSubmitting(true);
-    createCheckout(values)
+    createCheckout({createCheckoutPayload: values })
       .unwrap()
       .then((checkout) => {
         console.log("created checkout with reference", checkout);
