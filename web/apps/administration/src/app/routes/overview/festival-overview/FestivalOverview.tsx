@@ -10,8 +10,10 @@ import { VoucherStatsCard } from "./VoucherStatsCard";
 
 export const FestivalOverview: React.FC = () => {
   const { t } = useTranslation();
-  const [fromTimestamp, setFromTimestamp] = React.useState<null | DateTime>(null);
-  const [toTimestamp, setToTimestamp] = React.useState<null | DateTime>(null);
+  // Prefilling the initial values
+  const [fromTimestamp, setFromTimestamp] = React.useState<null | DateTime>(DateTime.now().minus({ months: 1 }));
+  const [toTimestamp, setToTimestamp] = React.useState<null | DateTime>(DateTime.now());
+
 
   return (
     <Grid container spacing={2}>
