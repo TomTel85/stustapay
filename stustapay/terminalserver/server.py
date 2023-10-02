@@ -35,7 +35,7 @@ class Api(SubCommand):
         self.logger = logging.getLogger(__name__)
 
         self.server = Server(
-            title="StuStaPay Terminal API",
+            title="TFPay Terminal API",
             config=config.terminalserver,
             cors=True,
         )

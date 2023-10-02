@@ -27,7 +27,7 @@ class Api(SubCommand):
         self.logger = logging.getLogger(__name__)
 
         self.server = Server(
-            title="StuStaPay Customer Portal API",
+            title="TFPay Customer Portal API",
             config=config.customer_portal,
             cors=True,
         )

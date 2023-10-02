@@ -1,4 +1,4 @@
-# StuStaPay Simulator
+# TFPay Simulator
 
 ## Setup
 - Set up core
