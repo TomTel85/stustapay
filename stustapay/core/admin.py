@@ -37,7 +37,7 @@ async def add_user(config: Config):
             display_name=display_name,
         )
         user = await user_service.create_user_no_auth(  # pylint: disable=missing-kwoa
-            new_user=new_user, password=password
+            new_user=new_user, password=password,node_id=0
         )
         print("created new user:")
         pprint(user)
