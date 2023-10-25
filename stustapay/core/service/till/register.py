@@ -3,7 +3,8 @@ from typing import Optional
 import asyncpg
 
 from stustapay.core.config import Config
-from stustapay.core.schema.account import ACCOUNT_CASH_VAULT, Account
+from stustapay.core.schema.account import Account, AccountType
+from stustapay.core.schema.terminal import Terminal
 from stustapay.core.schema.till import (
     CashRegister,
     CashRegisterStocking,
@@ -14,6 +15,7 @@ from stustapay.core.schema.tree import Node
 from stustapay.core.schema.user import CurrentUser, Privilege
 from stustapay.core.service.account import (
     get_account_by_id,
+    get_system_account_for_node,
     get_transport_account_by_tag_uid,
 )
 from stustapay.core.service.auth import AuthService
@@ -28,24 +30,59 @@ from stustapay.core.service.common.decorators import (
 from stustapay.core.service.common.error import InvalidArgument, NotFound
 from stustapay.core.service.order.booking import BookingIdentifier, book_money_transfer
 from stustapay.core.service.transaction import book_transaction
+from stustapay.core.service.tree.common import fetch_node
 from stustapay.framework.database import Connection
 
 
-async def get_cash_register(conn: Connection, register_id: int) -> Optional[CashRegister]:
+async def get_cash_register(conn: Connection, node: Node, register_id: int) -> Optional[CashRegister]:
     return await conn.fetch_maybe_one(
-        CashRegister, "select * from cash_register_with_cashier where id = $1", register_id
+        CashRegister,
+        "select * from cash_register_with_cashier where id = $1 and node_id = any($2)",
+        register_id,
+        node.ids_to_event_node,
     )
 
 
-async def create_cash_register(*, conn: Connection, node_id: int, new_register: NewCashRegister) -> CashRegister:
+async def create_cash_register(*, conn: Connection, node: Node, new_register: NewCashRegister) -> CashRegister:
+    # TODO: TREE visibility
     register_id = await conn.fetchval(
         "insert into cash_register (node_id, name) values ($1, $2) returning id",
-        node_id,
+        node.id,
         new_register.name,
     )
-    register = await get_cash_register(conn=conn, register_id=register_id)
+    register = await get_cash_register(conn=conn, node=node, register_id=register_id)
     assert register is not None
     return register
+
+
+async def _list_cash_register_stockings(*, conn: Connection, node: Node) -> list[CashRegisterStocking]:
+    return await conn.fetch_many(
+        CashRegisterStocking, "select * from cash_register_stocking where node_id = any($1)", node.ids_to_event_node
+    )
+
+
+async def _get_cash_register_stocking(
+    *, conn: Connection, node: Node, stocking_id: int
+) -> Optional[CashRegisterStocking]:
+    return await conn.fetch_maybe_one(
+        CashRegisterStocking,
+        "select * from cash_register_stocking where id = $1 and node_id = any($2)",
+        stocking_id,
+        node.ids_to_event_node,
+    )
+
+
+async def _list_cash_registers(*, conn: Connection, node: Node, hide_assigned_registers: bool) -> list[CashRegister]:
+    if hide_assigned_registers:
+        return await conn.fetch_many(
+            CashRegister,
+            "select * from cash_register_with_cashier where current_cashier_id is null and node_id = any($1)",
+            node.ids_to_event_node,
+        )
+    else:
+        return await conn.fetch_many(
+            CashRegister, "select * from cash_register_with_cashier where node_id = any($1)", node.ids_to_event_node
+        )
 
 
 class TillRegisterService(DBService):
@@ -53,26 +90,20 @@ class TillRegisterService(DBService):
         super().__init__(db_pool, config)
         self.auth_service = auth_service
 
-    @staticmethod
-    async def _list_cash_register_stockings(*, conn: Connection) -> list[CashRegisterStocking]:
-        return await conn.fetch_many(CashRegisterStocking, "select * from cash_register_stocking")
-
-    @staticmethod
-    async def _get_cash_register_stocking(*, conn: Connection, stocking_id: int) -> Optional[CashRegisterStocking]:
-        return await conn.fetch_maybe_one(
-            CashRegisterStocking, "select * from cash_register_stocking where id = $1", stocking_id
-        )
-
     @with_db_transaction
     @requires_user([Privilege.till_management])
     @requires_node()
-    async def list_cash_register_stockings_admin(self, *, conn: Connection) -> list[CashRegisterStocking]:
-        return await self._list_cash_register_stockings(conn=conn)
+    async def list_cash_register_stockings_admin(self, *, conn: Connection, node: Node) -> list[CashRegisterStocking]:
+        return await _list_cash_register_stockings(conn=conn, node=node)
 
     @with_db_transaction
     @requires_terminal()
-    async def list_cash_register_stockings_terminal(self, *, conn: Connection) -> list[CashRegisterStocking]:
-        return await self._list_cash_register_stockings(conn=conn)
+    async def list_cash_register_stockings_terminal(
+        self, *, conn: Connection, current_terminal: Terminal
+    ) -> list[CashRegisterStocking]:
+        node = await fetch_node(conn=conn, node_id=current_terminal.till.node_id)
+        assert node is not None
+        return await _list_cash_register_stockings(conn=conn, node=node)
 
     @with_db_transaction
     @requires_user([Privilege.till_management])
@@ -80,6 +111,7 @@ class TillRegisterService(DBService):
     async def create_cash_register_stockings(
         self, *, conn: Connection, node: Node, stocking: NewCashRegisterStocking
     ) -> CashRegisterStocking:
+        # TODO: TREE visibility
         stocking_id = await conn.fetchval(
             "insert into cash_register_stocking "
             "   (node_id, euro200, euro100, euro50, euro20, euro10, euro5, euro2, euro1, "
@@ -104,7 +136,7 @@ class TillRegisterService(DBService):
             stocking.variable_in_euro,
             stocking.name,
         )
-        updated = await self._get_cash_register_stocking(conn=conn, stocking_id=stocking_id)
+        updated = await _get_cash_register_stocking(conn=conn, node=node, stocking_id=stocking_id)
         assert updated is not None
         return updated
 
@@ -112,8 +144,9 @@ class TillRegisterService(DBService):
     @requires_user([Privilege.till_management])
     @requires_node()
     async def update_cash_register_stockings(
-        self, *, conn: Connection, stocking_id: int, stocking: NewCashRegisterStocking
+        self, *, conn: Connection, node: Node, stocking_id: int, stocking: NewCashRegisterStocking
     ) -> CashRegisterStocking:
+        # TODO: TREE visibility
         stocking_id = await conn.fetchval(
             "update cash_register_stocking set "
             "   euro200 = $1, euro100 = $2, euro50 = $3, euro20 = $4, euro10 = $5, euro5 = $6, euro2 = $7, "
@@ -139,7 +172,7 @@ class TillRegisterService(DBService):
         )
         if stocking_id is None:
             raise NotFound(element_typ="cash_register_stocking", element_id=str(stocking_id))
-        updated = await self._get_cash_register_stocking(conn=conn, stocking_id=stocking_id)
+        updated = await _get_cash_register_stocking(conn=conn, node=node, stocking_id=stocking_id)
         assert updated is not None
         return updated
 
@@ -147,33 +180,30 @@ class TillRegisterService(DBService):
     @requires_user([Privilege.till_management])
     @requires_node()
     async def delete_cash_register_stockings(self, *, conn: Connection, stocking_id: int):
+        # TODO: TREE visibility
         result = await conn.execute(
             "delete from cash_register_stocking where id = $1",
             stocking_id,
         )
         return result != "DELETE 0"
 
-    @staticmethod
-    async def _list_cash_registers(*, conn: Connection, hide_assigned_registers: bool) -> list[CashRegister]:
-        if hide_assigned_registers:
-            return await conn.fetch_many(
-                CashRegister, "select * from cash_register_with_cashier where current_cashier_id is null"
-            )
-        else:
-            return await conn.fetch_many(CashRegister, "select * from cash_register_with_cashier")
-
     @with_db_transaction
     @requires_terminal([Privilege.till_management])
     async def list_cash_registers_terminal(
-        self, *, conn: Connection, hide_assigned_registers=False
+        self, *, conn: Connection, current_terminal: Terminal, hide_assigned_registers=False
     ) -> list[CashRegister]:
-        return await self._list_cash_registers(conn=conn, hide_assigned_registers=hide_assigned_registers)
+        # TODO: TREE visibility
+        node = await fetch_node(conn=conn, node_id=current_terminal.till.id)
+        assert node is not None
+        return await _list_cash_registers(conn=conn, node=node, hide_assigned_registers=hide_assigned_registers)
 
     @with_db_transaction
     @requires_user([Privilege.till_management])
     @requires_node()
-    async def list_cash_registers_admin(self, *, conn: Connection, hide_assigned_registers=False) -> list[CashRegister]:
-        return await self._list_cash_registers(conn=conn, hide_assigned_registers=hide_assigned_registers)
+    async def list_cash_registers_admin(
+        self, *, conn: Connection, node: Node, hide_assigned_registers=False
+    ) -> list[CashRegister]:
+        return await _list_cash_registers(conn=conn, node=node, hide_assigned_registers=hide_assigned_registers)
 
     @with_db_transaction
     @requires_user([Privilege.till_management])
@@ -181,20 +211,22 @@ class TillRegisterService(DBService):
     async def create_cash_register(
         self, *, conn: Connection, node: Node, new_register: NewCashRegister
     ) -> CashRegister:
-        return await create_cash_register(conn=conn, node_id=node.id, new_register=new_register)
+        # TODO: TREE visibility
+        return await create_cash_register(conn=conn, node=node, new_register=new_register)
 
     @with_db_transaction
     @requires_user([Privilege.till_management])
     @requires_node()
     async def update_cash_register(
-        self, *, conn: Connection, register_id: int, register: NewCashRegister
+        self, *, conn: Connection, node: Node, register_id: int, register: NewCashRegister
     ) -> CashRegister:
+        # TODO: TREE visibility
         row = await conn.fetchrow(
             "update cash_register set name = $2 where id = $1 returning id, name", register_id, register.name
         )
         if row is None:
             raise NotFound(element_typ="cash_register", element_id=str(register_id))
-        r = await get_cash_register(conn=conn, register_id=register_id)
+        r = await get_cash_register(conn=conn, node=node, register_id=register_id)
         assert r is not None
         return r
 
@@ -202,6 +234,7 @@ class TillRegisterService(DBService):
     @requires_user([Privilege.till_management])
     @requires_node()
     async def delete_cash_register(self, *, conn: Connection, register_id: int):
+        # TODO: TREE visibility
         result = await conn.execute(
             "delete from cash_register where id = $1",
             register_id,
@@ -215,11 +248,15 @@ class TillRegisterService(DBService):
         *,
         conn: Connection,
         current_user: CurrentUser,
+        current_terminal: Terminal,
         stocking_id: int,
         cashier_tag_uid: int,
         cash_register_id: int,
     ) -> bool:
-        register_stocking = await self._get_cash_register_stocking(conn=conn, stocking_id=stocking_id)
+        # TODO: TREE visibility
+        node = await fetch_node(conn=conn, node_id=current_terminal.till.node_id)
+        assert node is not None
+        register_stocking = await _get_cash_register_stocking(conn=conn, node=node, stocking_id=stocking_id)
         if register_stocking is None:
             raise InvalidArgument("cash register stocking template does not exist")
 
@@ -241,10 +278,14 @@ class TillRegisterService(DBService):
 
         await conn.fetchval("update usr set cash_register_id = $1 where id = $2", cash_register_id, user_id)
 
+        node = await fetch_node(conn=conn, node_id=current_terminal.till.node_id)
+        assert node is not None
+        cash_vault_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.cash_vault)
+
         await book_transaction(
             conn=conn,
             description=f"cash register stock up using template: {register_stocking.name}",
-            source_account_id=ACCOUNT_CASH_VAULT,
+            source_account_id=cash_vault_acc.id,
             target_account_id=cashier_account_id,
             amount=register_stocking.total,
             conducting_user_id=current_user.id,
@@ -257,10 +298,12 @@ class TillRegisterService(DBService):
         self,
         *,
         conn: Connection,
+        node: Node,
         current_user: CurrentUser,
         cashier_tag_uid: int,
         amount: float,
     ):
+        # TODO: TREE visibility
         row = await conn.fetchrow(
             "select usr.cash_register_id, t.id as till_id, a.* "
             "from usr "
@@ -298,6 +341,7 @@ class TillRegisterService(DBService):
         # till_id is the till of the cashier, not the finanzorga!
         await book_money_transfer(
             conn=conn,
+            node=node,
             originating_user_id=current_user.id,
             till_id=row["till_id"],
             bookings=bookings,
@@ -308,8 +352,15 @@ class TillRegisterService(DBService):
     @with_retryable_db_transaction()
     @requires_terminal([Privilege.cashier_management])
     async def modify_transport_account_balance(
-        self, *, conn: Connection, current_user: CurrentUser, orga_tag_uid: int, amount: float
+        self,
+        *,
+        conn: Connection,
+        current_user: CurrentUser,
+        current_terminal: Terminal,
+        orga_tag_uid: int,
+        amount: float,
     ):
+        # TODO: TREE visibility
         transport_account = await get_transport_account_by_tag_uid(conn=conn, orga_tag_uid=orga_tag_uid)
         if transport_account is None:
             raise InvalidArgument("Transport account could not be found")
@@ -319,17 +370,23 @@ class TillRegisterService(DBService):
                 f"Insufficient balance on transport account. Current balance is {transport_account.balance}."
             )
 
+        node = await fetch_node(conn=conn, node_id=current_terminal.till.node_id)
+        assert node is not None
+        cash_vault_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.cash_vault)
+
         await book_transaction(
             conn=conn,
             description="transport account balance modification",
-            source_account_id=ACCOUNT_CASH_VAULT,
+            source_account_id=cash_vault_acc.id,
             target_account_id=transport_account.id,
             amount=amount,
             conducting_user_id=current_user.id,
         )
 
     @staticmethod
-    async def _transfer_cash_register(conn: Connection, source_cashier_id: int, target_cashier_id: int) -> CashRegister:
+    async def _transfer_cash_register(
+        conn: Connection, node: Node, source_cashier_id: int, target_cashier_id: int
+    ) -> CashRegister:
         if source_cashier_id == target_cashier_id:
             raise InvalidArgument("Cashiers must differ")
 
@@ -381,7 +438,7 @@ class TillRegisterService(DBService):
             target_cashier_id,
             source_cashier["cash_register_id"],
         )
-        reg = await get_cash_register(conn=conn, register_id=source_cashier["cash_register_id"])
+        reg = await get_cash_register(conn=conn, node=node, register_id=source_cashier["cash_register_id"])
         assert reg is not None
         return reg
 
@@ -389,19 +446,23 @@ class TillRegisterService(DBService):
     @requires_user([Privilege.cashier_management])
     @requires_node()
     async def transfer_cash_register_admin(
-        self, *, conn: Connection, source_cashier_id: int, target_cashier_id: int
+        self, *, conn: Connection, node: Node, source_cashier_id: int, target_cashier_id: int
     ) -> CashRegister:
+        # TODO: TREE visibility
         return await self._transfer_cash_register(
-            conn=conn, source_cashier_id=source_cashier_id, target_cashier_id=target_cashier_id
+            conn=conn, node=node, source_cashier_id=source_cashier_id, target_cashier_id=target_cashier_id
         )
 
     @with_retryable_db_transaction()
     @requires_terminal()
     async def transfer_cash_register_terminal(
-        self, *, conn: Connection, source_cashier_tag_uid: int, target_cashier_tag_uid: int
+        self, *, conn: Connection, current_terminal: Terminal, source_cashier_tag_uid: int, target_cashier_tag_uid: int
     ):
+        node = await fetch_node(conn=conn, node_id=current_terminal.till.node_id)
+        assert node is not None
+        # TODO: TREE visibility
         source_cashier_id = await conn.fetchval("select id from usr where user_tag_uid = $1", source_cashier_tag_uid)
         target_cashier_id = await conn.fetchval("select id from usr where user_tag_uid = $1", target_cashier_tag_uid)
         return await self._transfer_cash_register(
-            conn=conn, source_cashier_id=source_cashier_id, target_cashier_id=target_cashier_id
+            conn=conn, node=node, source_cashier_id=source_cashier_id, target_cashier_id=target_cashier_id
         )

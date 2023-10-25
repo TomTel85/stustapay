@@ -1,14 +1,7 @@
 # pylint: disable=attribute-defined-outside-init,unexpected-keyword-arg,missing-kwoa
 import uuid
 
-from stustapay.core.schema.account import (
-    ACCOUNT_CASH_ENTRY,
-    ACCOUNT_CASH_EXIT,
-    ACCOUNT_CASH_SALE_SOURCE,
-    ACCOUNT_DEPOSIT,
-    ACCOUNT_SALE_EXIT,
-    ACCOUNT_SUMUP,
-)
+from stustapay.core.schema.account import AccountType
 from stustapay.core.schema.order import (
     Button,
     CompletedTicketSale,
@@ -21,13 +14,7 @@ from stustapay.core.schema.order import (
     PaymentMethod,
     PendingSale,
 )
-from stustapay.core.schema.product import (
-    TICKET_PRODUCT_ID,
-    TICKET_U16_PRODUCT_ID,
-    TICKET_U18_PRODUCT_ID,
-    NewProduct,
-    ProductRestriction,
-)
+from stustapay.core.schema.product import NewProduct, ProductRestriction
 from stustapay.core.schema.ticket import NewTicket
 from stustapay.core.schema.till import (
     NewCashRegister,
@@ -91,7 +78,7 @@ class OrderLogicTest(TerminalTestCase):
                 name="Helles 0,5l",
                 price=3,
                 fixed_price=True,
-                tax_name="ust",
+                tax_rate_id=self.tax_rate_ust.id,
                 target_account_id=None,
                 price_in_vouchers=1,
                 is_locked=True,
@@ -105,7 +92,7 @@ class OrderLogicTest(TerminalTestCase):
                 name="Helles 1l",
                 price=5,
                 fixed_price=True,
-                tax_name="ust",
+                tax_rate_id=self.tax_rate_ust.id,
                 target_account_id=None,
                 price_in_vouchers=2,
                 is_locked=True,
@@ -119,8 +106,8 @@ class OrderLogicTest(TerminalTestCase):
                 name="Pfand",
                 price=2,
                 fixed_price=True,
-                tax_name="none",
-                target_account_id=ACCOUNT_DEPOSIT,
+                tax_rate_id=self.tax_rate_none.id,
+                target_account_id=None,
                 is_locked=True,
                 is_returnable=True,
                 restrictions=[],
@@ -140,24 +127,35 @@ class OrderLogicTest(TerminalTestCase):
         )
         self.ticket = await self.ticket_service.create_ticket(
             token=self.admin_token,
-            ticket=NewTicket(name="Eintritt mit 8€", product_id=TICKET_PRODUCT_ID, initial_top_up_amount=8),
+            ticket=NewTicket(
+                name="Eintritt mit 8€",
+                price=12,
+                tax_rate_id=self.tax_rate_none.id,
+                initial_top_up_amount=8,
+                restrictions=[],
+                is_locked=True,
+            ),
         )
         self.ticket_u18 = await self.ticket_service.create_ticket(
             token=self.admin_token,
             ticket=NewTicket(
                 name="Eintritt U18",
-                product_id=TICKET_U18_PRODUCT_ID,
+                price=12,
+                tax_rate_id=self.tax_rate_none.id,
                 initial_top_up_amount=8,
-                restriction=ProductRestriction.under_18,
+                is_locked=True,
+                restrictions=[ProductRestriction.under_18],
             ),
         )
         self.ticket_u16 = await self.ticket_service.create_ticket(
             token=self.admin_token,
             ticket=NewTicket(
                 name="Eintritt U16",
-                product_id=TICKET_U16_PRODUCT_ID,
+                price=12,
+                tax_rate_id=self.tax_rate_none.id,
                 initial_top_up_amount=0,
-                restriction=ProductRestriction.under_16,
+                is_locked=True,
+                restrictions=[ProductRestriction.under_16],
             ),
         )
 
@@ -236,16 +234,17 @@ class OrderLogicTest(TerminalTestCase):
         self.assertIsNotNone(completed_sale)
         order: Order = await self.order_service.get_order(token=self.admin_token, order_id=completed_sale.id)
         self.assertIsNotNone(order)
-        await self._assert_account_balance(account_id=ACCOUNT_SALE_EXIT, expected_balance=2 * self.beer_product.price)
-        await self._assert_account_balance(account_id=ACCOUNT_DEPOSIT, expected_balance=2 * self.deposit_product.price)
+        await self._assert_system_account_balance(
+            account_type=AccountType.sale_exit,
+            expected_balance=2 * self.beer_product.price + 2 * self.deposit_product.price,
+        )
 
         # test that we can cancel this order
         await self.order_service.cancel_sale(token=self.terminal_token, order_id=order.id)
         customer = await self.till_service.get_customer(token=self.terminal_token, customer_tag_uid=self.customer_uid)
         self.assertIsNotNone(customer)
         self.assertEqual(starting_balance, customer.balance)
-        await self._assert_account_balance(account_id=ACCOUNT_SALE_EXIT, expected_balance=0)
-        await self._assert_account_balance(account_id=ACCOUNT_DEPOSIT, expected_balance=0)
+        await self._assert_system_account_balance(account_type=AccountType.sale_exit, expected_balance=0)
 
         # after logging out a user with bookings the z_nr should not be incremented
         await self.till_service.logout_user(token=self.terminal_token)
@@ -287,8 +286,7 @@ class OrderLogicTest(TerminalTestCase):
         await self.db_conn.execute(
             "update account set balance = $1 where id = $2", start_balance, self.customer_account_id
         )
-        sale_exit_start_balance = await self._get_account_balance(account_id=ACCOUNT_SALE_EXIT)
-        deposit_start_balance = await self._get_account_balance(account_id=ACCOUNT_DEPOSIT)
+        sale_exit_start_balance = await self._get_system_account_balance(AccountType.sale_exit)
         new_sale = NewSale(
             uuid=uuid.uuid4(),
             buttons=[
@@ -314,15 +312,13 @@ class OrderLogicTest(TerminalTestCase):
         await self._assert_account_balance(
             account_id=self.customer_account_id, expected_balance=completed_sale.new_balance
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_SALE_EXIT, expected_balance=sale_exit_start_balance + self.beer_product.price * 5
-        )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_DEPOSIT, expected_balance=deposit_start_balance - self.deposit_product.price
+        await self._assert_system_account_balance(
+            account_type=AccountType.sale_exit,
+            expected_balance=sale_exit_start_balance + self.beer_product.price * 5 - self.deposit_product.price,
         )
 
     async def test_basic_sale_flow_with_only_deposit_return(self):
-        deposit_start_balance = await self._get_account_balance(account_id=ACCOUNT_DEPOSIT)
+        sale_exit_start_balance = await self._get_system_account_balance(AccountType.sale_exit)
         new_sale = NewSale(
             uuid=uuid.uuid4(),
             buttons=[
@@ -345,8 +341,9 @@ class OrderLogicTest(TerminalTestCase):
         await self._assert_account_balance(
             account_id=self.customer_account_id, expected_balance=completed_sale.new_balance
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_DEPOSIT, expected_balance=deposit_start_balance - 3 * self.deposit_product.price
+        await self._assert_system_account_balance(
+            account_type=AccountType.sale_exit,
+            expected_balance=sale_exit_start_balance - 3 * self.deposit_product.price,
         )
 
     async def test_deposit_returns_cannot_exceed_account_limit(self):
@@ -453,8 +450,10 @@ class OrderLogicTest(TerminalTestCase):
 
     async def test_topup_cash_order_flow(self):
         cash_drawer_start_balance = await self._get_account_balance(account_id=self.cashier.cashier_account_id)
-        cash_sale_source_start_balance = await self._get_account_balance(account_id=ACCOUNT_CASH_SALE_SOURCE)
-        cash_entry_start_balance = await self._get_account_balance(account_id=ACCOUNT_CASH_ENTRY)
+        cash_sale_source_start_balance = await self._get_system_account_balance(
+            account_type=AccountType.cash_topup_source
+        )
+        cash_entry_start_balance = await self._get_system_account_balance(account_type=AccountType.cash_entry)
 
         new_topup = NewTopUp(
             uuid=uuid.uuid4(),
@@ -474,11 +473,11 @@ class OrderLogicTest(TerminalTestCase):
         await self._assert_account_balance(
             account_id=self.cashier.cashier_account_id, expected_balance=cash_drawer_start_balance + 20
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_CASH_ENTRY, expected_balance=cash_entry_start_balance - 20
+        await self._assert_system_account_balance(
+            account_type=AccountType.cash_entry, expected_balance=cash_entry_start_balance - 20
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_CASH_SALE_SOURCE, expected_balance=cash_sale_source_start_balance - 20
+        await self._assert_system_account_balance(
+            account_type=AccountType.cash_topup_source, expected_balance=cash_sale_source_start_balance - 20
         )
 
     async def test_topup_exceeding_max_limit_fails(self):
@@ -512,7 +511,7 @@ class OrderLogicTest(TerminalTestCase):
         self.assertEqual(completed_topup.old_balance, START_BALANCE)
         self.assertEqual(completed_topup.amount, 20)
         self.assertEqual(completed_topup.new_balance, START_BALANCE + completed_topup.amount)
-        await self._assert_account_balance(account_id=ACCOUNT_SUMUP, expected_balance=-20)
+        await self._assert_system_account_balance(account_type=AccountType.sumup_entry, expected_balance=-20)
 
     async def test_only_payout_till_profiles_can_payout(self):
         profile = await self.till_service.profile.create_profile(
@@ -539,8 +538,10 @@ class OrderLogicTest(TerminalTestCase):
 
     async def test_cash_pay_out_flow_no_amount(self):
         cash_drawer_start_balance = await self._get_account_balance(account_id=self.cashier.cashier_account_id)
-        cash_sale_source_start_balance = await self._get_account_balance(account_id=ACCOUNT_CASH_SALE_SOURCE)
-        cash_exit_start_balance = await self._get_account_balance(account_id=ACCOUNT_CASH_EXIT)
+        cash_sale_source_start_balance = await self._get_system_account_balance(
+            account_type=AccountType.cash_topup_source
+        )
+        cash_exit_start_balance = await self._get_system_account_balance(account_type=AccountType.cash_exit)
 
         new_pay_out = NewPayOut(uuid=uuid.uuid4(), customer_tag_uid=self.customer_uid)
         pending_pay_out = await self.order_service.check_pay_out(token=self.terminal_token, new_pay_out=new_pay_out)
@@ -555,17 +556,19 @@ class OrderLogicTest(TerminalTestCase):
         await self._assert_account_balance(
             expected_balance=cash_drawer_start_balance - START_BALANCE, account_id=self.cashier.cashier_account_id
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_CASH_SALE_SOURCE, expected_balance=cash_sale_source_start_balance + START_BALANCE
+        await self._assert_system_account_balance(
+            account_type=AccountType.cash_topup_source, expected_balance=cash_sale_source_start_balance + START_BALANCE
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_CASH_EXIT, expected_balance=cash_exit_start_balance + START_BALANCE
+        await self._assert_system_account_balance(
+            account_type=AccountType.cash_exit, expected_balance=cash_exit_start_balance + START_BALANCE
         )
 
     async def test_cash_pay_out_flow_with_amount(self):
         cash_drawer_start_balance = await self._get_account_balance(account_id=self.cashier.cashier_account_id)
-        cash_sale_source_start_balance = await self._get_account_balance(account_id=ACCOUNT_CASH_SALE_SOURCE)
-        cash_exit_start_balance = await self._get_account_balance(account_id=ACCOUNT_CASH_EXIT)
+        cash_sale_source_start_balance = await self._get_system_account_balance(
+            account_type=AccountType.cash_topup_source
+        )
+        cash_exit_start_balance = await self._get_system_account_balance(account_type=AccountType.cash_exit)
 
         new_pay_out = NewPayOut(uuid=uuid.uuid4(), customer_tag_uid=self.customer_uid, amount=-2 * START_BALANCE)
         with self.assertRaises(NotEnoughFundsException):
@@ -585,10 +588,12 @@ class OrderLogicTest(TerminalTestCase):
         await self._assert_account_balance(
             account_id=self.cashier.cashier_account_id, expected_balance=cash_drawer_start_balance - 20
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_CASH_SALE_SOURCE, expected_balance=cash_sale_source_start_balance + 20
+        await self._assert_system_account_balance(
+            account_type=AccountType.cash_topup_source, expected_balance=cash_sale_source_start_balance + 20
         )
-        await self._assert_account_balance(account_id=ACCOUNT_CASH_EXIT, expected_balance=cash_exit_start_balance + 20)
+        await self._assert_system_account_balance(
+            account_type=AccountType.cash_exit, expected_balance=cash_exit_start_balance + 20
+        )
 
     async def test_only_ticket_till_profiles_can_sell_tickets(self):
         profile = await self.till_service.profile.create_profile(
@@ -616,9 +621,11 @@ class OrderLogicTest(TerminalTestCase):
 
     async def test_ticket_flow_with_one_tag(self):
         cash_drawer_start_balance = await self._get_account_balance(account_id=self.cashier.cashier_account_id)
-        cash_sale_source_start_balance = await self._get_account_balance(account_id=ACCOUNT_CASH_SALE_SOURCE)
-        cash_entry_start_balance = await self._get_account_balance(account_id=ACCOUNT_CASH_ENTRY)
-        sale_exit_start_balance = await self._get_account_balance(account_id=ACCOUNT_SALE_EXIT)
+        cash_sale_source_start_balance = await self._get_system_account_balance(
+            account_type=AccountType.cash_topup_source
+        )
+        cash_entry_start_balance = await self._get_system_account_balance(account_type=AccountType.cash_entry)
+        sale_exit_start_balance = await self._get_system_account_balance(account_type=AccountType.cash_exit)
 
         unused_tag_uid = await self.db_conn.fetchval(
             "insert into user_tag (node_id, uid) values ($1, 12345) returning uid", self.node_id
@@ -649,20 +656,21 @@ class OrderLogicTest(TerminalTestCase):
             account_id=self.cashier.cashier_account_id,
             expected_balance=cash_drawer_start_balance + completed_ticket.total_price,
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_CASH_ENTRY, expected_balance=cash_entry_start_balance - completed_ticket.total_price
+        await self._assert_system_account_balance(
+            account_type=AccountType.cash_entry,
+            expected_balance=cash_entry_start_balance - completed_ticket.total_price,
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_CASH_SALE_SOURCE,
+        await self._assert_system_account_balance(
+            account_type=AccountType.cash_topup_source,
             expected_balance=cash_sale_source_start_balance + -completed_ticket.total_price,
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_SALE_EXIT, expected_balance=sale_exit_start_balance + self.ticket.price
+        await self._assert_system_account_balance(
+            account_type=AccountType.sale_exit, expected_balance=sale_exit_start_balance + self.ticket.price
         )
 
     async def test_ticket_flow_with_initial_topup_sumup(self):
-        sumup_start_balance = await self._get_account_balance(account_id=ACCOUNT_SUMUP)
-        sale_exit_start_balance = await self._get_account_balance(account_id=ACCOUNT_SALE_EXIT)
+        sumup_start_balance = await self._get_system_account_balance(account_type=AccountType.sumup_entry)
+        sale_exit_start_balance = await self._get_system_account_balance(account_type=AccountType.sale_exit)
         unused_tag_uid = await self.db_conn.fetchval(
             "insert into user_tag (node_id, uid) values ($1, 12345) returning uid", self.node_id
         )
@@ -688,18 +696,20 @@ class OrderLogicTest(TerminalTestCase):
 
         customer = await self.till_service.get_customer(token=self.terminal_token, customer_tag_uid=unused_tag_uid)
         self.assertEqual(self.ticket.initial_top_up_amount, customer.balance)
-        await self._assert_account_balance(
-            account_id=ACCOUNT_SUMUP, expected_balance=sumup_start_balance - completed_ticket.total_price
+        await self._assert_system_account_balance(
+            account_type=AccountType.sumup_entry, expected_balance=sumup_start_balance - completed_ticket.total_price
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_SALE_EXIT, expected_balance=sale_exit_start_balance + self.ticket.price
+        await self._assert_system_account_balance(
+            account_type=AccountType.sale_exit, expected_balance=sale_exit_start_balance + self.ticket.price
         )
 
     async def test_ticket_flow_with_multiple_tags_invalid_booking(self):
         cash_drawer_start_balance = await self._get_account_balance(account_id=self.cashier.cashier_account_id)
-        cash_sale_source_start_balance = await self._get_account_balance(account_id=ACCOUNT_CASH_SALE_SOURCE)
-        cash_entry_start_balance = await self._get_account_balance(account_id=ACCOUNT_CASH_ENTRY)
-        sale_exit_start_balance = await self._get_account_balance(account_id=ACCOUNT_SALE_EXIT)
+        cash_sale_source_start_balance = await self._get_system_account_balance(
+            account_type=AccountType.cash_topup_source
+        )
+        cash_entry_start_balance = await self._get_system_account_balance(account_type=AccountType.cash_entry)
+        sale_exit_start_balance = await self._get_system_account_balance(account_type=AccountType.sale_exit)
 
         tag_uid = await self.db_conn.fetchval(
             "insert into user_tag (node_id, uid) values ($1, 12345) returning uid", self.node_id
@@ -739,9 +749,9 @@ class OrderLogicTest(TerminalTestCase):
             expected_balance=cash_drawer_start_balance + completed_ticket.total_price,
         )
         expected_line_items = {
-            TICKET_PRODUCT_ID: 2,
-            TICKET_U18_PRODUCT_ID: 1,
-            TICKET_U16_PRODUCT_ID: 1,
+            self.ticket.id: 2,
+            self.ticket_u18.id: 1,
+            self.ticket_u16.id: 1,
         }
         for product_id, quantity in expected_line_items.items():
             items = [line_item for line_item in completed_ticket.line_items if line_item.product.id == product_id]
@@ -765,15 +775,16 @@ class OrderLogicTest(TerminalTestCase):
             (await self.till_service.get_customer(token=self.terminal_token, customer_tag_uid=u16_tag_uid)).balance,
         )
 
-        await self._assert_account_balance(
-            account_id=ACCOUNT_CASH_ENTRY, expected_balance=cash_entry_start_balance - completed_ticket.total_price
+        await self._assert_system_account_balance(
+            account_type=AccountType.cash_entry,
+            expected_balance=cash_entry_start_balance - completed_ticket.total_price,
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_CASH_SALE_SOURCE,
+        await self._assert_system_account_balance(
+            account_type=AccountType.cash_topup_source,
             expected_balance=cash_sale_source_start_balance - completed_ticket.total_price,
         )
-        await self._assert_account_balance(
-            account_id=ACCOUNT_SALE_EXIT,
+        await self._assert_system_account_balance(
+            account_type=AccountType.sale_exit,
             expected_balance=sale_exit_start_balance
             + 2 * self.ticket.price
             + self.ticket_u18.price

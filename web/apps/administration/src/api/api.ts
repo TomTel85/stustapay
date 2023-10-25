@@ -1,9 +1,9 @@
 import { createEntityAdapter } from "@reduxjs/toolkit";
 import {
-  Account,
+  AccountRead,
   CashRegister,
   CashRegisterStocking,
-  Cashier,
+  CashierRead,
   CashierShift,
   ConfigEntry,
   Order,
@@ -16,24 +16,24 @@ import {
   TillLayout,
   TillProfile,
   Tse,
-  User,
+  UserRead,
   UserRole,
-  UserTagDetail,
+  UserTagDetailRead,
   api as generatedApi,
 } from "./generated/api";
 import { convertEntityAdaptorSelectors, generateCacheKeys } from "./utils";
 
 export * from "./generated/api";
 
-const userAdapter = createEntityAdapter<User>({
+const userAdapter = createEntityAdapter<UserRead>({
   sortComparer: (a, b) => a.login.toLowerCase().localeCompare(b.login.toLowerCase()),
 });
 
-const accountAdapter = createEntityAdapter<Account>({
+const accountAdapter = createEntityAdapter<AccountRead>({
   sortComparer: (a, b) => (a.name?.toLowerCase() ?? "").localeCompare(b.name?.toLowerCase() ?? ""),
 });
 
-const userTagAdapter = createEntityAdapter<UserTagDetail>({
+const userTagAdapter = createEntityAdapter<UserTagDetailRead>({
   sortComparer: (a, b) =>
     (a.user_tag_uid_hex?.toLowerCase() ?? "").localeCompare(b.user_tag_uid_hex?.toLowerCase() ?? ""),
 });
@@ -46,7 +46,7 @@ const productAdapter = createEntityAdapter<Product>({
   sortComparer: (a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
 });
 
-const cashierAdapter = createEntityAdapter<Cashier>({
+const cashierAdapter = createEntityAdapter<CashierRead>({
   sortComparer: (a, b) => a.display_name.toLowerCase().localeCompare(b.display_name.toLowerCase()),
 });
 
@@ -62,7 +62,6 @@ const configAdaptor = createEntityAdapter<ConfigEntry>({
 const orderAdapter = createEntityAdapter<Order>({ sortComparer: (a, b) => b.id - a.id });
 
 const taxRateAdapter = createEntityAdapter<TaxRate>({
-  selectId: (taxRate) => taxRate.name,
   sortComparer: (a, b) => a.name.localeCompare(b.name),
 });
 
@@ -129,7 +128,7 @@ export const api = generatedApi.enhanceEndpoints({
       providesTags: (result) => generateCacheKeys("tax-rates", result),
     },
     getTaxRate: {
-      providesTags: (result, error, arg) => [{ type: "tax-rates", id: arg.taxRateName }],
+      providesTags: (result, error, arg) => [{ type: "tax-rates", id: arg.taxRateId }],
     },
     listTickets: {
       providesTags: (result) => generateCacheKeys("tickets", result),
