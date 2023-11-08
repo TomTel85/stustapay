@@ -7,4 +7,5 @@ export * from "./TaxRateSelect";
 export * from "./ThemeSelect";
 export * from "./TillLayoutSelect";
 export * from "./TillProfileSelect";
+export * from "./TillTseSelect";
 export * from "./UserSelect";

@@ -220,10 +220,13 @@ class TSEWrapper:
         # listed as assigned to the TSE in the database.
         # These tills need to be unregistered from the TSE.
         extra_tills = set(self._tills)
-        for row in await conn.fetch("select id from till where tse_id=$1", self.tse_id):
+        #TO DO FISKALY ONLY
+        for row in await conn.fetch("select id,fiskaly_uuid from till where tse_id=$1", self.tse_id):
+        #for row in await conn.fetch("select id from till where tse_id=$1", self.tse_id):
+            till_uuid = str(row["fiskaly_uuid"])
             till = str(row["id"])
-            extra_tills.discard(till)  # no need to unregister this till
-            if till not in self._tills:
+            extra_tills.discard(till_uuid)  # no need to unregister this till
+            if till_uuid not in self._tills:
                 # let's register the till with the TSE!
                 await self._till_add(conn, till)
         # Unregister all of the extra tills
@@ -319,7 +322,6 @@ class TSEWrapper:
             till_id = str(
                 next_sig["till_id"]
             )  # use till_id converted to string as TSE ClientID to satisfy naming constraints
-
             await conn.execute(
                 """
                 update
@@ -426,12 +428,21 @@ class TSEWrapper:
     async def _sign(self, conn: Connection, signing_request: TSESignatureRequest) -> typing.Optional[TSESignature]:
         assert self._tse_handler is not None
         # must be called when the TSE is connected and operational.
-        if signing_request.till_id not in self._tills:
+        #todo only if fiskaly
+        fiskaly_uuid = await conn.fetchval("select fiskaly_uuid from till where id=$1", int(signing_request.till_id))
+        if str(fiskaly_uuid) not in self._tills:
             LOGGER.info(f"registering new ClientID {signing_request.till_id} with TSE {self.name}")
             await self._till_add(conn, signing_request.till_id)
         start = time.monotonic()
         try:
-            result = await self._tse_handler.sign(signing_request)
+            #TO DO only if FISKALY
+            await self._tse_handler.authenticate_admin()
+            client = await self._tse_handler.retrieve_client(client_id=str(fiskaly_uuid))
+            print(client)
+            if client["state"] != "REGISTERED":
+                await self._tse_handler.register_client_id(client_id=str(fiskaly_uuid))
+            await self._tse_handler.logout_admin()
+            result = await self._tse_handler.sign(signing_request,fiskaly_uuid)  
         except asyncio.TimeoutError:
             LOGGER.warning("WARNING: TSE request timeout")
             return None
@@ -447,7 +458,12 @@ class TSEWrapper:
     async def _till_add(self, conn: Connection, till):
         assert self._tse_handler is not None
         LOGGER.info(f"{self.name!r}: adding till {till!r}")
-        await self._tse_handler.register_client_id(str(till))
+        #TO DO only if FISKALY
+        fiskaly_uuid = await conn.fetchval("select fiskaly_uuid from till where id=$1", int(till))
+        await self._tse_handler.authenticate_admin()
+        await self._tse_handler.register_client_id(client_id=str(fiskaly_uuid))
+        #TO DO only if FISKALY
+        await self._tse_handler.logout_admin()
         # get z_nr
         z_nr = await conn.fetchval("select z_nr from till where id=$1", int(till))
         await conn.execute(
@@ -461,7 +477,9 @@ class TSEWrapper:
     async def _till_remove(self, conn: Connection, till):
         assert self._tse_handler is not None
         LOGGER.info(f"{self.name!r}: removing till {till!r}")
-        await self._tse_handler.deregister_client_id(str(till))
+        await self._tse_handler.authenticate_admin()
+        await self._tse_handler.deregister_client_id(client_id=str(till))
+        await self._tse_handler.logout_admin()
         if str(till).isnumeric():
             z_nr = await conn.fetchval("select z_nr from till where id=$1", int(till))
         else:

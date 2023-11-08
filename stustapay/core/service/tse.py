@@ -30,14 +30,15 @@ class TseService(DBService):
     async def create_tse(self, *, conn: Connection, node: Node, new_tse: NewTse) -> Tse:
         # TODO: TREE visibility
         tse_id = await conn.fetchval(
-            "insert into tse (node_id, name, serial, ws_url, ws_timeout, password, status) "
-            "values ($1, $2, $3, $4, $5, $6, 'new') returning id",
+            "insert into tse (node_id, name, serial, ws_url, ws_timeout, password, type, status) "
+            "values ($1, $2, $3, $4, $5, $6, $7, 'new') returning id",
             node.id,
             new_tse.name,
             new_tse.serial,
             new_tse.ws_url,
             new_tse.ws_timeout,
             new_tse.password,
+            new_tse.type.value
         )
         return await conn.fetch_one(Tse, "select * from tse where id = $1", tse_id)
 
@@ -47,11 +48,12 @@ class TseService(DBService):
     async def update_tse(self, *, conn: Connection, tse_id: int, updated_tse: UpdateTse) -> Tse:
         # TODO: TREE visibility
         tse_id = await conn.fetchval(
-            "update tse set name = $1, ws_timeout = $2, ws_url = $3, password = $4 where id = $5 returning id",
+            "update tse set name = $1, ws_timeout = $2, ws_url = $3, password = $4, type = $5 where id = $6 returning id",
             updated_tse.name,
             updated_tse.ws_timeout,
             updated_tse.ws_url,
             updated_tse.password,
+            updated_tse.type.value,
             tse_id,
         )
         if tse_id is None:

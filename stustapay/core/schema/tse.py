@@ -13,10 +13,12 @@ class TseStatus(enum.Enum):
 
 class TseType(enum.Enum):
     diebold_nixdorf = "diebold_nixdorf"
+    fiskaly = "fiskaly"
 
 
 class UpdateTse(BaseModel):
     name: str
+    type: TseType
     ws_url: str
     ws_timeout: float
     password: str
