@@ -20,7 +20,7 @@ def get_tse_handler(tse: Tse, config: Config) -> Callable[[], TSEHandler]:
     if tse.type == TseType.fiskaly:
         print(tse.serial)
         cfg = FiskalyCloudTSEConfig(
-            serial_number=tse.serial, password=tse.password, tss_id="1a463a31-242a-4a96-a444-1e64a9cabf9c", base_url=config.fiskaly.base_url, api_key=config.fiskaly.api_key, api_secret=config.fiskaly.api_secret, 
+            serial_number=tse.serial, password=tse.password, tss_id=tse.serial, base_url=config.fiskaly.base_url, api_key=config.fiskaly.api_key, api_secret=config.fiskaly.api_secret, 
         )
         return lambda: FiskalyCloudTSE(tse.name, cfg)
 
