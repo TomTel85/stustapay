@@ -45,6 +45,11 @@ class CustomerPortalApiConfig(HTTPServerConfig):
 class BonConfig(BaseModel):
     output_folder: Path
 
+class FiskalyConfig(BaseModel):
+    base_url: str
+    api_key: str
+    api_secret: str
+
 
 class Config(BaseModel):
     database: DatabaseConfig
@@ -53,6 +58,7 @@ class Config(BaseModel):
     terminalserver: TerminalApiConfig
     customer_portal: CustomerPortalApiConfig
     bon: BonConfig
+    fiskaly: FiskalyConfig
 
 
 def read_config(config_path: os.PathLike) -> Config:

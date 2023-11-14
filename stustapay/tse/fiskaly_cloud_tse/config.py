@@ -1,14 +1,9 @@
 """
 configuration options for fiskaly cloud tses
 """
+from stustapay.core.config import FiskalyConfig
 
-from pydantic import BaseModel
-
-
-class FiskalyCloudTSEConfig(BaseModel):
-    base_url: str
-    api_key: str
-    api_secret: str
+class FiskalyCloudTSEConfig(FiskalyConfig):
     serial_number: str
     tss_id: str
     password: str
