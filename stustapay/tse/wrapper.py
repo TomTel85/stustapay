@@ -13,6 +13,7 @@ from stustapay.core.util import create_task_protected
 from stustapay.framework.database import Connection
 
 from .handler import TSEHandler, TSESignature, TSESignatureRequest
+from .fiskaly_cloud_tse.handler import FiskalyCloudTSE
 from .kassenbeleg_v1 import Kassenbeleg_V1
 
 LOGGER = logging.getLogger(__name__)
@@ -428,21 +429,22 @@ class TSEWrapper:
     async def _sign(self, conn: Connection, signing_request: TSESignatureRequest) -> typing.Optional[TSESignature]:
         assert self._tse_handler is not None
         # must be called when the TSE is connected and operational.
-        #todo only if fiskaly
-        fiskaly_uuid = await conn.fetchval("select fiskaly_uuid from till where id=$1", int(signing_request.till_id))
-        if str(fiskaly_uuid) not in self._tills:
+        till_id = signing_request.till_id
+        if(isinstance(self._tse_handler, FiskalyCloudTSE)):
+            till_id = await conn.fetchval("select fiskaly_uuid from till where id=$1", int(signing_request.till_id))
+        if str(till_id) not in self._tills:
             LOGGER.info(f"registering new ClientID {signing_request.till_id} with TSE {self.name}")
             await self._till_add(conn, signing_request.till_id)
         start = time.monotonic()
         try:
-            #TO DO only if FISKALY
-            await self._tse_handler.authenticate_admin()
-            client = await self._tse_handler.retrieve_client(client_id=str(fiskaly_uuid))
-            print(client)
-            if client["state"] != "REGISTERED":
-                await self._tse_handler.register_client_id(client_id=str(fiskaly_uuid))
-            await self._tse_handler.logout_admin()
-            result = await self._tse_handler.sign(signing_request,fiskaly_uuid)  
+            if(isinstance(self._tse_handler, FiskalyCloudTSE)):
+                await self._tse_handler.authenticate_admin()
+                client = await self._tse_handler.retrieve_client(client_id=str(till_id))
+                print(client)
+                if client["state"] != "REGISTERED":
+                    await self._tse_handler.register_client_id(client_id=str(till_id))
+                await self._tse_handler.logout_admin()
+            result = await self._tse_handler.sign(signing_request,till_id)  
         except asyncio.TimeoutError:
             LOGGER.warning("WARNING: TSE request timeout")
             return None
@@ -458,12 +460,14 @@ class TSEWrapper:
     async def _till_add(self, conn: Connection, till):
         assert self._tse_handler is not None
         LOGGER.info(f"{self.name!r}: adding till {till!r}")
-        #TO DO only if FISKALY
-        fiskaly_uuid = await conn.fetchval("select fiskaly_uuid from till where id=$1", int(till))
-        await self._tse_handler.authenticate_admin()
-        await self._tse_handler.register_client_id(client_id=str(fiskaly_uuid))
-        #TO DO only if FISKALY
-        await self._tse_handler.logout_admin()
+
+        if(isinstance(self._tse_handler, FiskalyCloudTSE)):
+            fiskaly_uuid = await conn.fetchval("select fiskaly_uuid from till where id=$1", int(till))
+            await self._tse_handler.authenticate_admin()
+            await self._tse_handler.register_client_id(client_id=str(fiskaly_uuid))
+            await self._tse_handler.logout_admin()
+        else:
+            await self._tse_handler.register_client_id(client_id=str(till))
         # get z_nr
         z_nr = await conn.fetchval("select z_nr from till where id=$1", int(till))
         await conn.execute(
@@ -477,9 +481,14 @@ class TSEWrapper:
     async def _till_remove(self, conn: Connection, till):
         assert self._tse_handler is not None
         LOGGER.info(f"{self.name!r}: removing till {till!r}")
-        await self._tse_handler.authenticate_admin()
-        await self._tse_handler.deregister_client_id(client_id=str(till))
-        await self._tse_handler.logout_admin()
+        if(isinstance(self._tse_handler, FiskalyCloudTSE)):
+            fiskaly_uuid = await conn.fetchval("select fiskaly_uuid from till where id=$1", int(till))
+            await self._tse_handler.authenticate_admin()
+            await self._tse_handler.deregister_client_id(client_id=str(till))
+            await self._tse_handler.logout_admin()
+        else:
+            await self._tse_handler.deregister_client_id(str(till))    
+            
         if str(till).isnumeric():
             z_nr = await conn.fetchval("select z_nr from till where id=$1", int(till))
         else:
