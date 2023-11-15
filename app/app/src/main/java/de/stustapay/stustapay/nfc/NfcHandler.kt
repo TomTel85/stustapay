@@ -4,6 +4,7 @@ import android.app.Activity
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.TagLostException
+import android.nfc.tech.MifareUltralight
 import android.os.Bundle
 import de.stustapay.stustapay.model.NfcScanFailure
 import de.stustapay.stustapay.model.NfcScanRequest
@@ -47,18 +48,35 @@ class NfcHandler @Inject constructor(
         )
     }
 
+    private fun bytesToHexNpe(bytes: ByteArray?): String {
+        if (bytes == null) return ""
+        val result = StringBuffer()
+        for (b in bytes) result.append(
+            ((b.toInt() and 0xff) + 0x100).toString(16).substring(1)
+        )
+        return result.toString()
+    }
+
+    fun hexToULong(hex: String): ULong {
+        return hex.toULong(16)
+    }
+
+
+
     private fun handleTag(tag: Tag) {
         if (!tag.techList.contains("android.nfc.tech.NfcA")) {
             dataSource.setScanResult(NfcScanResult.Fail(NfcScanFailure.Incompatible("device has no NfcA support")))
             return
         }
-
-        val mfUlAesTag = MifareUltralightAES(tag)
-
+        //Todo handle aes and normal
+        //val mfUlAesTag = MifareUltralightAES(tag)
+        val mfu = MifareUltralight.get(tag)
         try {
-            handleMfUlAesTag(mfUlAesTag)
+        //    handleMfUlAesTag(mfUlAesTag)
+              handleMfUlTag(mfu)
 
-            mfUlAesTag.close()
+              mfu.close()
+        //    mfUlAesTag.close()
         } catch (e: TagLostException) {
             dataSource.setScanResult(
                 NfcScanResult.Fail(
@@ -111,6 +129,27 @@ class NfcHandler @Inject constructor(
         }
     }
 
+    private fun handleMfUlTag(mfu: MifareUltralight) {
+
+        val req = dataSource.getScanRequest()
+        if (req != null) {
+            when (req) {
+                is NfcScanRequest.FastRead -> {
+                    mfu.connect()
+                    if (mfu.isConnected) {
+                        val id = bytesToHexNpe(mfu.tag.id)
+                        dataSource.setScanResult(NfcScanResult.FastRead(hexToULong(id)))
+                    }
+
+                }
+                else ->  {
+                    mfu.connect()
+
+                }
+            }
+        }
+
+    }
     private fun handleMfUlAesTag(tag: MifareUltralightAES) {
         val req = dataSource.getScanRequest()
         if (req != null) {
