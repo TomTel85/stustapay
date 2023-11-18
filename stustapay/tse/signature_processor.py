@@ -54,7 +54,7 @@ class SignatureProcessor:
             async with self.db_pool.acquire() as conn:
                 tses_in_db = await conn.fetch_many(Tse, "select * from tse")
                 for tse_in_db in tses_in_db:
-                    factory = get_tse_handler(tse_in_db)
+                    factory = get_tse_handler(tse_in_db, config=self.config)
                     tse = TSEWrapper(name=tse_in_db.name, factory_function=factory)
                     tse.start(self.db_pool)
                     aes.push_async_callback(tse.stop)
