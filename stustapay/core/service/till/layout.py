@@ -17,6 +17,7 @@ from stustapay.core.service.common.decorators import (
     requires_user,
     with_db_transaction,
 )
+from stustapay.core.service.common.error import NotFound
 from stustapay.core.service.user import AuthService
 from stustapay.framework.database import Connection
 
@@ -78,7 +79,7 @@ class TillLayoutService(DBService):
     @with_db_transaction
     @requires_user([Privilege.node_administration])
     @requires_node()
-    async def update_button(self, *, conn: Connection, button_id: int, button: NewTillButton) -> Optional[TillButton]:
+    async def update_button(self, *, conn: Connection, button_id: int, button: NewTillButton) -> TillButton:
         # TODO: TREE visibility
         row = await conn.fetchrow(
             "update till_button set name = $2 where id = $1 returning id, name",
@@ -86,7 +87,7 @@ class TillLayoutService(DBService):
             button.name,
         )
         if row is None:
-            return None
+            raise NotFound(element_typ="button", element_id=button_id)
         await conn.execute("delete from till_button_product where button_id = $1", button_id)
         for product_id in button.product_ids:
             await conn.execute(
@@ -159,17 +160,20 @@ class TillLayoutService(DBService):
     @with_db_transaction
     @requires_user([Privilege.node_administration])
     @requires_node()
-    async def update_layout(self, *, conn: Connection, layout_id: int, layout: NewTillLayout) -> Optional[TillLayout]:
+    async def update_layout(
+        self, *, conn: Connection, node: Node, layout_id: int, layout: NewTillLayout
+    ) -> Optional[TillLayout]:
         # TODO: TREE visibility
-        till_layout = await conn.fetch_maybe_one(
-            TillLayout,
-            "update till_layout set name = $2, description = $3 where id = $1 returning id, name, description",
+        till_layout_id = await conn.fetchval(
+            "update till_layout set name = $2, description = $3 where id = $1 and node_id = any($4) returning id",
             layout_id,
             layout.name,
             layout.description,
+            node.ids_to_event_node,
         )
-        if till_layout is None:
+        if till_layout_id is None:
             return None
+        till_layout = await _fetch_till_layout(conn=conn, node=node, layout_id=layout_id)
         await conn.execute("delete from till_layout_to_button where layout_id = $1", layout_id)
         if layout.button_ids:
             for idx, button_id in enumerate(layout.button_ids):

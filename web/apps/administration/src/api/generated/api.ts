@@ -96,6 +96,15 @@ const injectedRtkApi = api
         }),
         invalidatesTags: ["users"],
       }),
+      changeUserPassword: build.mutation<ChangeUserPasswordApiResponse, ChangeUserPasswordApiArg>({
+        query: (queryArg) => ({
+          url: `/users/${queryArg.userId}/change-password`,
+          method: "POST",
+          body: queryArg.changeUserPasswordPayload,
+          params: { node_id: queryArg.nodeId },
+        }),
+        invalidatesTags: ["users"],
+      }),
       listUserRoles: build.query<ListUserRolesApiResponse, ListUserRolesApiArg>({
         query: (queryArg) => ({ url: `/user-roles`, params: { node_id: queryArg.nodeId } }),
         providesTags: ["user-roles"],
@@ -666,6 +675,10 @@ const injectedRtkApi = api
         query: (queryArg) => ({ url: `/tree/events/${queryArg.nodeId}/settings` }),
         providesTags: ["tree"],
       }),
+      generateTestBon: build.mutation<GenerateTestBonApiResponse, GenerateTestBonApiArg>({
+        query: (queryArg) => ({ url: `/tree/events/${queryArg.nodeId}/generate-test-bon`, method: "POST" }),
+        invalidatesTags: ["tree"],
+      }),
     }),
     overrideExisting: false,
   });
@@ -719,6 +732,12 @@ export type DeleteUserApiResponse = /** status 200 Successful Response */ any;
 export type DeleteUserApiArg = {
   userId: number;
   nodeId?: number | null;
+};
+export type ChangeUserPasswordApiResponse = /** status 200 Successful Response */ UserRead;
+export type ChangeUserPasswordApiArg = {
+  userId: number;
+  nodeId?: number | null;
+  changeUserPasswordPayload: ChangeUserPasswordPayload;
 };
 export type ListUserRolesApiResponse = /** status 200 Successful Response */ NormalizedListUserRoleInt;
 export type ListUserRolesApiArg = {
@@ -1137,6 +1156,10 @@ export type GetRestrictedEventSettingsApiResponse = /** status 200 Successful Re
 export type GetRestrictedEventSettingsApiArg = {
   nodeId: number;
 };
+export type GenerateTestBonApiResponse = /** status 200 Successful Response */ any;
+export type GenerateTestBonApiArg = {
+  nodeId: number;
+};
 export type ProductRestriction = "under_16" | "under_18";
 export type ProductType = "discount" | "topup" | "payout" | "money_transfer" | "imbalance" | "user_defined" | "ticket";
 export type Product = {
@@ -1224,6 +1247,9 @@ export type UpdateUserPayload = {
   role_names: string[];
   description?: string | null;
   user_tag_uid_hex?: string | null;
+};
+export type ChangeUserPasswordPayload = {
+  new_password: string;
 };
 export type Privilege =
   | "node_administration"
@@ -1933,6 +1959,7 @@ export type CreateSepaXmlPayload = {
   execution_date: string;
   batch_size?: number | null;
 };
+export type Language = "en-US" | "de-DE";
 export type PublicEventSettings = {
   currency_identifier: string;
   max_account_balance: number;
@@ -1951,6 +1978,13 @@ export type PublicEventSettings = {
   sepa_sender_iban: string;
   sepa_description: string;
   sepa_allowed_country_codes: string[];
+  translation_texts?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
+  id: number;
+  languages: Language[];
 };
 export type ObjectType =
   | "user"
@@ -1958,11 +1992,11 @@ export type ObjectType =
   | "ticket"
   | "till"
   | "user_role"
-  | "account"
   | "order"
-  | "user_tags"
   | "tax_rate"
-  | "tse";
+  | "user_tag"
+  | "tse"
+  | "account";
 export type Node = {
   id: number;
   parent: number;
@@ -1973,10 +2007,10 @@ export type Node = {
   parent_ids: number[];
   event_node_id: number | null;
   parents_until_event_node: number[] | null;
-  allowed_objects_at_node: ObjectType[];
-  computed_allowed_objects_at_node: ObjectType[];
-  allowed_objects_in_subtree: ObjectType[];
-  computed_allowed_objects_in_subtree: ObjectType[];
+  forbidden_objects_at_node: ObjectType[];
+  computed_forbidden_objects_at_node: ObjectType[];
+  forbidden_objects_in_subtree: ObjectType[];
+  computed_forbidden_objects_in_subtree: ObjectType[];
   children: Node[];
 };
 export type UpdateEvent = {
@@ -2000,6 +2034,11 @@ export type UpdateEvent = {
   sepa_sender_iban: string;
   sepa_description: string;
   sepa_allowed_country_codes: string[];
+  translation_texts?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
 };
 export type RestrictedEventSettings = {
   sumup_api_key?: string;
@@ -2022,6 +2061,13 @@ export type RestrictedEventSettings = {
   sepa_sender_iban: string;
   sepa_description: string;
   sepa_allowed_country_codes: string[];
+  translation_texts?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
+  id: number;
+  languages: Language[];
 };
 export const {
   useListProductsQuery,
@@ -2038,6 +2084,7 @@ export const {
   useLazyGetUserQuery,
   useUpdateUserMutation,
   useDeleteUserMutation,
+  useChangeUserPasswordMutation,
   useListUserRolesQuery,
   useLazyListUserRolesQuery,
   useCreateUserRoleMutation,
@@ -2157,4 +2204,5 @@ export const {
   useUpdateEventMutation,
   useGetRestrictedEventSettingsQuery,
   useLazyGetRestrictedEventSettingsQuery,
+  useGenerateTestBonMutation,
 } = injectedRtkApi;
