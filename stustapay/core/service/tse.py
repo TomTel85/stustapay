@@ -1,7 +1,7 @@
 import asyncpg
 
 from stustapay.core.config import Config
-from stustapay.core.schema.tree import Node
+from stustapay.core.schema.tree import Node, ObjectType
 from stustapay.core.schema.tse import NewTse, Tse, UpdateTse
 from stustapay.core.schema.user import Privilege
 from stustapay.core.service.auth import AuthService
@@ -25,10 +25,9 @@ class TseService(DBService):
         self.auth_service = auth_service
 
     @with_db_transaction
+    @requires_node(object_types=[ObjectType.tse], event_only=True)
     @requires_user([Privilege.node_administration])
-    @requires_node()
     async def create_tse(self, *, conn: Connection, node: Node, new_tse: NewTse) -> Tse:
-        # TODO: TREE visibility
         tse_id = await conn.fetchval(
             "insert into tse (node_id, name, serial, ws_url, ws_timeout, password, type, status) "
             "values ($1, $2, $3, $4, $5, $6, $7, 'new') returning id",
@@ -43,25 +42,26 @@ class TseService(DBService):
         return await conn.fetch_one(Tse, "select * from tse where id = $1", tse_id)
 
     @with_db_transaction
+    @requires_node(object_types=[ObjectType.tse], event_only=True)
     @requires_user([Privilege.node_administration])
-    @requires_node()
-    async def update_tse(self, *, conn: Connection, tse_id: int, updated_tse: UpdateTse) -> Tse:
-        # TODO: TREE visibility
+    async def update_tse(self, *, conn: Connection, node: Node, tse_id: int, updated_tse: UpdateTse) -> Tse:
         tse_id = await conn.fetchval(
-            "update tse set name = $1, ws_timeout = $2, ws_url = $3, password = $4, type = $5 where id = $6 returning id",
+            "update tse set name = $1, ws_timeout = $2, ws_url = $3, password = $4, type = $5 "
+            "where id = $6 and node_id = any($7) returning id",
             updated_tse.name,
             updated_tse.ws_timeout,
             updated_tse.ws_url,
             updated_tse.password,
             updated_tse.type.value,
             tse_id,
+            node.ids_to_event_node,
         )
         if tse_id is None:
             raise NotFound(element_typ="tse", element_id=str(tse_id))
         return await conn.fetch_one(Tse, "select * from tse where id = $1", tse_id)
 
-    @with_db_transaction
+    @with_db_transaction(read_only=True)
+    @requires_node(event_only=True)
     @requires_user([Privilege.node_administration])
-    @requires_node()
     async def list_tses(self, *, conn: Connection, node: Node) -> list[Tse]:
         return await list_tses(conn=conn, node=node)
