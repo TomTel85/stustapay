@@ -9,7 +9,6 @@ import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { z } from "zod";
 
-
 export const TabPayout: React.FC<{ nodeId: number; eventSettings: RestrictedEventSettings }> = ({
   nodeId,
   eventSettings,
@@ -17,14 +16,13 @@ export const TabPayout: React.FC<{ nodeId: number; eventSettings: RestrictedEven
   const { t } = useTranslation();
   const [updateEvent] = useUpdateEventMutation();
 
-  const handleSubmit = (values: PayoutSettings, { setSubmitting, resetForm }: FormikHelpers<PayoutSettings>) => {
+  const handleSubmit = (values: PayoutSettings, { setSubmitting }: FormikHelpers<PayoutSettings>) => {
     setSubmitting(true);
     updateEvent({ nodeId: nodeId, updateEvent: { ...eventSettings, ...values } })
       .unwrap()
       .then(() => {
         setSubmitting(false);
         toast.success(t("settings.updateEventSucessful"));
-        resetForm();
       })
       .catch((err) => {
         setSubmitting(false);
@@ -35,13 +33,13 @@ export const TabPayout: React.FC<{ nodeId: number; eventSettings: RestrictedEven
     sepa_enabled: z.boolean(),
     sepa_sender_name: z.string(),
     sepa_sender_iban: z.string().superRefine((val, ctx) => {
-        if (!iban.isValid(val)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: t("settings.payout.ibanNotValid"),
-          });
-        }
-      }),
+      if (!iban.isValid(val)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t("settings.payout.ibanNotValid"),
+        });
+      }
+    }),
     sepa_description: z.string(),
     sepa_allowed_country_codes: z.array(z.string()).min(1),
   });
@@ -52,6 +50,7 @@ export const TabPayout: React.FC<{ nodeId: number; eventSettings: RestrictedEven
       initialValues={eventSettings as PayoutSettings} // TODO: figure out a way of not needing to cast this
       onSubmit={handleSubmit}
       validationSchema={toFormikValidationSchema(PayoutSettingsSchema)}
+      enableReinitialize={true}
     >
       {(formik) => (
         <Form onSubmit={formik.handleSubmit}>
@@ -64,9 +63,9 @@ export const TabPayout: React.FC<{ nodeId: number; eventSettings: RestrictedEven
               label={t("settings.payout.sepa_allowed_country_codes")}
               multiple={true}
               name="sepa_allowed_country_codes"
+              checkboxes={true}
               formik={formik}
               options={Object.keys(iban.countries)}
-              getOptionKey={(iban) => iban}
               formatOption={(iban) => iban}
             />
 

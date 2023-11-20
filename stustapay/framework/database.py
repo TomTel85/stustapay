@@ -282,7 +282,7 @@ async def apply_revisions(
     revisions = SchemaRevision.revisions_from_dir(revision_path)
 
     async with db_pool.acquire() as conn:
-        async with conn.transaction():
+        async with conn.transaction(isolation="serializable"):
             await conn.execute(f"create table if not exists {REVISION_TABLE} (version text not null primary key)")
 
             curr_revision = await conn.fetchval(f"select version from {REVISION_TABLE} limit 1")
@@ -333,6 +333,7 @@ class Connection(asyncpg.Connection):
 
 async def init_connection(conn: Connection):
     await conn.set_type_codec("json", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
+    await conn.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
 
 
 async def create_db_pool(cfg: DatabaseConfig, n_connections=10) -> asyncpg.Pool:

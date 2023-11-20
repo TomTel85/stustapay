@@ -3,6 +3,7 @@ export const addTagTypes = [
   "products",
   "users",
   "user-roles",
+  "user-to-roles",
   "tax-rates",
   "auth",
   "tills",
@@ -96,6 +97,15 @@ const injectedRtkApi = api
         }),
         invalidatesTags: ["users"],
       }),
+      changeUserPassword: build.mutation<ChangeUserPasswordApiResponse, ChangeUserPasswordApiArg>({
+        query: (queryArg) => ({
+          url: `/users/${queryArg.userId}/change-password`,
+          method: "POST",
+          body: queryArg.changeUserPasswordPayload,
+          params: { node_id: queryArg.nodeId },
+        }),
+        invalidatesTags: ["users"],
+      }),
       listUserRoles: build.query<ListUserRolesApiResponse, ListUserRolesApiArg>({
         query: (queryArg) => ({ url: `/user-roles`, params: { node_id: queryArg.nodeId } }),
         providesTags: ["user-roles"],
@@ -125,6 +135,28 @@ const injectedRtkApi = api
           params: { node_id: queryArg.nodeId },
         }),
         invalidatesTags: ["user-roles"],
+      }),
+      listUserToRole: build.query<ListUserToRoleApiResponse, ListUserToRoleApiArg>({
+        query: (queryArg) => ({ url: `/user-to-roles`, params: { node_id: queryArg.nodeId } }),
+        providesTags: ["user-to-roles"],
+      }),
+      associatedUserToRole: build.mutation<AssociatedUserToRoleApiResponse, AssociatedUserToRoleApiArg>({
+        query: (queryArg) => ({
+          url: `/user-to-roles`,
+          method: "POST",
+          body: queryArg.newUserToRole,
+          params: { node_id: queryArg.nodeId },
+        }),
+        invalidatesTags: ["user-to-roles"],
+      }),
+      deassociatedUserToRole: build.mutation<DeassociatedUserToRoleApiResponse, DeassociatedUserToRoleApiArg>({
+        query: (queryArg) => ({
+          url: `/user-to-roles`,
+          method: "DELETE",
+          body: queryArg.newUserToRole,
+          params: { node_id: queryArg.nodeId },
+        }),
+        invalidatesTags: ["user-to-roles"],
       }),
       listTaxRates: build.query<ListTaxRatesApiResponse, ListTaxRatesApiArg>({
         query: (queryArg) => ({ url: `/tax-rates`, params: { node_id: queryArg.nodeId } }),
@@ -666,6 +698,10 @@ const injectedRtkApi = api
         query: (queryArg) => ({ url: `/tree/events/${queryArg.nodeId}/settings` }),
         providesTags: ["tree"],
       }),
+      generateTestBon: build.mutation<GenerateTestBonApiResponse, GenerateTestBonApiArg>({
+        query: (queryArg) => ({ url: `/tree/events/${queryArg.nodeId}/generate-test-bon`, method: "POST" }),
+        invalidatesTags: ["tree"],
+      }),
     }),
     overrideExisting: false,
   });
@@ -697,48 +733,68 @@ export type DeleteProductApiArg = {
 };
 export type ListUsersApiResponse = /** status 200 Successful Response */ NormalizedListUserInt;
 export type ListUsersApiArg = {
-  nodeId?: number | null;
+  nodeId: number;
 };
 export type CreateUserApiResponse = /** status 200 Successful Response */ UserRead;
 export type CreateUserApiArg = {
-  nodeId?: number | null;
+  nodeId: number;
   createUserPayload: CreateUserPayload;
 };
 export type GetUserApiResponse = /** status 200 Successful Response */ UserRead;
 export type GetUserApiArg = {
   userId: number;
-  nodeId?: number | null;
+  nodeId: number;
 };
 export type UpdateUserApiResponse = /** status 200 Successful Response */ UserRead;
 export type UpdateUserApiArg = {
   userId: number;
-  nodeId?: number | null;
+  nodeId: number;
   updateUserPayload: UpdateUserPayload;
 };
 export type DeleteUserApiResponse = /** status 200 Successful Response */ any;
 export type DeleteUserApiArg = {
   userId: number;
-  nodeId?: number | null;
+  nodeId: number;
+};
+export type ChangeUserPasswordApiResponse = /** status 200 Successful Response */ UserRead;
+export type ChangeUserPasswordApiArg = {
+  userId: number;
+  nodeId: number;
+  changeUserPasswordPayload: ChangeUserPasswordPayload;
 };
 export type ListUserRolesApiResponse = /** status 200 Successful Response */ NormalizedListUserRoleInt;
 export type ListUserRolesApiArg = {
-  nodeId?: number | null;
+  nodeId: number;
 };
 export type CreateUserRoleApiResponse = /** status 200 Successful Response */ UserRole;
 export type CreateUserRoleApiArg = {
-  nodeId?: number | null;
+  nodeId: number;
   newUserRole: NewUserRole;
 };
 export type UpdateUserRoleApiResponse = /** status 200 Successful Response */ UserRole;
 export type UpdateUserRoleApiArg = {
   userRoleId: number;
-  nodeId?: number | null;
+  nodeId: number;
   updateUserRolePrivilegesPayload: UpdateUserRolePrivilegesPayload;
 };
 export type DeleteUserRoleApiResponse = /** status 200 Successful Response */ any;
 export type DeleteUserRoleApiArg = {
   userRoleId: number;
-  nodeId?: number | null;
+  nodeId: number;
+};
+export type ListUserToRoleApiResponse = /** status 200 Successful Response */ UserToRole[];
+export type ListUserToRoleApiArg = {
+  nodeId: number;
+};
+export type AssociatedUserToRoleApiResponse = /** status 200 Successful Response */ UserToRole;
+export type AssociatedUserToRoleApiArg = {
+  nodeId: number;
+  newUserToRole: NewUserToRole;
+};
+export type DeassociatedUserToRoleApiResponse = /** status 200 Successful Response */ any;
+export type DeassociatedUserToRoleApiArg = {
+  nodeId: number;
+  newUserToRole: NewUserToRole;
 };
 export type ListTaxRatesApiResponse = /** status 200 Successful Response */ NormalizedListTaxRateInt;
 export type ListTaxRatesApiArg = {
@@ -1137,6 +1193,10 @@ export type GetRestrictedEventSettingsApiResponse = /** status 200 Successful Re
 export type GetRestrictedEventSettingsApiArg = {
   nodeId: number;
 };
+export type GenerateTestBonApiResponse = /** status 200 Successful Response */ any;
+export type GenerateTestBonApiArg = {
+  nodeId: number;
+};
 export type ProductRestriction = "under_16" | "under_18";
 export type ProductType = "discount" | "topup" | "payout" | "money_transfer" | "imbalance" | "user_defined" | "ticket";
 export type Product = {
@@ -1185,7 +1245,6 @@ export type User = {
   login: string;
   display_name: string;
   user_tag_uid?: number | null;
-  role_names: string[];
   description?: string | null;
   node_id: number;
   transport_account_id?: number | null;
@@ -1196,7 +1255,6 @@ export type UserRead = {
   login: string;
   display_name: string;
   user_tag_uid?: number | null;
-  role_names: string[];
   description?: string | null;
   node_id: number;
   transport_account_id?: number | null;
@@ -1213,7 +1271,6 @@ export type NormalizedListUserInt = {
 export type CreateUserPayload = {
   login: string;
   display_name: string;
-  role_names: string[];
   description?: string | null;
   user_tag_uid_hex?: string | null;
   password?: string | null;
@@ -1221,9 +1278,11 @@ export type CreateUserPayload = {
 export type UpdateUserPayload = {
   login: string;
   display_name: string;
-  role_names: string[];
   description?: string | null;
   user_tag_uid_hex?: string | null;
+};
+export type ChangeUserPasswordPayload = {
+  new_password: string;
 };
 export type Privilege =
   | "node_administration"
@@ -1255,6 +1314,15 @@ export type NewUserRole = {
 export type UpdateUserRolePrivilegesPayload = {
   is_privileged: boolean;
   privileges: Privilege[];
+};
+export type UserToRole = {
+  user_id: number;
+  role_id: number;
+  node_id: number;
+};
+export type NewUserToRole = {
+  user_id: number;
+  role_id: number;
 };
 export type TaxRate = {
   name: string;
@@ -1932,6 +2000,7 @@ export type CreateSepaXmlPayload = {
   execution_date: string;
   batch_size?: number | null;
 };
+export type Language = "en-US" | "de-DE";
 export type PublicEventSettings = {
   currency_identifier: string;
   max_account_balance: number;
@@ -1950,6 +2019,13 @@ export type PublicEventSettings = {
   sepa_sender_iban: string;
   sepa_description: string;
   sepa_allowed_country_codes: string[];
+  translation_texts?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
+  id: number;
+  languages: Language[];
 };
 export type ObjectType =
   | "user"
@@ -1957,11 +2033,11 @@ export type ObjectType =
   | "ticket"
   | "till"
   | "user_role"
-  | "account"
-  | "order"
-  | "user_tags"
   | "tax_rate"
-  | "tse";
+  | "user_tag"
+  | "tse"
+  | "order"
+  | "account";
 export type Node = {
   id: number;
   parent: number;
@@ -1972,10 +2048,10 @@ export type Node = {
   parent_ids: number[];
   event_node_id: number | null;
   parents_until_event_node: number[] | null;
-  allowed_objects_at_node: ObjectType[];
-  computed_allowed_objects_at_node: ObjectType[];
-  allowed_objects_in_subtree: ObjectType[];
-  computed_allowed_objects_in_subtree: ObjectType[];
+  forbidden_objects_at_node: ObjectType[];
+  computed_forbidden_objects_at_node: ObjectType[];
+  forbidden_objects_in_subtree: ObjectType[];
+  computed_forbidden_objects_in_subtree: ObjectType[];
   children: Node[];
 };
 export type UpdateEvent = {
@@ -1999,6 +2075,11 @@ export type UpdateEvent = {
   sepa_sender_iban: string;
   sepa_description: string;
   sepa_allowed_country_codes: string[];
+  translation_texts?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
 };
 export type RestrictedEventSettings = {
   sumup_api_key?: string;
@@ -2021,6 +2102,13 @@ export type RestrictedEventSettings = {
   sepa_sender_iban: string;
   sepa_description: string;
   sepa_allowed_country_codes: string[];
+  translation_texts?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
+  id: number;
+  languages: Language[];
 };
 export const {
   useListProductsQuery,
@@ -2037,11 +2125,16 @@ export const {
   useLazyGetUserQuery,
   useUpdateUserMutation,
   useDeleteUserMutation,
+  useChangeUserPasswordMutation,
   useListUserRolesQuery,
   useLazyListUserRolesQuery,
   useCreateUserRoleMutation,
   useUpdateUserRoleMutation,
   useDeleteUserRoleMutation,
+  useListUserToRoleQuery,
+  useLazyListUserToRoleQuery,
+  useAssociatedUserToRoleMutation,
+  useDeassociatedUserToRoleMutation,
   useListTaxRatesQuery,
   useLazyListTaxRatesQuery,
   useCreateTaxRateMutation,
@@ -2156,4 +2249,5 @@ export const {
   useUpdateEventMutation,
   useGetRestrictedEventSettingsQuery,
   useLazyGetRestrictedEventSettingsQuery,
+  useGenerateTestBonMutation,
 } = injectedRtkApi;

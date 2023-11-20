@@ -43,10 +43,13 @@ import {
   UserDetail,
   UserList,
   UserPageLayout,
+  UserPasswordChange,
   UserRoleCreate,
   UserRoleList,
   UserRoleUpdate,
   UserUpdate,
+  UserToRoleList,
+  UserToRoleCreate,
 } from "./routes/users";
 
 const router = createBrowserRouter([
@@ -365,8 +368,26 @@ const router = createBrowserRouter([
             element: <UserUpdate />,
           },
           {
+            path: ":userId/change-password",
+            element: <UserPasswordChange />,
+          },
+          {
             path: ":userId",
             element: <UserDetail />,
+          },
+        ],
+      },
+      {
+        path: "node/:nodeId/user-to-roles",
+        element: <PrivilegeGuard privilege="user_management" />,
+        children: [
+          {
+            index: true,
+            element: <UserToRoleList />,
+          },
+          {
+            path: "new",
+            element: <UserToRoleCreate />,
           },
         ],
       },
