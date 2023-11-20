@@ -8,7 +8,7 @@ from uuid import UUID
 
 from asyncpg.exceptions import PostgresError
 
-from stustapay.bon.bon import BonConfig, fetch_base_config, generate_bon
+from stustapay.bon.bon import BonConfig, generate_bon
 from stustapay.core.config import Config
 from stustapay.core.healthcheck import run_healthcheck
 from stustapay.core.service.common.dbhook import DBHook
@@ -45,9 +45,6 @@ class Generator:
         self.logger.info("Starting Bon Generator")
         self.pool = await create_db_pool(self.config.database)
 
-        async with self.pool.acquire() as conn:
-            self.bon_config = await fetch_base_config(conn=conn)
-
         # initial processing of pending bons
         await self.cleanup_pending_bons()
 
@@ -70,7 +67,7 @@ class Generator:
                 self.worker_id,
             )
             for row in missing_bons:
-                async with conn.transaction():
+                async with conn.transaction(isoloation="serializable"):
                     await self.process_bon(conn=conn, order_id=row["id"], order_uuid=row["uuid"])
             self.logger.info("Finished generating left-over bons")
 
@@ -83,7 +80,7 @@ class Generator:
                 return
 
             async with self.pool.acquire() as conn:
-                async with conn.transaction():
+                async with conn.transaction(isolation="serializable"):
                     order_uuid = await conn.fetchval("select uuid from ordr where id = $1", bon_id)
                     assert order_uuid is not None
                     await self.process_bon(conn=conn, order_id=bon_id, order_uuid=order_uuid)
@@ -109,7 +106,7 @@ class Generator:
 
         # Generate the PDF and store the result back in the database
         self.logger.debug(f"Generating Bon for order {order_id}...")
-        success, msg = await generate_bon(conn=conn, config=self.bon_config, order_id=order_id, out_file=out_file)
+        success, msg = await generate_bon(conn=conn, order_id=order_id, out_file=out_file)
         self.logger.debug(f"Bon {order_id} generated with result {success}, {msg}")
         if success:
             await conn.execute(

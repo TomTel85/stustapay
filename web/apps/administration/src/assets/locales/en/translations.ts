@@ -16,6 +16,7 @@ export const translations = {
   edit: "Edit",
   delete: "Delete",
   copy: "Copy",
+  save: "Save",
   update: "Update",
   logout: "Logout",
   login: "Login",
@@ -33,8 +34,11 @@ export const translations = {
   tillProfiles: "Till Profiles",
   registerStockings: "Cash Register Stockings",
   registers: "Cash Registers",
+  userToRoles: "User to Roles",
   common: {
     definedAtNode: "Node",
+    loadingError: "Errors while loading page",
+    configLoadFailed: "Something went wrong while loading the page configuration: {{what}}",
   },
   nodes: {
     overview: "Overview",
@@ -234,11 +238,22 @@ export const translations = {
       baseUrl: "Base URL of Customer Portal",
       contact_email: "Contact E-Mail",
     },
+    agb: {
+      tabLabel: "AGB",
+      preview: "Show Preview",
+      content: "AGB (in markdown formatting)",
+    },
+    faq: {
+      tabLabel: "FAQ",
+      preview: "Show Preview",
+      content: "FAQ (in markdown formatting)",
+    },
     bon: {
       tabLabel: "Bon",
       issuer: "Bon issuer",
       address: "Bon address",
       title: "Bon title",
+      previewBon: "Preview Bon",
     },
     sumup: {
       tabLabel: "SumUp",
@@ -251,6 +266,7 @@ export const translations = {
     payout: {
       tabLabel: "Payout",
       sepa_enabled: "Payout enabled",
+      ibanNotValid: "IBAN is not valid",
       sepa_sender_name: "SEPA sender name",
       sepa_sender_iban: "SEPA sender IBAN",
       sepa_description: "SEPA description",
@@ -389,6 +405,7 @@ export const translations = {
   deleteUser: "Delete User",
   deleteUserDescription: "Confirm user deletion",
   user: {
+    user: "User",
     users: "Users",
     roles: "Roles",
     login: "Login",
@@ -396,6 +413,11 @@ export const translations = {
     description: "Description",
     tagUid: "User Tag UID",
     noTagAssigned: "No Tag assigned",
+    changePassword: {
+      title: "Change password",
+      new_password: "New Password",
+      new_password_confirm: "Confirm New Password",
+    },
   },
   userRole: {
     name: "Name",
@@ -407,6 +429,13 @@ export const translations = {
     privileges: "Privileges",
     delete: "Delete user role",
     deleteDescription: "Confirm user role deletion",
+  },
+  userToRole: {
+    user: "User",
+    role: "Role",
+    create: "Associate a user to a role for node {{node}}",
+    deleteAssociation: "Remove Role association",
+    deleteAssociationDescription: "Remove association",
   },
   tse: {
     tses: "TSE",

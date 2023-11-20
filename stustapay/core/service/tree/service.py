@@ -2,6 +2,7 @@ import uuid
 
 import asyncpg
 
+from stustapay.bon.bon import generate_dummy_bon
 from stustapay.core.config import Config
 from stustapay.core.schema.tree import (
     NewEvent,
@@ -10,7 +11,7 @@ from stustapay.core.schema.tree import (
     ObjectType,
     RestrictedEventSettings,
 )
-from stustapay.core.schema.user import CurrentUser
+from stustapay.core.schema.user import CurrentUser, Privilege
 from stustapay.core.service.auth import AuthService
 from stustapay.core.service.common.dbservice import DBService
 from stustapay.core.service.common.decorators import (
@@ -18,7 +19,7 @@ from stustapay.core.service.common.decorators import (
     requires_user,
     with_db_transaction,
 )
-from stustapay.core.service.common.error import NotFound
+from stustapay.core.service.common.error import InvalidArgument, NotFound
 from stustapay.core.service.tree.common import (
     fetch_node,
     fetch_restricted_event_settings_for_node,
@@ -27,17 +28,17 @@ from stustapay.core.service.tree.common import (
 from stustapay.framework.database import Connection
 
 
-async def _update_allowed_objects_in_subtree(conn: Connection, node_id: int, allowed: list[ObjectType]):
+async def _update_forbidden_objects_in_subtree(conn: Connection, node_id: int, allowed: list[ObjectType]):
     for t in allowed:
         await conn.execute(
-            "insert into allowed_objects_in_subtree_at_node (object_name, node_id) values ($1, $2)", t.value, node_id
+            "insert into forbidden_objects_in_subtree_at_node (object_name, node_id) values ($1, $2)", t.value, node_id
         )
 
 
-async def _update_allowed_objects_at_node(conn: Connection, node_id: int, allowed: list[ObjectType]):
+async def _update_forbidden_objects_at_node(conn: Connection, node_id: int, allowed: list[ObjectType]):
     for t in allowed:
         await conn.execute(
-            "insert into allowed_objects_at_node (object_name, node_id) values ($1, $2)", t.value, node_id
+            "insert into forbidden_objects_at_node (object_name, node_id) values ($1, $2)", t.value, node_id
         )
 
 
@@ -49,9 +50,9 @@ async def create_node(conn: Connection, parent_id: int, new_node: NewNode, event
         new_node.description,
         event_id,
     )
-    await _update_allowed_objects_at_node(conn=conn, node_id=new_node_id, allowed=new_node.allowed_objects_at_node)
-    await _update_allowed_objects_in_subtree(
-        conn=conn, node_id=new_node_id, allowed=new_node.allowed_objects_in_subtree
+    await _update_forbidden_objects_at_node(conn=conn, node_id=new_node_id, allowed=new_node.forbidden_objects_at_node)
+    await _update_forbidden_objects_in_subtree(
+        conn=conn, node_id=new_node_id, allowed=new_node.forbidden_objects_in_subtree
     )
     result = await fetch_node(conn=conn, node_id=new_node_id)
     assert result is not None
@@ -147,6 +148,15 @@ async def create_event(conn: Connection, parent_id: int, event: NewEvent) -> Nod
         event.sumup_affiliate_key,
         event.sumup_merchant_code,
     )
+    for lang_code, translation in event.translation_texts.items():
+        for text_type, content in translation.items():
+            await conn.execute(
+                "insert into translation_text (event_id, lang_code, type, content) values ($1, $2, $3, $4)",
+                event_id,
+                lang_code.value,
+                text_type,
+                content,
+            )
 
     node = await create_node(conn=conn, parent_id=parent_id, new_node=event, event_id=event_id)
     await _create_system_accounts(conn=conn, node_id=node.id)
@@ -162,23 +172,25 @@ class TreeService(DBService):
         self.auth_service = auth_service
 
     @with_db_transaction
-    @requires_user()  # TODO: privilege
     @requires_node()
+    @requires_user(privileges=[Privilege.node_administration])
     async def create_node(self, conn: Connection, node: Node, new_node: NewNode) -> Node:
         return await create_node(conn=conn, parent_id=node.id, new_node=new_node)
 
     @with_db_transaction
-    @requires_user()  # TODO: privilege
     @requires_node()
+    @requires_user(privileges=[Privilege.node_administration])
     async def create_event(self, conn: Connection, node: Node, event: NewEvent) -> Node:
         return await create_event(conn=conn, parent_id=node.id, event=event)
 
     @with_db_transaction
-    @requires_user()  # TODO: privilege
-    async def update_event(self, conn: Connection, node_id: int, event: NewEvent) -> Node:
-        event_id = await conn.fetchval("select event_id from node where id = $1", node_id)
+    @requires_node()
+    @requires_user(privileges=[Privilege.node_administration])
+    async def update_event(self, conn: Connection, node: Node, event: NewEvent) -> Node:
+        # TODO: privilege
+        event_id = await conn.fetchval("select event_id from node where id = $1", node.id)
         if event_id is None:
-            raise NotFound(element_typ="event", element_id=node_id)
+            raise NotFound(element_typ="event", element_id=node.id)
 
         await conn.fetchval(
             "update event set currency_identifier = $2, sumup_topup_enabled = $3, max_account_balance = $4, "
@@ -210,17 +222,39 @@ class TreeService(DBService):
             event.sumup_affiliate_key,
             event.sumup_merchant_code,
         )
-        node = await fetch_node(conn=conn, node_id=node_id)
-        assert node is not None
-        return node
+        await conn.execute("delete from translation_text where event_id = $1", event_id)
+        for lang_code, translation in event.translation_texts.items():
+            for text_type, content in translation.items():
+                await conn.execute(
+                    "insert into translation_text (event_id, lang_code, type, content) values ($1, $2, $3, $4)",
+                    event_id,
+                    lang_code.value,
+                    text_type,
+                    content,
+                )
+        updated_node = await fetch_node(conn=conn, node_id=node.id)
+        assert updated_node is not None
+        return updated_node
 
-    @with_db_transaction
-    @requires_user()
+    @with_db_transaction(read_only=True)
+    @requires_user(node_required=False)
     async def get_tree_for_current_user(self, *, conn: Connection, current_user: CurrentUser) -> Node:
         return await get_tree_for_current_user(conn=conn, user_node_id=current_user.node_id)
 
-    @with_db_transaction
-    @requires_user()
+    @with_db_transaction(read_only=True)
     @requires_node()
+    @requires_user(privileges=[Privilege.node_administration])
     async def get_restricted_event_settings(self, *, conn: Connection, node: Node) -> RestrictedEventSettings:
         return await fetch_restricted_event_settings_for_node(conn=conn, node_id=node.id)
+
+    @with_db_transaction
+    @requires_node()
+    @requires_user(privileges=[Privilege.node_administration])
+    async def generate_test_bon(self, *, conn: Connection, node: Node) -> bytes:
+        if node.event_node_id is None:
+            raise InvalidArgument("Cannot generate bon for a node not associated with an event")
+        event = await fetch_restricted_event_settings_for_node(conn=conn, node_id=node.id)
+        dummy_bon = await generate_dummy_bon(node_id=node.event_node_id, event=event)
+        if dummy_bon.error is not None or dummy_bon.pdf is None:
+            raise InvalidArgument(f"Error while generating dummy bon: {dummy_bon.error}")
+        return dummy_bon.pdf

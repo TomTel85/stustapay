@@ -77,6 +77,21 @@ create table event (
     sepa_allowed_country_codes text[]
 );
 
+create table language (
+    code varchar(5) not null primary key
+);
+
+insert into language (code) values
+('en-US'), ('de-DE');
+
+create table translation_text (
+    event_id bigint not null references event(id),
+    lang_code varchar(5) not null references language(code),
+    type text not null,
+    content text not null,
+    primary key (event_id, lang_code, type)
+);
+
 insert into event (
     id, currency_identifier, sumup_topup_enabled, max_account_balance, ust_id, bon_issuer, bon_address, bon_title,
     customer_portal_contact_email, sepa_enabled, sepa_sender_name, sepa_sender_iban,
@@ -136,15 +151,15 @@ create table tree_object_type (
 
 insert into tree_object_type (name)
 values
-('user'), ('user_role'), ('product'), ('ticket'), ('till'), ('account'), ('order'), ('user_tags'), ('tax_rate'), ('tse');
+('user'), ('user_role'), ('product'), ('ticket'), ('till');
 
-create table allowed_objects_at_node (
+create table forbidden_objects_at_node (
     object_name varchar(255) not null references tree_object_type(name),
     node_id bigint not null references node(id),
     primary key (object_name, node_id)
 );
 
-create table allowed_objects_in_subtree_at_node (
+create table forbidden_objects_in_subtree_at_node (
     object_name varchar(255) not null references tree_object_type(name),
     node_id bigint not null references node(id),
     primary key (object_name, node_id)
@@ -161,44 +176,6 @@ values
     (0, 0, null, 'root', '{0}', '/0', null, null),
     (1, 0, 0, 'event', '{0}', '/0/1', 1, '{}')
     on conflict do nothing;
-
-insert into allowed_objects_at_node (node_id, object_name)
-values
-(0, 'user'),
-(0, 'user_role'),
-(1, 'user'),
-(1, 'user_role'),
-(1, 'product'),
-(1, 'ticket'),
-(1, 'till'),
-(1, 'account'),
-(1, 'order'),
-(1, 'user_tags'),
-(1, 'tax_rate'),
-(1, 'tse');
-
-insert into allowed_objects_in_subtree_at_node (node_id, object_name)
-values
-(0, 'user'),
-(0, 'user_role'),
-(0, 'product'),
-(0, 'ticket'),
-(0, 'till'),
-(0, 'account'),
-(0, 'order'),
-(0, 'user_tags'),
-(0, 'tax_rate'),
-(0, 'tse'),
-(1, 'user'),
-(1, 'user_role'),
-(1, 'product'),
-(1, 'ticket'),
-(1, 'till'),
-(1, 'account'),
-(1, 'order'),
-(1, 'user_tags'),
-(1, 'tax_rate'),
-(1, 'tse');
 
 -- add the node column to all elements in the tree, and reference the 'event' node.
 alter table account add column node_id bigint not null references node(id) default 1;
@@ -263,6 +240,9 @@ alter table user_tag_secret alter column node_id drop default;
 
 alter table usr add column node_id bigint not null references node(id) default 1;
 alter table usr alter column node_id drop default;
+
+alter table user_to_role add column node_id bigint not null references node(id) default 1;
+alter table user_to_role alter column node_id drop default;
 
 -- TODO: add synthetic numeric primary key to tax table
 alter table tax rename to tax_rate;
@@ -376,8 +356,13 @@ create index on product (type, node_id);
 insert into account_type (name)
 values
 ('sale_exit'),
-('cash_entry'), ('cash_exit'), ('cash_topup_source'), ('cash_imbalance'), ('cash_vault'),
-('sumup_entry'), ('sumup_online_entry'),
+('cash_entry'),
+('cash_exit'),
+('cash_topup_source'),
+('cash_imbalance'),
+('cash_vault'),
+('sumup_entry'),
+('sumup_online_entry'),
 ('transport'), -- also a cash based account
 ('cashier'), -- also a cash based account
 ('voucher_create');
