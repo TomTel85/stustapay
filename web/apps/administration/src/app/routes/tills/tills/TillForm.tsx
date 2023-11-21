@@ -1,11 +1,12 @@
 import { NewTill } from "@/api";
-import { TillTseSelect } from "@/components/features";
 import { FormTextField } from "@stustapay/form-components";
 import { FormikProps } from "formik";
 import { useTranslation } from "react-i18next";
 import { TillProfile, selectTillProfileAll, useListTillProfilesQuery } from "@/api";
+import { Tse, selectTseAll, useListTsesQuery } from "@/api";
 import { useCurrentNode } from "@/hooks";
 import { Select } from "@stustapay/components";
+
 
 export type TillFormProps<T extends NewTill> = FormikProps<T>;
 
@@ -22,6 +23,15 @@ export function TillForm<T extends NewTill>(props: TillFormProps<T>) {
       }),
     }
   );
+  const { tses } = useListTsesQuery(
+    { nodeId: currentNode.id },
+    {
+      selectFromResult: ({ data, ...rest }) => ({
+        ...rest,
+        tses: data ? selectTseAll(data) : [],
+      }),
+    }
+  );        
   return (
     <>
       <FormTextField autoFocus name="name" label={t("till.name")} formik={props} />
@@ -38,14 +48,18 @@ export function TillForm<T extends NewTill>(props: TillFormProps<T>) {
           value != null ? setFieldValue("active_profile_id", value.id) : undefined
         }
       />
-      <TillTseSelect
-        name="layout"
+      <Select
+        multiple={false}
+        formatOption={(tse: Tse) => tse.name}
+        value={tses.find((t) => t.id === values.active_tse_id) ?? null}
+        options={tses}
         label={t("till.tse")}
         error={touched.active_tse_id && !!errors.active_tse_id}
         helperText={(touched.active_tse_id && errors.active_tse_id) as string}
-        onChange={(value) => setFieldValue("active_tse_id", value)}
-        value={values.active_tse_id || null}
+        onChange={(value: Tse | null) =>
+          value != null ? setFieldValue("active_tse_id", value.id) : undefined
+        }
       />
     </>
-  );
+    );
 }
