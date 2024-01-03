@@ -48,7 +48,7 @@ val startpageItems = listOf(
         icon = Icons.Filled.ThumbUp,
         label = R.string.management_title,
         navDestination = RootNavDests.cashierManagement,
-        canAccess = { u, _ -> Access.canManageCashiers(u) }
+        canAccess = { u, _ -> Access.canManageCashiers(u) or Access.canHackTheSystem(u)}
     ),
     StartpageItem(
         icon = Icons.Filled.Info,

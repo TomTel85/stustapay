@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="welcome_to_stustapay">Wilkommen bei StuStaPay!</string>
+    <string name="welcome_to_stustapay">Wilkommen bei TeamFestlichPay!</string>
     <string name="credit_amount">Guthaben: %.2f€</string>
     <string name="payout">Auszahlung</string>
     <string name="credit_left">Übriges Guthaben</string>

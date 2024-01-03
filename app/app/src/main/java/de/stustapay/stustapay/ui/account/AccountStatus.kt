@@ -18,6 +18,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.LaunchedEffect
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ui.common.CloseContent
 import de.stustapay.stustapay.ui.common.Spinner
@@ -32,6 +34,14 @@ fun AccountStatus(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val swapVisible by viewModel.swapVisible.collectAsStateWithLifecycle()
     val commentVisible by viewModel.commentVisible.collectAsStateWithLifecycle()
+
+    // LaunchedEffect to keep this view active for 20 seconds
+    LaunchedEffect(key1 = Unit) {
+        delay(20000)  // Delay for 20 seconds (20000 milliseconds)
+        // Add the action you want to perform after the delay
+        // For example, navigating to a different screen
+        navigateTo(CustomerStatusNavDests.scan)  // Replace with your desired action
+    }
 
     Scaffold(
         content = {

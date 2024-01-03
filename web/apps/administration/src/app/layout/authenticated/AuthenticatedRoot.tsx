@@ -67,7 +67,7 @@ export const AuthenticatedRoot: React.FC = () => {
           </IconButton>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             <RouterLink to="/" style={{ textDecoration: "none", color: "inherit" }}>
-              {t("StuStaPay")}
+              {t("TeamFestlichPay")}
             </RouterLink>
           </Typography>
           <Button component={RouterLink} color="inherit" to="/profile">

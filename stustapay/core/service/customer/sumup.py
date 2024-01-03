@@ -192,7 +192,7 @@ class SumupService(DBService):
     ) -> SumupCheckout:
         async with aiohttp.ClientSession(trust_env=True, headers=_get_sumup_auth_headers(event)) as session:
             try:
-                payload = checkout.model_dump()
+                payload = checkout.json()
                 async with session.post(self.SUMUP_CHECKOUT_URL, data=payload, timeout=2) as response:
                     if not response.ok:
                         self.logger.error(
@@ -237,7 +237,7 @@ class SumupService(DBService):
 
     @staticmethod
     async def _process_topup(conn: Connection, checkout: SumupCheckout):
-        row = await conn.fetchval(
+        row = await conn.fetchrow(
             "select c.customer_account_id, a.node_id "
             "from customer_sumup_checkout c join account a on c.customer_account_id = a.id "
             "where checkout_reference = $1",
@@ -375,7 +375,7 @@ class SumupService(DBService):
 
     @with_db_transaction(read_only=True)
     @requires_customer
-    @requires_sumup_enabled
+    #@requires_sumup_enabled
     async def check_checkout(
         self, *, conn: Connection, current_customer: Customer, checkout_id: str
     ) -> SumupCheckoutStatus:
@@ -388,7 +388,7 @@ class SumupService(DBService):
 
     @with_db_transaction
     @requires_customer
-    @requires_sumup_enabled
+    #@requires_sumup_enabled
     async def create_checkout(self, *, conn: Connection, current_customer: Customer, amount: float) -> SumupCheckout:
         event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=current_customer.node_id)
 
@@ -416,7 +416,7 @@ class SumupService(DBService):
             currency=event_settings.currency_identifier,
             merchant_code=event_settings.sumup_merchant_code,
             # TODO: HARDCODED
-            description=f"StuStaCulum 2023 Online TopUp {format_user_tag_uid(current_customer.user_tag_uid)} {checkout_reference}",
+            description=f"TeamFestlichPay Online TopUp {format_user_tag_uid(current_customer.user_tag_uid)} {checkout_reference}",
         )
         checkout_response = await self._create_sumup_checkout(event=event_settings, checkout=create_checkout)
 

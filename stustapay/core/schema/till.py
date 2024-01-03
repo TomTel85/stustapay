@@ -110,3 +110,4 @@ class UserInfo(UserWithoutId):
     cash_register_name: Optional[str] = None
     cash_drawer_balance: Optional[float] = None
     transport_account_balance: Optional[float] = None
+    role_names: Optional[list[str]] = None

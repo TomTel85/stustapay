@@ -112,7 +112,7 @@ export const Login: React.FC = () => {
           style={{
             width: "100%",
             height: "auto",
-            marginTop: "-1em",
+            marginTop: "2em",
           }}
         />
       </Stack>

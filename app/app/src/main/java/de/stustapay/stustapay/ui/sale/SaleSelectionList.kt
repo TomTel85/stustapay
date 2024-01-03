@@ -77,6 +77,7 @@ fun SaleSelectionList(
 
                         is SaleItemPrice.Returnable -> {
                             // returnable items can become negative and positive.
+
                             SaleSelectionItemType.Returnable(
                                 price = price,
                                 amount = (saleStatus.buttonSelection[button.value.id] as? SaleItemAmount.FixedPrice),
@@ -86,6 +87,7 @@ fun SaleSelectionList(
                                 incrementText = "Extra Glas",
                             )
                         }
+
 
                         is SaleItemPrice.FreePrice -> {
                             SaleSelectionItemType.FreePrice(

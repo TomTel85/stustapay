@@ -39,7 +39,7 @@ object Access {
     }
 
     fun canChangeConfig(user: CurrentUser): Boolean {
-        return user.privileges.contains(Privilege.config_management)
+        return user.privileges.contains(Privilege.supervised_terminal_login)
     }
 
     fun canSwap(user: CurrentUser): Boolean {

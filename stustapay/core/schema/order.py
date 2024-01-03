@@ -157,7 +157,7 @@ class PendingLineItem(BaseModel):
     @property
     def total_price(self) -> float:
         # pylint false positive
-        return self.product_price * self.quantity  # pylint: disable=no-member
+        return round(self.product_price,2) * self.quantity  # pylint: disable=no-member
 
 
 class PendingSaleBase(BaseModel):

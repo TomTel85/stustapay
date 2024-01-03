@@ -23,7 +23,7 @@ export const CashierShiftDetail: React.FC = () => {
 
   const { data: cashier } = useGetCashierQuery({ nodeId: currentNode.id, cashierId: Number(cashierId) });
   const { cashierShift } = useGetCashierShiftsQuery(
-    { cashierId: Number(cashierId) },
+    { cashierId: Number(cashierId), nodeId: currentNode.id  },
     {
       selectFromResult: ({ data, ...rest }) => ({
         ...rest,

@@ -17,7 +17,7 @@ class TerminalLoginState(
         return if (terminal is TerminalConfigState.Success) {
             TillName(terminal.config.name, terminal.config.profile_name)
         } else {
-            TillName("StuStaPay")
+            TillName("TeamFestlichPay")
         }
     }
 

@@ -126,7 +126,7 @@ async def book_order(
             order_id,
             i,
             line_item.product_id,
-            line_item.product_price,
+            round(line_item.product_price,2),
             line_item.quantity,
             line_item.tax_rate_id,
         )

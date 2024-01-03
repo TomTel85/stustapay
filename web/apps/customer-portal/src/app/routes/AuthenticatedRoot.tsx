@@ -42,31 +42,26 @@ export const AuthenticatedRoot: React.FC = () => {
     return <Navigate to={`/login${next}`} />;
   }
 
-  const navbarLinks = publicConfig.sumup_topup_enabled
-    ? [
-        {
-          label: t("nav.payout"),
-          link: "/payout-info",
-        },
-        {
-          label: t("nav.topup"),
-          link: "/topup",
-        },
-        {
-          label: t("nav.faq"),
-          link: "/faq",
-        },
-      ]
-    : [
-        {
-          label: t("nav.payout"),
-          link: "/payout-info",
-        },
-        {
-          label: t("nav.faq"),
-          link: "/faq",
-        },
-      ];
+  const navbarLinks = [];
+
+  if (publicConfig.payout_enabled) {
+    navbarLinks.push({
+      label: t("nav.payout"),
+      link: "/payout-info",
+    });
+  }
+
+  if (publicConfig.sumup_topup_enabled) {
+    navbarLinks.push({
+      label: t("nav.topup"),
+      link: "/topup",
+    });
+  }
+
+  navbarLinks.push({
+    label: t("nav.faq"),
+    link: "/faq",
+  });
 
   return (
     <Layout>
@@ -77,7 +72,7 @@ export const AuthenticatedRoot: React.FC = () => {
             <Toolbar disableGutters>
               <Typography variant="h6" component="div" sx={{ mr: 2, display: { xs: "none", md: "flex" } }}>
                 <RouterLink to="/" style={{ textDecoration: "none", color: "inherit" }}>
-                  {t("StuStaPay")}
+                  {t("TeamFestlichPay")}
                 </RouterLink>
               </Typography>
 
@@ -126,7 +121,7 @@ export const AuthenticatedRoot: React.FC = () => {
                 }}
               >
                 <RouterLink to="/" style={{ textDecoration: "none", color: "inherit" }}>
-                  {t("StuStaPay")}
+                  {t("TeamFestlichPay")}
                 </RouterLink>
               </Typography>
 

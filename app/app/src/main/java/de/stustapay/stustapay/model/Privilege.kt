@@ -8,6 +8,12 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 enum class Privilege {
+    @SerialName("node_administration")
+    node_administration,
+
+    @SerialName("cash_transport")
+    cash_transport,
+
     // general management
     @SerialName("account_management")
     account_management,

@@ -16,7 +16,7 @@ export const Agb = () => {
   return (
     <Container component="main" maxWidth="md">
       <Box sx={{ flexDirection: "column", alignItems: "center", width: "100%", textAlign: "justify" }}>
-        <h1 id="stustapay-agb">StuStaPay AGB</h1>
+        <h1 id="stustapay-agb">AGB</h1>
         <p>
           <Trans i18nKey="termsAndConditionsHeader">
             Link to

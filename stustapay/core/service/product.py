@@ -80,7 +80,7 @@ class ProductService(DBService):
             "returning id",
             node.id,
             product.name,
-            product.price,
+            round(product.price,2),
             product.tax_rate_id,
             product.target_account_id,
             product.fixed_price,

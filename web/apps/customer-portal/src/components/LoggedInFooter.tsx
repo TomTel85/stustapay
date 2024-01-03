@@ -10,9 +10,9 @@ export const LoggedInFooter: React.FC = () => {
   const config = usePublicConfig();
   const { t } = useTranslation();
 
-  let subject = "Support request StuStaPay";
+  let subject = "Support request TeamFestlichPay";
   if (customer && !customerError && !isCustomerLoading) {
-    subject = encodeURIComponent(`Support request StuStaPay, tagUID: ${formatUserTagUid(customer.user_tag_uid_hex)}`);
+    subject = encodeURIComponent(`Support request TeamFestlichPay, tagUID: ${formatUserTagUid(customer.user_tag_uid_hex)}`);
   }
 
   const mailtoLink = `mailto:${config.contact_email}?subject=${subject}`;

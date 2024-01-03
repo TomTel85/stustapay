@@ -78,9 +78,9 @@ export const Index: React.FC = () => {
             </Stack>
           </Paper>
         </Grid>
-      </Grid>
-
+      </Grid>         
       <Grid item xs={12} sm={8}>
+      {config.payout_enabled && ( 
         <Alert severity="info" variant="outlined" style={{ marginBottom: "1em", width: "100%" }}>
           <Trans i18nKey="payoutInfo">
             to get your payout
@@ -89,8 +89,8 @@ export const Index: React.FC = () => {
             </Link>
           </Trans>
         </Alert>
+              )}
       </Grid>
-
       <Grid item xs={12} sm={8}>
         <OrderList />
       </Grid>

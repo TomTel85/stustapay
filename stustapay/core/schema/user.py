@@ -34,7 +34,6 @@ class Privilege(enum.Enum):
     grant_free_tickets = "grant_free_tickets"
     grant_vouchers = "grant_vouchers"
 
-
 class NewUserRole(BaseModel):
     name: str
     is_privileged: bool = False

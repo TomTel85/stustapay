@@ -15,8 +15,8 @@ i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    lng: "en-US",
-    fallbackLng: "en",
+    lng: "de-DE",
+    fallbackLng: "de",
     debug: true,
     defaultNS: defaultNS,
     resources: resources,

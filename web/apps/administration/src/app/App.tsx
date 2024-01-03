@@ -57,7 +57,7 @@ export function App() {
         <UnauthenticatedLayout
           toolbar={
             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              {t("StuStaPay")}
+              {t("TeamFestlichPay")}
             </Typography>
           }
         >

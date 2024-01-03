@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity(), SysUiController {
         super.onCreate(savedInstanceState)
 
         // disable all automatic screen rotation
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        // requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 
         // things that need the activity
         nfcHandler.onCreate(this)
