@@ -690,8 +690,36 @@ const injectedRtkApi = api
         query: () => ({ url: `/tree/` }),
         providesTags: ["tree"],
       }),
+      createNode: build.mutation<CreateNodeApiResponse, CreateNodeApiArg>({
+        query: (queryArg) => ({
+          url: `/tree/nodes/${queryArg.nodeId}/create-node`,
+          method: "POST",
+          body: queryArg.newNode,
+        }),
+        invalidatesTags: ["tree"],
+      }),
+      updateNode: build.mutation<UpdateNodeApiResponse, UpdateNodeApiArg>({
+        query: (queryArg) => ({
+          url: `/tree/nodes/${queryArg.nodeId}/settings`,
+          method: "POST",
+          body: queryArg.newNode,
+        }),
+        invalidatesTags: ["tree"],
+      }),
+      createEvent: build.mutation<CreateEventApiResponse, CreateEventApiArg>({
+        query: (queryArg) => ({
+          url: `/tree/nodes/${queryArg.nodeId}/create-event`,
+          method: "POST",
+          body: queryArg.newEvent,
+        }),
+        invalidatesTags: ["tree"],
+      }),
       updateEvent: build.mutation<UpdateEventApiResponse, UpdateEventApiArg>({
-        query: (queryArg) => ({ url: `/tree/events/${queryArg.nodeId}`, method: "POST", body: queryArg.updateEvent }),
+        query: (queryArg) => ({
+          url: `/tree/events/${queryArg.nodeId}/event-settings`,
+          method: "POST",
+          body: queryArg.updateEvent,
+        }),
         invalidatesTags: ["tree"],
       }),
       getRestrictedEventSettings: build.query<GetRestrictedEventSettingsApiResponse, GetRestrictedEventSettingsApiArg>({
@@ -1182,8 +1210,23 @@ export type PayoutRunSepaXmlExportApiArg = {
   nodeId?: number | null;
   createSepaXmlPayload: CreateSepaXmlPayload;
 };
-export type GetTreeForCurrentUserApiResponse = /** status 200 Successful Response */ Node;
+export type GetTreeForCurrentUserApiResponse = /** status 200 Successful Response */ NodeSeenByUserRead;
 export type GetTreeForCurrentUserApiArg = void;
+export type CreateNodeApiResponse = /** status 200 Successful Response */ Node;
+export type CreateNodeApiArg = {
+  nodeId: number;
+  newNode: NewNode;
+};
+export type UpdateNodeApiResponse = /** status 200 Successful Response */ Node;
+export type UpdateNodeApiArg = {
+  nodeId: number;
+  newNode: NewNode;
+};
+export type CreateEventApiResponse = /** status 200 Successful Response */ Node;
+export type CreateEventApiArg = {
+  nodeId: number;
+  newEvent: NewEvent;
+};
 export type UpdateEventApiResponse = /** status 200 Successful Response */ Node;
 export type UpdateEventApiArg = {
   nodeId: number;
@@ -2038,6 +2081,41 @@ export type ObjectType =
   | "tse"
   | "order"
   | "account";
+export type NodeSeenByUser = {
+  id: number;
+  parent: number;
+  name: string;
+  description: string;
+  event: PublicEventSettings | null;
+  path: string;
+  parent_ids: number[];
+  event_node_id: number | null;
+  parents_until_event_node: number[] | null;
+  forbidden_objects_at_node: ObjectType[];
+  computed_forbidden_objects_at_node: ObjectType[];
+  forbidden_objects_in_subtree: ObjectType[];
+  computed_forbidden_objects_in_subtree: ObjectType[];
+  children: NodeSeenByUser[];
+  roles_at_node: UserRole[];
+};
+export type NodeSeenByUserRead = {
+  id: number;
+  parent: number;
+  name: string;
+  description: string;
+  event: PublicEventSettings | null;
+  path: string;
+  parent_ids: number[];
+  event_node_id: number | null;
+  parents_until_event_node: number[] | null;
+  forbidden_objects_at_node: ObjectType[];
+  computed_forbidden_objects_at_node: ObjectType[];
+  forbidden_objects_in_subtree: ObjectType[];
+  computed_forbidden_objects_in_subtree: ObjectType[];
+  children: NodeSeenByUserRead[];
+  roles_at_node: UserRole[];
+  privileges_at_node: Privilege[];
+};
 export type Node = {
   id: number;
   parent: number;
@@ -2053,6 +2131,43 @@ export type Node = {
   forbidden_objects_in_subtree: ObjectType[];
   computed_forbidden_objects_in_subtree: ObjectType[];
   children: Node[];
+};
+export type NewNode = {
+  name: string;
+  description: string;
+  forbidden_objects_at_node?: ObjectType[];
+  forbidden_objects_in_subtree?: ObjectType[];
+};
+export type NewEvent = {
+  sumup_api_key?: string;
+  sumup_affiliate_key?: string;
+  sumup_merchant_code?: string;
+  currency_identifier: string;
+  max_account_balance: number;
+  sumup_topup_enabled?: boolean;
+  sumup_payment_enabled?: boolean;
+  customer_portal_url: string;
+  customer_portal_about_page_url: string;
+  customer_portal_data_privacy_url: string;
+  customer_portal_contact_email: string;
+  ust_id: string;
+  bon_issuer: string;
+  bon_address: string;
+  bon_title: string;
+  sepa_enabled: boolean;
+  sepa_sender_name: string;
+  sepa_sender_iban: string;
+  sepa_description: string;
+  sepa_allowed_country_codes: string[];
+  translation_texts?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
+  name: string;
+  description: string;
+  forbidden_objects_at_node?: ObjectType[];
+  forbidden_objects_in_subtree?: ObjectType[];
 };
 export type UpdateEvent = {
   sumup_api_key?: string;
@@ -2246,6 +2361,9 @@ export const {
   usePayoutRunSepaXmlExportMutation,
   useGetTreeForCurrentUserQuery,
   useLazyGetTreeForCurrentUserQuery,
+  useCreateNodeMutation,
+  useUpdateNodeMutation,
+  useCreateEventMutation,
   useUpdateEventMutation,
   useGetRestrictedEventSettingsQuery,
   useLazyGetRestrictedEventSettingsQuery,

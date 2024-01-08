@@ -1,22 +1,21 @@
-import { Node } from "@/api";
+import { NodeSeenByUserRead } from "@/api";
 import {
   AccountBalance as AccountBalanceIcon,
   AddShoppingCart as AddShoppingCartIcon,
   ConfirmationNumber as ConfirmationNumberIcon,
+  HistoryEdu as HistoryEduIcon,
   Nfc as NfcIcon,
-  Percent as PercentIcon,
   Person as PersonIcon,
   PointOfSale as PointOfSaleIcon,
   Shield as ShieldIcon,
   ShoppingCart as ShoppingCartIcon,
-  HistoryEdu as HistoryEduIcon,
 } from "@mui/icons-material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { NavigationTreeItem } from "./NavigationTreeItem";
 
 export interface NodeMenuProps {
-  node: Node;
+  node: NodeSeenByUserRead;
 }
 
 export const NodeMenu: React.FC<NodeMenuProps> = ({ node }) => {
@@ -51,10 +50,6 @@ export const NodeMenu: React.FC<NodeMenuProps> = ({ node }) => {
     items.push(<NavigationTreeItem key={id} nodeId={id} to={id} labelText={t("userToRoles")} labelIcon={PersonIcon} />);
   }
 
-  if (!node.computed_forbidden_objects_at_node.includes("tax_rate")) {
-    const id = `/node/${node.id}/tax-rates`;
-    items.push(<NavigationTreeItem key={id} nodeId={id} to={id} labelText={t("taxRates")} labelIcon={PercentIcon} />);
-  }
   if (!node.computed_forbidden_objects_at_node.includes("product")) {
     const id = `/node/${node.id}/products`;
     items.push(
@@ -89,11 +84,17 @@ export const NodeMenu: React.FC<NodeMenuProps> = ({ node }) => {
       <NavigationTreeItem key={id} nodeId={id} to={id} labelText={t("userTag.userTags")} labelIcon={NfcIcon} />
     );
   }
-  if (!node.computed_forbidden_objects_at_node.includes("tse")) {
+  if (
+    !node.computed_forbidden_objects_at_node.includes("tse") &&
+    node.privileges_at_node.includes("node_administration")
+  ) {
     const id = `/node/${node.id}/tses`;
     items.push(<NavigationTreeItem key={id} nodeId={id} to={id} labelText={t("tse.tses")} labelIcon={ShieldIcon} />);
   }
-  if (!node.computed_forbidden_objects_at_node.includes("till")) {
+  if (
+    !node.computed_forbidden_objects_at_node.includes("till") &&
+    node.privileges_at_node.includes("node_administration")
+  ) {
     const id = `/node/${node.id}/dsfinvk`;
     items.push(<NavigationTreeItem key={id} nodeId={id} to={id} labelText={t("dsfinvk")} labelIcon={HistoryEduIcon} />);
   }

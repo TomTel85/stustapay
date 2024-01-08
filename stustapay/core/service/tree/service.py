@@ -8,6 +8,7 @@ from stustapay.core.schema.tree import (
     NewEvent,
     NewNode,
     Node,
+    NodeSeenByUser,
     ObjectType,
     RestrictedEventSettings,
 )
@@ -180,6 +181,31 @@ class TreeService(DBService):
     @with_db_transaction
     @requires_node()
     @requires_user(privileges=[Privilege.node_administration])
+    async def update_node(self, conn: Connection, node: Node, updated_node: NewNode) -> Node:
+        if any([x not in node.forbidden_objects_at_node for x in updated_node.forbidden_objects_at_node]):
+            raise InvalidArgument("Adding new forbidden object types to existing node is not allowed")
+        if any([x not in node.forbidden_objects_in_subtree for x in updated_node.forbidden_objects_in_subtree]):
+            raise InvalidArgument("Adding new forbidden object types to subtree is not allowed")
+
+        await conn.execute(
+            "update node set name = $2, description = $3 where id = $1",
+            node.id,
+            updated_node.name,
+            updated_node.description,
+        )
+        await _update_forbidden_objects_at_node(
+            conn=conn, node_id=node.id, allowed=updated_node.forbidden_objects_at_node
+        )
+        await _update_forbidden_objects_in_subtree(
+            conn=conn, node_id=node.id, allowed=updated_node.forbidden_objects_in_subtree
+        )
+        result = await fetch_node(conn=conn, node_id=node.id)
+        assert result is not None
+        return result
+
+    @with_db_transaction
+    @requires_node()
+    @requires_user(privileges=[Privilege.node_administration])
     async def create_event(self, conn: Connection, node: Node, event: NewEvent) -> Node:
         return await create_event(conn=conn, parent_id=node.id, event=event)
 
@@ -238,8 +264,8 @@ class TreeService(DBService):
 
     @with_db_transaction(read_only=True)
     @requires_user(node_required=False)
-    async def get_tree_for_current_user(self, *, conn: Connection, current_user: CurrentUser) -> Node:
-        return await get_tree_for_current_user(conn=conn, user_node_id=current_user.node_id)
+    async def get_tree_for_current_user(self, *, conn: Connection, current_user: CurrentUser) -> NodeSeenByUser:
+        return await get_tree_for_current_user(conn=conn, current_user=current_user)
 
     @with_db_transaction(read_only=True)
     @requires_node()

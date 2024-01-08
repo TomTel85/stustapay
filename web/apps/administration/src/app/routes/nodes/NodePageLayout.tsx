@@ -1,8 +1,7 @@
-import { useNode } from "@/api/nodes";
+import { useNode } from "@/api";
 import {
   Dashboard as DashboardIcon,
   Leaderboard as LeaderboardIcon,
-  Money as MoneyIcon,
   Settings as SettingsIcon,
 } from "@mui/icons-material";
 import { Box, Tab, Tabs } from "@mui/material";
@@ -10,28 +9,23 @@ import { Loading } from "@stustapay/components";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Outlet, Link as RouterLink, useLocation, useParams } from "react-router-dom";
+import { EventPageLayout } from "./EventPageLayout";
 
-const getActiveTab = (nodeId: string, location: string) => {
+const getActiveTab = (nodeId: number, location: string) => {
   if (location.startsWith(`/node/${nodeId}/stats`)) {
     return `/node/${nodeId}/stats`;
   }
   if (location.startsWith(`/node/${nodeId}/settings`)) {
     return `/node/${nodeId}/settings`;
   }
-  if (location.startsWith(`/node/${nodeId}/settings-legacy`)) {
-    return `/node/${nodeId}/settings-legacy`;
-  }
-  if (location.startsWith(`/node/${nodeId}/payout-runs`)) {
-    return `/node/${nodeId}/payout-runs`;
-  }
   return `/node/${nodeId}`;
 };
 
 export const NodePageLayout: React.FC = () => {
   const { t } = useTranslation();
+  const location = useLocation();
   const { nodeId } = useParams();
   const { node } = useNode({ nodeId: Number(nodeId) });
-  const location = useLocation();
 
   if (!nodeId) {
     // TODO: return error page / redirect
@@ -42,13 +36,16 @@ export const NodePageLayout: React.FC = () => {
     return <Loading />;
   }
 
-  const nodeUrl = `/node/${nodeId}`;
+  if (node.event != null) {
+    return <EventPageLayout node={node} />;
+  }
+  const nodeUrl = `/node/${node.id}`;
 
   return (
     <Box>
       <Tabs
         sx={{ borderBottom: 1, borderColor: "divider" }}
-        value={getActiveTab(nodeId, location.pathname)}
+        value={getActiveTab(node.id, location.pathname)}
         aria-label="Users"
       >
         <Tab
@@ -59,32 +56,24 @@ export const NodePageLayout: React.FC = () => {
           iconPosition="start"
           to={nodeUrl}
         />
-        <Tab
-          label={t("nodes.statistics")}
-          component={RouterLink}
-          value={`${nodeUrl}/stats`}
-          icon={<LeaderboardIcon />}
-          iconPosition="start"
-          to={`${nodeUrl}/stats`}
-        />
-        <Tab
-          label="Payouts"
-          component={RouterLink}
-          value={`${nodeUrl}/payout-runs`}
-          icon={<MoneyIcon />}
-          iconPosition="start"
-          to={`${nodeUrl}/payout-runs`}
-        />
-        {node.event != null && (
+        {node.event_node_id != null && (
           <Tab
-            label={t("nodes.settings")}
+            label={t("nodes.statistics")}
             component={RouterLink}
-            value={`${nodeUrl}/settings`}
-            icon={<SettingsIcon />}
+            value={`${nodeUrl}/stats`}
+            icon={<LeaderboardIcon />}
             iconPosition="start"
-            to={`${nodeUrl}/settings`}
+            to={`${nodeUrl}/stats`}
           />
         )}
+        <Tab
+          label={t("nodes.settings")}
+          component={RouterLink}
+          value={`${nodeUrl}/settings`}
+          icon={<SettingsIcon />}
+          iconPosition="start"
+          to={`${nodeUrl}/settings`}
+        />
       </Tabs>
       <Box sx={{ mt: 2 }}>
         <Outlet />

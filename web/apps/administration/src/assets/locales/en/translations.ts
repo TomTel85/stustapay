@@ -228,8 +228,20 @@ export const translations = {
     juristiction: "Juristiction",
     serverSideConfig: "Server side settings",
     localConfig: "Local settings",
+    createEvent: {
+      link: "Create new event",
+      heading: "Create new event below {{parentNodeName}}",
+    },
+    createNode: {
+      link: "Create new node",
+      heading: "Create new node below {{parentNodeName}}",
+    },
     general: {
       tabLabel: "General",
+      name: "Name",
+      description: "Description",
+      forbidden_objects_at_node: "Forbidden objects at node",
+      forbidden_objects_in_subtree: "Forbidden objects in subtree",
       ust_id: "UST ID",
       max_account_balance: "Max account balance",
       currency_identifier: "Currency Identifier",
@@ -238,6 +250,8 @@ export const translations = {
       tabLabel: "Customer Portal",
       baseUrl: "Base URL of Customer Portal",
       contact_email: "Contact E-Mail",
+      data_privacy_url: "Data privacy URL",
+      about_page_url: "About page URL",
     },
     agb: {
       tabLabel: "AGB",

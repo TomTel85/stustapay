@@ -5,7 +5,15 @@ import { AuthenticatedRoot, PrivilegeGuard, UnauthenticatedRoot } from "./layout
 import { AccountDetail, AccountPageLayout, FindAccounts, SystemAccountList } from "./routes/accounts";
 import { Login, Logout, Profile } from "./routes/auth";
 import { CashierCloseOut, CashierDetail, CashierList, CashierShiftDetail } from "./routes/cashiers";
-import { FestivalOverview, MoneyOverview, NodePageLayout, Settings, SettingsLegacy } from "./routes/nodes";
+import {
+  EventCreate,
+  NodeOverview,
+  MoneyOverview,
+  NodePageLayout,
+  NodeSettings,
+  SettingsLegacy,
+  NodeCreate,
+} from "./routes/nodes";
 import { OrderDetail, OrderList, SaleEdit } from "./routes/orders";
 import { PayoutRunCreate, PayoutRunDetail, PayoutRunList } from "./routes/payouts";
 import { ProductCreate, ProductDetail, ProductList, ProductUpdate } from "./routes/products";
@@ -51,6 +59,7 @@ import {
   UserToRoleList,
   UserToRoleCreate,
 } from "./routes/users";
+import { DsfinvkExport, DsfinvkPageLayout } from "./routes/dsfinvk";
 
 const router = createBrowserRouter([
   {
@@ -70,7 +79,7 @@ const router = createBrowserRouter([
         path: "node/:nodeId",
         element: <NodePageLayout />,
         children: [
-          { index: true, element: <FestivalOverview /> },
+          { index: true, element: <NodeOverview /> },
           { path: "stats", element: <MoneyOverview /> },
           {
             path: "settings-legacy",
@@ -78,7 +87,7 @@ const router = createBrowserRouter([
           },
           {
             path: "settings",
-            element: <Settings />,
+            element: <NodeSettings />,
           },
           {
             path: "payout-runs",
@@ -92,11 +101,30 @@ const router = createBrowserRouter([
             path: "payout-runs/:payoutRunId",
             element: <PayoutRunDetail />,
           },
+          {
+            path: "tax-rates",
+            element: <TaxRateList />,
+          },
+          {
+            path: "tax-rates/new",
+            element: <TaxRateCreate />,
+          },
+          {
+            path: "tax-rates/:taxRateId/edit",
+            element: <TaxRateUpdate />,
+          },
         ],
       },
       {
+        path: "node/:nodeId/create-event",
+        element: <EventCreate />,
+      },
+      {
+        path: "node/:nodeId/create-node",
+        element: <NodeCreate />,
+      },
+      {
         path: "node/:nodeId/products",
-        element: <PrivilegeGuard privilege="node_administration" />,
         children: [
           {
             index: true,
@@ -118,7 +146,6 @@ const router = createBrowserRouter([
       },
       {
         path: "node/:nodeId/tickets",
-        element: <PrivilegeGuard privilege="node_administration" />,
         children: [
           {
             index: true,
@@ -161,30 +188,8 @@ const router = createBrowserRouter([
         ],
       },
       {
-        path: "node/:nodeId/tax-rates",
-        element: <PrivilegeGuard privilege="node_administration" />,
-        children: [
-          {
-            index: true,
-            element: <TaxRateList />,
-          },
-          {
-            path: "new",
-            element: <TaxRateCreate />,
-          },
-          {
-            path: ":taxRateName/edit",
-            element: <TaxRateUpdate />,
-          },
-        ],
-      },
-      {
         path: "node/:nodeId/tills",
-        element: (
-          <PrivilegeGuard privilege="node_administration">
-            <TillPageLayout />
-          </PrivilegeGuard>
-        ),
+        element: <TillPageLayout />,
         children: [
           {
             index: true,
@@ -277,6 +282,16 @@ const router = createBrowserRouter([
         ],
       },
       {
+        path: "node/:nodeId/dsfinvk",
+        element: <DsfinvkPageLayout />,
+        children: [
+          {
+            index: true,
+            element: <DsfinvkExport />,
+          },
+        ],
+      },
+      {
         path: "node/:nodeId/accounts",
         element: (
           <PrivilegeGuard privilege="node_administration">
@@ -319,7 +334,6 @@ const router = createBrowserRouter([
       },
       {
         path: "node/:nodeId/orders",
-        element: <PrivilegeGuard privilege="node_administration" />,
         children: [
           {
             index: true,
@@ -337,11 +351,7 @@ const router = createBrowserRouter([
       },
       {
         path: "node/:nodeId/users",
-        element: (
-          <PrivilegeGuard privilege="user_management">
-            <UserPageLayout />
-          </PrivilegeGuard>
-        ),
+        element: <UserPageLayout />,
         children: [
           {
             index: true,
@@ -379,7 +389,6 @@ const router = createBrowserRouter([
       },
       {
         path: "node/:nodeId/user-to-roles",
-        element: <PrivilegeGuard privilege="user_management" />,
         children: [
           {
             index: true,

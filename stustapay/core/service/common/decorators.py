@@ -139,7 +139,9 @@ def requires_node(
             if object_types is not None:
                 forbidden = list(filter(lambda obj: obj in node.computed_forbidden_objects_at_node, object_types))
                 if len(forbidden) != 0:
-                    raise ResourceNotAllowed(f'The resources: "{forbidden}" are not allowed at node {node.name}')
+                    raise ResourceNotAllowed(
+                        f'The resources: "{", ".join(map(lambda x: x.value, forbidden))}" are not allowed at node {node.name}'
+                    )
             if event_only and node.event_node_id is None:
                 raise EventRequired("This operation is only allowed for nodes within events")
 
@@ -207,7 +209,9 @@ def requires_user(
 
                 if privileges:
                     if not any([p.value in user_privileges for p in privileges]):
-                        raise AccessDenied(f"user does not have any of the required privileges: {privileges}")
+                        raise AccessDenied(
+                            f"user does not have any of the required privileges: {[p.value for p in privileges]}"
+                        )
 
             if "current_user" in original_signature.parameters:
                 kwargs["current_user"] = user
