@@ -1460,6 +1460,7 @@ export type NewTill = {
   description?: string | null;
   active_shift?: string | null;
   active_profile_id: number;
+  active_tse_id?: number | null;
 };
 export type TillLayout = {
   name: string;
@@ -1957,7 +1958,7 @@ export type FindUserTagPayload = {
 export type UpdateCommentPayload = {
   comment: string;
 };
-export type TseType = "diebold_nixdorf";
+export type TseType = "diebold_nixdorf" | "fiskaly";
 export type TseStatus = "new" | "active" | "disabled" | "failed";
 export type Tse = {
   name: string;

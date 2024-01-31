@@ -14,6 +14,7 @@ export function TseForm<T extends NewTse>(props: TseFormProps<T>) {
       <FormTextField autoFocus name="name" label={t("tse.name")} formik={props} />
       <FormTextField name="serial" label={t("tse.serial")} formik={props} />
       <FormTextField name="ws_url" label={t("tse.wsUrl")} formik={props} />
+      <FormTextField name="type" label={t("tse.type")} formik={props} />
       <FormNumericInput
         name="ws_timeout"
         label={t("tse.wsTimeout")}

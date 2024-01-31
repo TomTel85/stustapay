@@ -86,13 +86,14 @@ class TillService(DBService):
     async def update_till(self, *, conn: Connection, node: Node, till_id: int, till: NewTill) -> Till:
         # TODO: TREE visibility
         row = await conn.fetchrow(
-            "update till set name = $2, description = $3, active_shift = $4, active_profile_id = $5 "
+            "update till set name = $2, description = $3, active_shift = $4, active_profile_id = $5, tse_id = $6 "
             "where id = $1 returning id",
             till_id,
             till.name,
             till.description,
             till.active_shift,
             till.active_profile_id,
+            till.active_tse_id
         )
         if row is None:
             raise NotFound(element_typ="till", element_id=till_id)

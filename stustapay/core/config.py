@@ -43,6 +43,11 @@ class CustomerPortalApiConfig(HTTPServerConfig):
 class BonConfig(BaseModel):
     n_workers: int = 1
 
+class FiskalyConfig(BaseModel):
+    base_url: str
+    api_key: str
+    api_secret: str
+
 
 class Config(BaseModel):
     database: DatabaseConfig
@@ -51,6 +56,7 @@ class Config(BaseModel):
     terminalserver: TerminalApiConfig
     customerportal: CustomerPortalApiConfig
     bon: BonConfig
+    fiskaly: FiskalyConfig
 
 
 def read_config(config_path: os.PathLike) -> Config:

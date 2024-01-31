@@ -1,4 +1,5 @@
 import { NewTill } from "@/api";
+import { TillTseSelect } from "@/components/features";
 import { FormTextField } from "@stustapay/form-components";
 import { FormikProps } from "formik";
 import { useTranslation } from "react-i18next";
@@ -36,6 +37,14 @@ export function TillForm<T extends NewTill>(props: TillFormProps<T>) {
         onChange={(value: TillProfile | null) =>
           value != null ? setFieldValue("active_profile_id", value.id) : undefined
         }
+      />
+      <TillTseSelect
+        name="layout"
+        label={t("till.tse")}
+        error={touched.active_tse_id && !!errors.active_tse_id}
+        helperText={(touched.active_tse_id && errors.active_tse_id) as string}
+        onChange={(value) => setFieldValue("active_tse_id", value)}
+        value={values.active_tse_id || null}
       />
     </>
   );

@@ -48,6 +48,7 @@ class NewTill(BaseModel):
     description: Optional[str] = None
     active_shift: Optional[str] = None
     active_profile_id: int
+    active_tse_id: Optional[int] = None
 
 
 class Till(NewTill):
@@ -62,7 +63,6 @@ class Till(NewTill):
     current_cash_register_name: Optional[str] = None
     current_cash_register_balance: Optional[float] = None
 
-    tse_id: Optional[int] = None
     tse_serial: Optional[str] = None
 
 

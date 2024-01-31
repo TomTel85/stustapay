@@ -57,20 +57,22 @@ class NfcHandler @Inject constructor(
         return hex.toULong(16)
     }
 
+
+
     private fun handleTag(tag: Tag) {
         if (!tag.techList.contains("android.nfc.tech.NfcA")) {
             dataSource.setScanResult(NfcScanResult.Fail(NfcScanFailure.Incompatible("device has no NfcA support")))
             return
         }
-
-
-        // you should have checked that this device is capable of working with Mifare Ultralight tags, otherwise you receive an exception
+        //Todo handle aes and normal
+        //val mfUlAesTag = MifareUltralightAES(tag)
         val mfu = MifareUltralight.get(tag)
-
         try {
-            handleMfUlTag(mfu)
+        //    handleMfUlAesTag(mfUlAesTag)
+              handleMfUlTag(mfu)
 
-            mfu.close()
+              mfu.close()
+        //    mfUlAesTag.close()
         } catch (e: TagLostException) {
             dataSource.setScanResult(
                 NfcScanResult.Fail(
@@ -125,6 +127,26 @@ class NfcHandler @Inject constructor(
 
     private fun handleMfUlTag(mfu: MifareUltralight) {
 
+        val req = dataSource.getScanRequest()
+        if (req != null) {
+            when (req) {
+                is NfcScanRequest.FastRead -> {
+                    mfu.connect()
+                    if (mfu.isConnected) {
+                        val id = bytesToHexNpe(mfu.tag.id)
+                        dataSource.setScanResult(NfcScanResult.FastRead(hexToULong(id)))
+                    }
+
+                }
+                else ->  {
+                    mfu.connect()
+
+                }
+            }
+        }
+
+    }
+    private fun handleMfUlAesTag(tag: MifareUltralightAES) {
         val req = dataSource.getScanRequest()
         if (req != null) {
             when (req) {

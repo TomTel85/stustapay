@@ -13,6 +13,7 @@ const initialValues: NewTill = {
   description: "",
   active_user_id: undefined,
   active_profile_id: undefined as unknown as number, // to circument typescript
+  active_tse_id: undefined as unknown as number, // to circument typescript
   active_shift: undefined,
 };
 
