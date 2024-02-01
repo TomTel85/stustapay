@@ -4,9 +4,10 @@ import { FormNumericInput, FormTextField } from "@stustapay/form-components";
 import { FormikProps } from "formik";
 import { useTranslation } from "react-i18next";
 
-export type UpdateTseForm<T extends UpdateTse> = FormikProps<T>;
+// Renamed the type for clarity
+export type UpdateTseFormProps<T extends UpdateTse> = FormikProps<T>;
 
-export function UpdateTseForm<T extends UpdateTse>(props: UpdateTseForm<T>) {
+export function UpdateTseForm<T extends UpdateTse>(props: UpdateTseFormProps<T>) {
   const { t } = useTranslation();
 
   return (

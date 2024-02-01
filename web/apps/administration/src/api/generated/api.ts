@@ -1992,6 +1992,7 @@ export type NewTse = {
 };
 export type UpdateTse = {
   name: string;
+  type: TseType;
   ws_url: string;
   ws_timeout: number;
   password: string;
