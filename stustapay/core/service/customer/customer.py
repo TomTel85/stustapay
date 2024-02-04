@@ -148,14 +148,15 @@ class CustomerService(DBService):
 
         # if customer_info does not exist create it, otherwise update it
         await conn.execute(
-            "insert into customer_info (customer_account_id, iban, account_name, email, donation) "
-            "values ($1, $2, $3, $4, $5) "
-            "on conflict (customer_account_id) do update set iban = $2, account_name = $3, email = $4, donation = $5",
+            "insert into customer_info (customer_account_id, iban, account_name, email, donation, payout_amount) "
+            "values ($1, $2, $3, $4, $5, $6) "
+            "on conflict (customer_account_id) do update set iban = $2, account_name = $3, email = $4, donation = $5, payout_amount = $6",
             current_customer.id,
             iban.compact,
             customer_bank.account_name,
             customer_bank.email,
             round(customer_bank.donation, 2),
+            current_customer.balance-customer_bank.donation
         )
 
     async def check_payout_run(self, conn: Connection, current_customer: Customer) -> None:

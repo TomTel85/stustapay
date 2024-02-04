@@ -1,4 +1,4 @@
--- revision: 99999999
+-- revision: 99999998
 -- requires: c66cbafc
 
 ALTER TYPE tse_type ADD VALUE 'fiskaly' AFTER 'diebold_nixdorf';

@@ -188,10 +188,10 @@ class PayoutService(DBService):
     async def get_pending_payout_detail(self, *, conn: Connection) -> PendingPayoutDetail:
         return await conn.fetch_one(
             PendingPayoutDetail,
-            "select coalesce(sum(c.balance), 0) - coalesce(sum(c.donation), 0) as total_payout_amount, "
+            "select coalesce(sum(payout_amount), 0) as total_payout_amount, "
             "   coalesce(sum(c.donation), 0) as total_donation_amount, "
             "   count(*) as n_payouts "
-            "from customer c "
+            "from customer_info c "
             "where c.payout_run_id is null and c.customer_account_id is not null",
         )
 
