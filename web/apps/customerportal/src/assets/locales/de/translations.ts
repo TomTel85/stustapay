@@ -70,6 +70,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
     donationTitle: "Spende",
     payoutTitle: "Auszahlung",
     donationAmount: "Spendebetrag ",
+    payoutAmount: "Auszahlungsbetrag ",
     donationDescription:
       "Hat dir die Veranstaltung gefallen? Wir würden uns über eine Spende freuen, um unsere ehrenamtliche Arbeit zu unterstützen.",
     donateRemainingBalanceOf: "Spende verbleibende Summe von ",

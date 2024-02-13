@@ -70,6 +70,17 @@ async def create_payout_run(
         max_payout_sum,
         event_node_id,
     )
+ 
+
+    await conn.execute("""UPDATE account
+                        SET balance = 0
+                        WHERE id IN (
+                        SELECT customer_account_id
+                        FROM public.customer_info
+                        WHERE payout_run_id = $1
+                        )
+                        """,payout_run_id,)
+
     return payout_run_id, number_of_payouts
 
 

@@ -128,6 +128,7 @@ export type Customer = {
   account_name: string | null;
   email: string | null;
   donation: number | null;
+  payout_amount: number | null;
   payout_error: string | null;
   payout_run_id: number | null;
   payout_export: boolean | null;
@@ -148,6 +149,7 @@ export type CustomerRead = {
   account_name: string | null;
   email: string | null;
   donation: number | null;
+  payout_amount: number | null;
   payout_error: string | null;
   payout_run_id: number | null;
   payout_export: boolean | null;

@@ -66,6 +66,7 @@ export const translations = {
     donationTitle: "Donation",
     payoutTitle: "Payout",
     donationAmount: "Donate amount",
+    payoutAmount: "Payout amount ",
     donationDescription:
       "If you appreciated our hard work to make this event come true, we also welcome donations in order to support our future work",
     donateRemainingBalanceOf: "Donate remaining balance of ",
