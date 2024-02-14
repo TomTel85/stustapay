@@ -55,8 +55,9 @@ class Config(BaseModel):
     administration: AdministrationApiConfig
     terminalserver: TerminalApiConfig
     customerportal: CustomerPortalApiConfig
-    bon: BonConfig
+    bon: BonConfig = BonConfig()
     fiskaly: FiskalyConfig
+    
 
 
 def read_config(config_path: os.PathLike) -> Config:
