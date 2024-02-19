@@ -101,7 +101,6 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           path: artifacts
-          merge-multiple: true
       - name: List files
         run: |
           ls -lah artifacts
