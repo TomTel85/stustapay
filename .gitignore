@@ -11,6 +11,7 @@ __pycache__
 
 # python venv
 /venv
+/.venv
 
 # building
 MANIFEST
@@ -43,4 +44,5 @@ node_modules/
 # local
 TODO.md
 DigiCertGlobalRootCA.crt.pem
-run/stustapay/administration.json
+/run
+run/stustapay/customer_portal.json
