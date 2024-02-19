@@ -13,6 +13,7 @@ import {
   InputAdornment,
   Link,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import { Loading } from "@stustapay/components";
@@ -82,6 +83,7 @@ export const PayoutInfo: React.FC = () => {
         });
       }
     }),
+    payout_amount: z.number(),
   });
   type FormVal = z.infer<typeof FormSchema>;
 
@@ -91,6 +93,7 @@ export const PayoutInfo: React.FC = () => {
     email: customer.email ?? "",
     privacy_policy: false,
     donation: customer.donation ?? 0.0,
+    payout_amount: customer.payout_amount ?? 0.0,
   };
 
   const onSubmit = (values: FormVal, { setSubmitting }: FormikHelpers<FormVal>) => {
@@ -184,6 +187,16 @@ export const PayoutInfo: React.FC = () => {
                   InputProps={{
                     endAdornment: <InputAdornment position="end">{currencySymbol}</InputAdornment>,
                   }}
+                />
+                <FormNumericInput
+                name="payout_amount"
+                label={t("payout.payoutAmount")}
+                variant="outlined"
+                formik={formik}
+                InputProps={{
+                  endAdornment: <InputAdornment position="end">{currencySymbol}</InputAdornment>,
+                }}
+                disabled
                 />
                 <Button type="submit" variant="contained" color="primary" disabled={formik.isSubmitting}>
                   {formik.isSubmitting ? "Submitting" : t("payout.submitPayoutData")}

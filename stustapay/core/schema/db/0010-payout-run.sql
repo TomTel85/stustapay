@@ -10,3 +10,5 @@ create table if not exists payout_run (
 alter table customer_info add column payout_run_id bigint references payout_run(id) on delete cascade;
 alter table customer_info add column payout_error text;
 alter table customer_info add column payout_export boolean default true not null;
+
+ 
