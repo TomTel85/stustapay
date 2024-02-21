@@ -42,6 +42,10 @@ export const translations: NestedPartialAsStrings<Translations> = {
     registerStockings: "Kassenbestückungen",
     registers: "Registrierkassen",
     userToRoles: "Benutzer zu Rollen",
+    languages: {
+      en: "English",
+      de: "Deutsch",
+    },
     common: {
       id: "ID",
       definedAtNode: "Knoten",

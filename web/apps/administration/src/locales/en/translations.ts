@@ -36,6 +36,10 @@ export const translations = {
   registerStockings: "Cash Register Stockings",
   registers: "Cash Registers",
   userToRoles: "User to Roles",
+  languages: {
+    en: "English",
+    de: "Deutsch",
+  },
   common: {
     id: "ID",
     definedAtNode: "Node",
