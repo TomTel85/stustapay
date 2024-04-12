@@ -12,6 +12,10 @@ __pycache__
 # python venv
 /venv
 /.venv
+bin
+lib
+lib64
+pyvenv.cfg
 
 # building
 MANIFEST
@@ -46,3 +50,7 @@ TODO.md
 DigiCertGlobalRootCA.crt.pem
 /run
 run/stustapay/customer_portal.json
+
+# nix
+.direnv
+.envrc

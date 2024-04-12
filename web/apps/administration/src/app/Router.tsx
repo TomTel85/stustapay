@@ -14,7 +14,8 @@ import {
   SettingsLegacy,
   NodeCreate,
 } from "./routes/nodes";
-import { OrderDetail, OrderList, SaleEdit } from "./routes/orders";
+import { NodeStats } from "./routes/nodes/stats";
+import { OrderDetail, SaleEdit } from "./routes/orders";
 import { PayoutRunCreate, PayoutRunDetail, PayoutRunList } from "./routes/payouts";
 import { ProductCreate, ProductDetail, ProductList, ProductUpdate } from "./routes/products";
 import { TaxRateCreate, TaxRateList, TaxRateUpdate } from "./routes/tax-rates";
@@ -61,6 +62,8 @@ import {
 } from "./routes/users";
 import { SumUpCheckoutList, SumUpPageLayout, SumUpTransactionList, SumUpTransactionDetail } from "./routes/sumup";
 import { DsfinvkExport } from "./routes/nodes/DsfinvkExport";
+import { CustomerDetail, CustomerOverview, CustomerPageLayout, CustomerSearch } from "./routes/customers";
+import { TerminalCreate, TerminalDetail, TerminalList, TerminalUpdate } from "./routes/terminals";
 
 const router = createBrowserRouter([
   {
@@ -81,7 +84,7 @@ const router = createBrowserRouter([
         element: <NodePageLayout />,
         children: [
           { index: true, element: <NodeOverview /> },
-          { path: "stats", element: <MoneyOverview /> },
+          { path: "stats", element: <NodeStats /> },
           {
             path: "settings-legacy",
             element: <SettingsLegacy />,
@@ -89,6 +92,10 @@ const router = createBrowserRouter([
           {
             path: "settings",
             element: <NodeSettings />,
+          },
+          {
+            path: "system-accounts",
+            element: <SystemAccountList />,
           },
           {
             path: "payout-runs",
@@ -146,6 +153,24 @@ const router = createBrowserRouter([
           {
             path: ":productId",
             element: <ProductDetail />,
+          },
+        ],
+      },
+      {
+        path: "node/:nodeId/customers",
+        element: <CustomerPageLayout />,
+        children: [
+          {
+            index: true,
+            element: <CustomerOverview />,
+          },
+          {
+            path: "search",
+            element: <CustomerSearch />,
+          },
+          {
+            path: ":customerId",
+            element: <CustomerDetail />,
           },
         ],
       },
@@ -305,6 +330,27 @@ const router = createBrowserRouter([
         ],
       },
       {
+        path: "node/:nodeId/terminals",
+        children: [
+          {
+            index: true,
+            element: <TerminalList />,
+          },
+          {
+            path: "new",
+            element: <TerminalCreate />,
+          },
+          {
+            path: ":terminalId/edit",
+            element: <TerminalUpdate />,
+          },
+          {
+            path: ":terminalId",
+            element: <TerminalDetail />,
+          },
+        ],
+      },
+      {
         path: "node/:nodeId/accounts",
         element: (
           <PrivilegeGuard privilege="node_administration">
@@ -316,10 +362,6 @@ const router = createBrowserRouter([
           {
             path: ":accountId",
             element: <AccountDetail />,
-          },
-          {
-            path: "system",
-            element: <SystemAccountList />,
           },
           {
             path: "find",
@@ -348,10 +390,6 @@ const router = createBrowserRouter([
       {
         path: "node/:nodeId/orders",
         children: [
-          {
-            index: true,
-            element: <OrderList />,
-          },
           {
             path: ":orderId/edit",
             element: <SaleEdit />,

@@ -23,6 +23,7 @@ export const addTagTypes = [
   "payouts",
   "tree",
   "sumup",
+  "terminals",
 ] as const;
 const injectedRtkApi = api
   .enhanceEndpoints({
@@ -235,14 +236,6 @@ const injectedRtkApi = api
         query: (queryArg) => ({
           url: `/tills/${queryArg.tillId}`,
           method: "DELETE",
-          params: { node_id: queryArg.nodeId },
-        }),
-        invalidatesTags: ["tills"],
-      }),
-      logoutTill: build.mutation<LogoutTillApiResponse, LogoutTillApiArg>({
-        query: (queryArg) => ({
-          url: `/tills/${queryArg.tillId}/logout`,
-          method: "POST",
           params: { node_id: queryArg.nodeId },
         }),
         invalidatesTags: ["tills"],
@@ -563,9 +556,42 @@ const injectedRtkApi = api
         query: (queryArg) => ({
           url: `/stats/products`,
           params: {
+            node_id: queryArg.nodeId,
             to_timestamp: queryArg.toTimestamp,
             from_timestamp: queryArg.fromTimestamp,
+          },
+        }),
+        providesTags: ["stats"],
+      }),
+      getVoucherStats: build.query<GetVoucherStatsApiResponse, GetVoucherStatsApiArg>({
+        query: (queryArg) => ({
+          url: `/stats/vouchers`,
+          params: {
             node_id: queryArg.nodeId,
+            to_timestamp: queryArg.toTimestamp,
+            from_timestamp: queryArg.fromTimestamp,
+          },
+        }),
+        providesTags: ["stats"],
+      }),
+      getEntryStats: build.query<GetEntryStatsApiResponse, GetEntryStatsApiArg>({
+        query: (queryArg) => ({
+          url: `/stats/entries`,
+          params: {
+            node_id: queryArg.nodeId,
+            to_timestamp: queryArg.toTimestamp,
+            from_timestamp: queryArg.fromTimestamp,
+          },
+        }),
+        providesTags: ["stats"],
+      }),
+      getTopUpStats: build.query<GetTopUpStatsApiResponse, GetTopUpStatsApiArg>({
+        query: (queryArg) => ({
+          url: `/stats/top-ups`,
+          params: {
+            node_id: queryArg.nodeId,
+            to_timestamp: queryArg.toTimestamp,
+            from_timestamp: queryArg.fromTimestamp,
           },
         }),
         providesTags: ["stats"],
@@ -743,6 +769,61 @@ const injectedRtkApi = api
         query: (queryArg) => ({ url: `/sumup/checkouts/${queryArg.checkoutId}`, params: { node_id: queryArg.nodeId } }),
         providesTags: ["sumup"],
       }),
+      findCustomers: build.mutation<FindCustomersApiResponse, FindCustomersApiArg>({
+        query: (queryArg) => ({
+          url: `/customers/find-customers`,
+          method: "POST",
+          body: queryArg.findCustomerPayload,
+          params: { node_id: queryArg.nodeId },
+        }),
+        invalidatesTags: ["accounts"],
+      }),
+      getCustomer: build.query<GetCustomerApiResponse, GetCustomerApiArg>({
+        query: (queryArg) => ({ url: `/customers/${queryArg.customerId}`, params: { node_id: queryArg.nodeId } }),
+        providesTags: ["accounts"],
+      }),
+      listTerminals: build.query<ListTerminalsApiResponse, ListTerminalsApiArg>({
+        query: (queryArg) => ({ url: `/terminal`, params: { node_id: queryArg.nodeId } }),
+        providesTags: ["terminals"],
+      }),
+      createTerminal: build.mutation<CreateTerminalApiResponse, CreateTerminalApiArg>({
+        query: (queryArg) => ({
+          url: `/terminal`,
+          method: "POST",
+          body: queryArg.newTerminal,
+          params: { node_id: queryArg.nodeId },
+        }),
+        invalidatesTags: ["terminals"],
+      }),
+      getTerminal: build.query<GetTerminalApiResponse, GetTerminalApiArg>({
+        query: (queryArg) => ({ url: `/terminal/${queryArg.terminalId}`, params: { node_id: queryArg.nodeId } }),
+        providesTags: ["terminals"],
+      }),
+      updateTerminal: build.mutation<UpdateTerminalApiResponse, UpdateTerminalApiArg>({
+        query: (queryArg) => ({
+          url: `/terminal/${queryArg.terminalId}`,
+          method: "POST",
+          body: queryArg.newTerminal,
+          params: { node_id: queryArg.nodeId },
+        }),
+        invalidatesTags: ["terminals"],
+      }),
+      deleteTerminal: build.mutation<DeleteTerminalApiResponse, DeleteTerminalApiArg>({
+        query: (queryArg) => ({
+          url: `/terminal/${queryArg.terminalId}`,
+          method: "DELETE",
+          params: { node_id: queryArg.nodeId },
+        }),
+        invalidatesTags: ["terminals"],
+      }),
+      logoutTerminal: build.mutation<LogoutTerminalApiResponse, LogoutTerminalApiArg>({
+        query: (queryArg) => ({
+          url: `/terminal/${queryArg.terminalId}/logout`,
+          method: "POST",
+          params: { node_id: queryArg.nodeId },
+        }),
+        invalidatesTags: ["terminals"],
+      }),
     }),
     overrideExisting: false,
   });
@@ -894,11 +975,6 @@ export type UpdateTillApiArg = {
 };
 export type DeleteTillApiResponse = /** status 200 Successful Response */ any;
 export type DeleteTillApiArg = {
-  tillId: number;
-  nodeId?: number | null;
-};
-export type LogoutTillApiResponse = /** status 200 Successful Response */ any;
-export type LogoutTillApiArg = {
   tillId: number;
   nodeId?: number | null;
 };
@@ -1131,11 +1207,29 @@ export type CloseOutCashierApiArg = {
   nodeId?: number | null;
   closeOut: CloseOut;
 };
-export type GetProductStatsApiResponse = /** status 200 Successful Response */ ProductStats2;
+export type GetProductStatsApiResponse = /** status 200 Successful Response */ ProductStats;
 export type GetProductStatsApiArg = {
+  nodeId: number;
   toTimestamp?: string | null;
   fromTimestamp?: string | null;
-  nodeId?: number | null;
+};
+export type GetVoucherStatsApiResponse = /** status 200 Successful Response */ VoucherStats;
+export type GetVoucherStatsApiArg = {
+  nodeId: number;
+  toTimestamp?: string | null;
+  fromTimestamp?: string | null;
+};
+export type GetEntryStatsApiResponse = /** status 200 Successful Response */ TimeseriesStats;
+export type GetEntryStatsApiArg = {
+  nodeId: number;
+  toTimestamp?: string | null;
+  fromTimestamp?: string | null;
+};
+export type GetTopUpStatsApiResponse = /** status 200 Successful Response */ TimeseriesStats;
+export type GetTopUpStatsApiArg = {
+  nodeId: number;
+  toTimestamp?: string | null;
+  fromTimestamp?: string | null;
 };
 export type ListTicketsApiResponse = /** status 200 Successful Response */ NormalizedListTicketInt;
 export type ListTicketsApiArg = {
@@ -1266,6 +1360,46 @@ export type GetSumupCheckoutApiArg = {
   checkoutId: string;
   nodeId: number;
 };
+export type FindCustomersApiResponse = /** status 200 Successful Response */ CustomerRead[];
+export type FindCustomersApiArg = {
+  nodeId?: number | null;
+  findCustomerPayload: FindCustomerPayload;
+};
+export type GetCustomerApiResponse = /** status 200 Successful Response */ CustomerRead;
+export type GetCustomerApiArg = {
+  customerId: number;
+  nodeId?: number | null;
+};
+export type ListTerminalsApiResponse = /** status 200 Successful Response */ NormalizedListTerminalInt;
+export type ListTerminalsApiArg = {
+  nodeId: number;
+};
+export type CreateTerminalApiResponse = /** status 200 Successful Response */ Terminal;
+export type CreateTerminalApiArg = {
+  nodeId: number;
+  newTerminal: NewTerminal;
+};
+export type GetTerminalApiResponse = /** status 200 Successful Response */ Terminal;
+export type GetTerminalApiArg = {
+  terminalId: number;
+  nodeId: number;
+};
+export type UpdateTerminalApiResponse = /** status 200 Successful Response */ Terminal;
+export type UpdateTerminalApiArg = {
+  terminalId: number;
+  nodeId: number;
+  newTerminal: NewTerminal;
+};
+export type DeleteTerminalApiResponse = /** status 200 Successful Response */ any;
+export type DeleteTerminalApiArg = {
+  terminalId: number;
+  nodeId: number;
+};
+export type LogoutTerminalApiResponse = /** status 200 Successful Response */ any;
+export type LogoutTerminalApiArg = {
+  terminalId: number;
+  nodeId: number;
+};
 export type ProductRestriction = "under_16" | "under_18";
 export type ProductType = "discount" | "topup" | "payout" | "money_transfer" | "imbalance" | "user_defined" | "ticket";
 export type Product = {
@@ -1355,6 +1489,7 @@ export type ChangeUserPasswordPayload = {
 };
 export type Privilege =
   | "node_administration"
+  | "customer_management"
   | "user_management"
   | "cash_transport"
   | "terminal_login"
@@ -1463,11 +1598,10 @@ export type Till = {
   description?: string | null;
   active_shift?: string | null;
   active_profile_id: number;
+  terminal_id?: number | null;
   node_id: number;
   id: number;
   z_nr: number;
-  session_uuid?: string | null;
-  registration_uuid?: string | null;
   active_user_id?: number | null;
   active_user_role_id?: number | null;
   current_cash_register_name?: string | null;
@@ -1486,7 +1620,7 @@ export type NewTill = {
   description?: string | null;
   active_shift?: string | null;
   active_profile_id: number;
-  active_tse_id?: number | null;
+  terminal_id?: number | null;
 };
 export type TillLayout = {
   name: string;
@@ -1883,12 +2017,12 @@ export type NormalizedListCashierShiftInt = {
     [key: string]: CashierShift;
   };
 };
-export type ProductStats = {
+export type CashierProductStats = {
   product: Product;
   quantity: number;
 };
 export type CashierShiftStats = {
-  booked_products: ProductStats[];
+  booked_products: CashierProductStats[];
 };
 export type CloseOutResult = {
   cashier_id: number;
@@ -1899,34 +2033,33 @@ export type CloseOut = {
   actual_cash_drawer_balance: number;
   closing_out_user_id: number;
 };
-export type ProductSoldStats = {
-  name: string;
-  price: number | null;
-  fixed_price: boolean;
-  price_in_vouchers?: number | null;
-  tax_rate_id: number;
-  restrictions: ProductRestriction[];
-  is_locked: boolean;
-  is_returnable: boolean;
-  target_account_id?: number | null;
-  node_id: number;
-  id: number;
-  tax_name: string;
-  tax_rate: number;
-  type: ProductType;
-  price_per_voucher?: number | null;
-  quantity_sold: number;
+export type StatInterval = {
+  from_time: string;
+  to_time: string;
+  count: number;
+  revenue: number;
+};
+export type ProductTimeseries = {
+  product_id: number;
+  intervals: StatInterval[];
+};
+export type ProductStats = {
+  from_time: string;
+  to_time: string;
+  daily_intervals: StatInterval[];
+  hourly_intervals: StatInterval[];
+  product_daily_intervals: ProductTimeseries[];
+  product_hourly_intervals: ProductTimeseries[];
 };
 export type VoucherStats = {
   vouchers_issued: number;
   vouchers_spent: number;
 };
-export type ProductStats2 = {
-  product_quantities: ProductSoldStats[];
-  product_quantities_by_till: {
-    [key: string]: ProductSoldStats[];
-  };
-  voucher_stats: VoucherStats;
+export type TimeseriesStats = {
+  from_time: string;
+  to_time: string;
+  daily_intervals: StatInterval[];
+  hourly_intervals: StatInterval[];
 };
 export type Ticket = {
   name: string;
@@ -2110,8 +2243,8 @@ export type ObjectType =
   | "tax_rate"
   | "user_tag"
   | "tse"
-  | "order"
-  | "account";
+  | "account"
+  | "terminal";
 export type NodeSeenByUser = {
   id: number;
   parent: number;
@@ -2292,6 +2425,69 @@ export type SumUpCheckout = {
   transaction_id?: string | null;
   transactions?: SumUpTransaction[];
 };
+export type Customer = {
+  node_id: number;
+  id: number;
+  type: AccountType;
+  name: string | null;
+  comment: string | null;
+  balance: number;
+  vouchers: number;
+  user_tag_uid: number | null;
+  user_tag_comment?: string | null;
+  restriction: ProductRestriction | null;
+  tag_history: UserTagHistoryEntry[];
+  iban: string | null;
+  account_name: string | null;
+  email: string | null;
+  donation: number | null;
+  payout_error: string | null;
+  payout_run_id: number | null;
+  payout_export: boolean | null;
+};
+export type CustomerRead = {
+  node_id: number;
+  id: number;
+  type: AccountType;
+  name: string | null;
+  comment: string | null;
+  balance: number;
+  vouchers: number;
+  user_tag_uid: number | null;
+  user_tag_comment?: string | null;
+  restriction: ProductRestriction | null;
+  tag_history: UserTagHistoryEntryRead[];
+  iban: string | null;
+  account_name: string | null;
+  email: string | null;
+  donation: number | null;
+  payout_error: string | null;
+  payout_run_id: number | null;
+  payout_export: boolean | null;
+  user_tag_uid_hex: string | null;
+};
+export type FindCustomerPayload = {
+  search_term: string;
+};
+export type Terminal = {
+  name: string;
+  description?: string | null;
+  id: number;
+  node_id: number;
+  till_id: number | null;
+  session_uuid: string | null;
+  registration_uuid: string | null;
+};
+export type NormalizedListTerminalInt = {
+  ids: number[];
+  entities: {
+    [key: string]: Terminal;
+  };
+};
+export type NewTerminal = {
+  name: string;
+  description?: string | null;
+};
 export const {
   useListProductsQuery,
   useLazyListProductsQuery,
@@ -2334,7 +2530,6 @@ export const {
   useLazyGetTillQuery,
   useUpdateTillMutation,
   useDeleteTillMutation,
-  useLogoutTillMutation,
   useForceLogoutUserMutation,
   useListTillLayoutsQuery,
   useLazyListTillLayoutsQuery,
@@ -2402,6 +2597,12 @@ export const {
   useCloseOutCashierMutation,
   useGetProductStatsQuery,
   useLazyGetProductStatsQuery,
+  useGetVoucherStatsQuery,
+  useLazyGetVoucherStatsQuery,
+  useGetEntryStatsQuery,
+  useLazyGetEntryStatsQuery,
+  useGetTopUpStatsQuery,
+  useLazyGetTopUpStatsQuery,
   useListTicketsQuery,
   useLazyListTicketsQuery,
   useCreateTicketMutation,
@@ -2441,4 +2642,15 @@ export const {
   useLazyListSumupTransactionsQuery,
   useGetSumupCheckoutQuery,
   useLazyGetSumupCheckoutQuery,
+  useFindCustomersMutation,
+  useGetCustomerQuery,
+  useLazyGetCustomerQuery,
+  useListTerminalsQuery,
+  useLazyListTerminalsQuery,
+  useCreateTerminalMutation,
+  useGetTerminalQuery,
+  useLazyGetTerminalQuery,
+  useUpdateTerminalMutation,
+  useDeleteTerminalMutation,
+  useLogoutTerminalMutation,
 } = injectedRtkApi;

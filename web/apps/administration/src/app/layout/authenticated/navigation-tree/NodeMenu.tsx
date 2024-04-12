@@ -1,7 +1,6 @@
 import { NodeSeenByUserRead } from "@/api";
 import {
   AccountBalance as AccountBalanceIcon,
-  AddShoppingCart as AddShoppingCartIcon,
   ConfirmationNumber as ConfirmationNumberIcon,
   Nfc as NfcIcon,
   Person as PersonIcon,
@@ -9,16 +8,17 @@ import {
   Shield as ShieldIcon,
   ShoppingCart as ShoppingCartIcon,
   Payment as PaymentIcon,
+  Smartphone as SmartphoneIcon,
 } from "@mui/icons-material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { NavigationTreeItem } from "./NavigationTreeItem";
 import {
-  AccountRoutes,
   CashierRoutes,
-  OrderRoutes,
+  CustomerRoutes,
   ProductRoutes,
   SumUpTransactionRoutes,
+  TerminalRoutes,
   TicketRoutes,
   TillRoutes,
   TseRoutes,
@@ -31,8 +31,9 @@ export interface NodeMenuProps {
   node: NodeSeenByUserRead;
 }
 
-export const NodeMenu: React.FC<NodeMenuProps> = ({ node }) => {
+export const NodeMenu: React.FC<NodeMenuProps> = React.memo(({ node }) => {
   const { t } = useTranslation();
+  const isEvent = node.event != null;
 
   if (node.computed_forbidden_objects_at_node === undefined) {
     return null;
@@ -46,16 +47,18 @@ export const NodeMenu: React.FC<NodeMenuProps> = ({ node }) => {
   ) {
     const id = UserRoutes.list(node.id);
     items.push(<NavigationTreeItem key={id} nodeId={id} to={id} labelText={t("users")} labelIcon={PersonIcon} />);
-    const cashierId = CashierRoutes.list(node.id);
-    items.push(
-      <NavigationTreeItem
-        key={cashierId}
-        nodeId={cashierId}
-        to={cashierId}
-        labelText={t("cashiers")}
-        labelIcon={PersonIcon}
-      />
-    );
+    if (node.event_node_id != null) {
+      const cashierId = CashierRoutes.list(node.id);
+      items.push(
+        <NavigationTreeItem
+          key={cashierId}
+          nodeId={cashierId}
+          to={cashierId}
+          labelText={t("cashiers")}
+          labelIcon={PersonIcon}
+        />
+      );
+    }
   }
 
   {
@@ -79,30 +82,43 @@ export const NodeMenu: React.FC<NodeMenuProps> = ({ node }) => {
     const id = TillRoutes.list(node.id);
     items.push(<NavigationTreeItem key={id} nodeId={id} to={id} labelText={t("tills")} labelIcon={PointOfSaleIcon} />);
   }
-  if (node.event != null && node.privileges_at_node.includes("node_administration")) {
+  if (!node.computed_forbidden_objects_at_node.includes("terminal")) {
+    const id = TerminalRoutes.list(node.id);
+    items.push(
+      <NavigationTreeItem key={id} nodeId={id} to={id} labelText={t("terminal.terminals")} labelIcon={SmartphoneIcon} />
+    );
+  }
+  if (
+    node.event != null &&
+    node.privileges_at_node.includes("node_administration") &&
+    (node.event.sumup_payment_enabled || node.event.sumup_topup_enabled)
+  ) {
     const id = SumUpTransactionRoutes.list(node.id);
     items.push(
       <NavigationTreeItem key={id} nodeId={id} to={id} labelText={t("sumup.sumup")} labelIcon={PaymentIcon} />
     );
   }
-  if (!node.computed_forbidden_objects_at_node.includes("account")) {
-    const id = AccountRoutes.list(node.id);
+
+  if (isEvent && node.privileges_at_node.includes("node_administration")) {
+    const id = CustomerRoutes.list(node.id);
     items.push(
-      <NavigationTreeItem key={id} nodeId={id} to={id} labelText={t("accounts")} labelIcon={AccountBalanceIcon} />
+      <NavigationTreeItem
+        key={id}
+        nodeId={id}
+        to={id}
+        labelText={t("customer.customers")}
+        labelIcon={AccountBalanceIcon}
+      />
     );
   }
-  if (!node.computed_forbidden_objects_at_node.includes("till")) {
-    const id = OrderRoutes.list(node.id);
-    items.push(
-      <NavigationTreeItem key={id} nodeId={id} to={id} labelText={t("orders")} labelIcon={AddShoppingCartIcon} />
-    );
-  }
+
   if (!node.computed_forbidden_objects_at_node.includes("user_tag")) {
     const id = UserTagRoutes.list(node.id);
     items.push(
       <NavigationTreeItem key={id} nodeId={id} to={id} labelText={t("userTag.userTags")} labelIcon={NfcIcon} />
     );
   }
+
   if (
     !node.computed_forbidden_objects_at_node.includes("tse") &&
     node.privileges_at_node.includes("node_administration")
@@ -112,4 +128,4 @@ export const NodeMenu: React.FC<NodeMenuProps> = ({ node }) => {
   }
 
   return <>{items}</>;
-};
+});

@@ -1,4 +1,4 @@
-import { NewTill } from "@/api";
+import { NewTill, Terminal, selectTerminalAll, useListTerminalsQuery } from "@/api";
 import { FormTextField } from "@stustapay/form-components";
 import { FormikProps } from "formik";
 import { useTranslation } from "react-i18next";
@@ -23,15 +23,15 @@ export function TillForm<T extends NewTill>(props: TillFormProps<T>) {
       }),
     }
   );
-  const { tses } = useListTsesQuery(
+  const { terminals } = useListTerminalsQuery(
     { nodeId: currentNode.id },
     {
       selectFromResult: ({ data, ...rest }) => ({
         ...rest,
-        tses: data ? selectTseAll(data) : [],
+        terminals: data ? selectTerminalAll(data) : [],
       }),
     }
-  );        
+  );
   return (
     <>
       <FormTextField autoFocus name="name" label={t("till.name")} formik={props} />
@@ -50,15 +50,13 @@ export function TillForm<T extends NewTill>(props: TillFormProps<T>) {
       />
       <Select
         multiple={false}
-        formatOption={(tse: Tse) => tse.name}
-        value={tses.find((t) => t.id === values.active_tse_id) ?? null}
-        options={tses}
-        label={t("till.tse")}
-        error={touched.active_tse_id && !!errors.active_tse_id}
-        helperText={(touched.active_tse_id && errors.active_tse_id) as string}
-        onChange={(value: Tse | null) =>
-          value != null ? setFieldValue("active_tse_id", value.id) : undefined
-        }
+        formatOption={(terminal: Terminal) => terminal.name}
+        value={terminals.find((p) => p.id === values.terminal_id) ?? null}
+        options={terminals}
+        label={t("till.terminal")}
+        error={touched.terminal_id && !!errors.terminal_id}
+        helperText={(touched.terminal_id && errors.terminal_id) as string}
+        onChange={(value: Terminal | null) => (value != null ? setFieldValue("terminal_id", value.id) : undefined)}
       />
     </>
     );

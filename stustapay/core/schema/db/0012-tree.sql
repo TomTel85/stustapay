@@ -156,7 +156,7 @@ create table tree_object_type (
 
 insert into tree_object_type (name)
 values
-('user'), ('user_role'), ('product'), ('ticket'), ('till');
+('user'), ('user_role'), ('product'), ('ticket'), ('till'), ('terminal'), ('tax_rate'), ('account'), ('user_tag');
 
 create table forbidden_objects_at_node (
     object_name varchar(255) not null references tree_object_type(name),
@@ -186,26 +186,14 @@ values
 alter table account add column node_id bigint not null references node(id) default 1;
 alter table account alter column node_id drop default;
 
--- references an order
--- alter table bon add column node_id bigint not null references node(id) default 1;
--- alter table bon alter column node_id drop default;
-
 alter table cash_register add column node_id bigint not null references node(id) default 1;
 alter table cash_register alter column node_id drop default;
 
 alter table cash_register_stocking add column node_id bigint not null references node(id) default 1;
 alter table cash_register_stocking alter column node_id drop default;
 
--- probably not needed since cashier shift always references a cashier which is inside the tree
--- alter table cashier_shift add column node_id bigint not null references node(id) default 1;
--- alter table cashier_shift alter column node_id drop default;
-
 alter table config add column node_id bigint not null references node(id) default 1;
 alter table config alter column node_id drop default;
-
--- probably not needed since it references a customer_account which is inside the tree
--- alter table customer_info add column node_id bigint not null references node(id) default 1;
--- alter table customer_info alter column node_id drop default;
 
 alter table payout_run add column node_id bigint not null references node(id) default 1;
 alter table payout_run alter column node_id drop default;
@@ -280,13 +268,15 @@ update till set is_virtual = true where id = 1;  -- set is_virtual flag for init
 
 drop table allowed_user_roles_for_till_profile;
 
-insert into privilege (name) values ('node_administration'), ('cash_transport');
+insert into privilege (name) values ('node_administration'), ('cash_transport'), ('customer_management');
 
 insert into user_role_to_privilege (role_id, privilege)
 values
     (0, 'node_administration'),  -- admin role
+    (0, 'customer_management'),  -- admin role
     (1, 'node_administration'),  -- finanzorga role
-    (1, 'cash_transport');  -- finanzorga role
+    (1, 'cash_transport'),  -- finanzorga role
+    (1, 'customer_management');  -- finanzorga role
 
 delete from user_role_to_privilege where
     privilege = 'account_management' or
@@ -334,6 +324,13 @@ alter table product alter column type set not null;
 
 alter table product add column ticket_metadata_id bigint references ticket(id) unique;
 update product set ticket_metadata_id = t.id from product p join ticket t on t.product_id = p.id where p.id = product.id;
+
+insert into product_restriction (id, restriction)
+select p.id, t.restriction
+from product p
+join ticket t on p.ticket_metadata_id = t.id
+where t.restriction is not null;
+
 alter table ticket drop column name;
 alter table ticket drop column description;
 alter table ticket drop column restriction;
@@ -398,3 +395,17 @@ delete from account_type where name = 'virtual' or name = 'internal';
 alter table bon drop column output_file;
 alter table bon add column mime_type text;
 alter table bon add column content bytea;
+
+alter table till drop column registration_uuid;
+alter table till drop column session_uuid;
+
+create table terminal (
+    id bigint primary key generated always as identity (start with 1000),
+    node_id bigint not null references node(id),
+    name text not null,
+    description text,
+    registration_uuid uuid unique default gen_random_uuid(),
+    session_uuid uuid unique
+);
+
+alter table till add column terminal_id bigint references terminal(id) unique;

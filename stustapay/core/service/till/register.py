@@ -4,7 +4,7 @@ import asyncpg
 
 from stustapay.core.config import Config
 from stustapay.core.schema.account import Account, AccountType
-from stustapay.core.schema.terminal import Terminal
+from stustapay.core.schema.terminal import CurrentTerminal
 from stustapay.core.schema.till import (
     CashRegister,
     CashRegisterStocking,
@@ -57,7 +57,9 @@ async def create_cash_register(*, conn: Connection, node: Node, new_register: Ne
 
 async def _list_cash_register_stockings(*, conn: Connection, node: Node) -> list[CashRegisterStocking]:
     return await conn.fetch_many(
-        CashRegisterStocking, "select * from cash_register_stocking where node_id = any($1)", node.ids_to_event_node
+        CashRegisterStocking,
+        "select * from cash_register_stocking where node_id = any($1) order by name",
+        node.ids_to_event_node,
     )
 
 
@@ -76,12 +78,15 @@ async def _list_cash_registers(*, conn: Connection, node: Node, hide_assigned_re
     if hide_assigned_registers:
         return await conn.fetch_many(
             CashRegister,
-            "select * from cash_register_with_cashier where current_cashier_id is null and node_id = any($1)",
+            "select * from cash_register_with_cashier "
+            "where current_cashier_id is null and node_id = any($1) order by name",
             node.ids_to_event_node,
         )
     else:
         return await conn.fetch_many(
-            CashRegister, "select * from cash_register_with_cashier where node_id = any($1)", node.ids_to_event_node
+            CashRegister,
+            "select * from cash_register_with_cashier where node_id = any($1) order by name",
+            node.ids_to_event_node,
         )
 
 
@@ -99,7 +104,7 @@ class TillRegisterService(DBService):
     @with_db_transaction(read_only=True)
     @requires_terminal()
     async def list_cash_register_stockings_terminal(
-        self, *, conn: Connection, current_terminal: Terminal
+        self, *, conn: Connection, current_terminal: CurrentTerminal
     ) -> list[CashRegisterStocking]:
         node = await fetch_node(conn=conn, node_id=current_terminal.till.node_id)
         assert node is not None
@@ -190,7 +195,7 @@ class TillRegisterService(DBService):
     @with_db_transaction(read_only=True)
     @requires_terminal([Privilege.node_administration])
     async def list_cash_registers_terminal(
-        self, *, conn: Connection, current_terminal: Terminal, hide_assigned_registers=False
+        self, *, conn: Connection, current_terminal: CurrentTerminal, hide_assigned_registers=False
     ) -> list[CashRegister]:
         # TODO: TREE visibility
         node = await fetch_node(conn=conn, node_id=current_terminal.till.id)
@@ -242,13 +247,13 @@ class TillRegisterService(DBService):
         return result != "DELETE 0"
 
     @with_retryable_db_transaction(read_only=False)
-    @requires_terminal([Privilege.node_administration])
+    @requires_terminal([Privilege.cash_transport])
     async def stock_up_cash_register(
         self,
         *,
         conn: Connection,
         current_user: CurrentUser,
-        current_terminal: Terminal,
+        current_terminal: CurrentTerminal,
         stocking_id: int,
         cashier_tag_uid: int,
         cash_register_id: int,
@@ -356,7 +361,7 @@ class TillRegisterService(DBService):
         *,
         conn: Connection,
         current_user: CurrentUser,
-        current_terminal: Terminal,
+        current_terminal: CurrentTerminal,
         orga_tag_uid: int,
         amount: float,
     ):
@@ -456,7 +461,12 @@ class TillRegisterService(DBService):
     @with_retryable_db_transaction(read_only=False)
     @requires_terminal()
     async def transfer_cash_register_terminal(
-        self, *, conn: Connection, current_terminal: Terminal, source_cashier_tag_uid: int, target_cashier_tag_uid: int
+        self,
+        *,
+        conn: Connection,
+        current_terminal: CurrentTerminal,
+        source_cashier_tag_uid: int,
+        target_cashier_tag_uid: int,
     ):
         node = await fetch_node(conn=conn, node_id=current_terminal.till.node_id)
         assert node is not None
