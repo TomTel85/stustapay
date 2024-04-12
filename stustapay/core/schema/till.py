@@ -47,7 +47,6 @@ class NewTill(BaseModel):
     description: Optional[str] = None
     active_shift: Optional[str] = None
     active_profile_id: int
-    active_tse_id: Optional[int] = None
     terminal_id: int | None = None
 
 

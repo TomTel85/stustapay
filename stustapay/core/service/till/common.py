@@ -16,7 +16,6 @@ async def create_till(*, conn: Connection, node_id: int, till: NewTill) -> Till:
         till.description,
         till.active_shift,
         till.active_profile_id,
-        till.active_tse_id,
         node_id,
         till.terminal_id,
     )
