@@ -2,6 +2,7 @@ import enum
 from datetime import datetime, time
 from itertools import chain
 from typing import Optional
+from decimal import Decimal
 
 from pydantic import BaseModel, EmailStr, computed_field
 
@@ -20,7 +21,7 @@ class Language(enum.Enum):
 
 class _BaseEvent(BaseModel):
     currency_identifier: str
-    max_account_balance: float
+    max_account_balance: Decimal
 
     start_date: datetime | None = None
     end_date: datetime | None = None

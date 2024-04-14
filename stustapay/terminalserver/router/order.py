@@ -1,8 +1,8 @@
 """
 purchase ordering.
 """
-
 from typing import Optional
+from decimal import getcontext
 
 from fastapi import APIRouter
 
@@ -25,6 +25,7 @@ from stustapay.core.schema.order import (
     PendingTopUp,
     TicketScanResult,
 )
+
 
 router = APIRouter(prefix="/order", tags=["order"])
 

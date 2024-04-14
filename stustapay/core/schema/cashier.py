@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+from decimal import Decimal
 
 from pydantic import BaseModel, computed_field
 
@@ -23,24 +24,24 @@ class Cashier(BaseModel):
     transport_account_id: Optional[int] = None
     cashier_account_id: int
     cash_register_id: Optional[int] = None
-    cash_drawer_balance: float
+    cash_drawer_balance: Decimal
     till_ids: list[int]
 
 
 class CashierShiftStats(BaseModel):
-    class CashierProductStats(BaseModel):
+    class ProductStats(BaseModel):
         product: Product
         quantity: int
 
-    booked_products: list[CashierProductStats]
+    booked_products: list[ProductStats]
 
 
 class CashierShift(BaseModel):
     id: int
     comment: str
     closing_out_user_id: int
-    actual_cash_drawer_balance: float
-    expected_cash_drawer_balance: float
-    cash_drawer_imbalance: float
+    actual_cash_drawer_balance: Decimal
+    expected_cash_drawer_balance: Decimal
+    cash_drawer_imbalance: Decimal
     started_at: datetime
     ended_at: datetime

@@ -1,5 +1,6 @@
 import re
 from typing import Optional
+from decimal import Decimal
 
 import asyncpg
 
@@ -168,7 +169,7 @@ class AccountService(DBService):
     @requires_node()
     @requires_user([Privilege.node_administration])
     async def update_account_balance(
-        self, *, conn: Connection, current_user: User, account_id: int, new_balance: float
+        self, *, conn: Connection, current_user: User, account_id: int, new_balance: Decimal
     ) -> bool:
         raise RuntimeError("currently disallowed")
         # account = await self.get_account(conn=conn, current_user=current_user, account_id=account_id)

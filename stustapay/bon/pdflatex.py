@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
+from decimal import Decimal
 
 import jinja2
 from pydantic import BaseModel, computed_field
@@ -42,12 +43,12 @@ LatexEncoder = UnicodeToLatexEncoder(
 TEX_PATH = os.path.join(os.path.abspath(os.path.dirname(__file__)), "tex")
 
 
-def jfilter_money(value: float):
+def jfilter_money(value: Decimal):
     # how are the money values printed in the pdf
     return f"{value:8.2f}".replace(".", ",")
 
 
-def jfilter_percent(value: float):
+def jfilter_percent(value: Decimal):
     # format percentages as ' 7,00%'
     return f"{value * 100:5.2f}\\%".replace(".", ",")
 
@@ -80,10 +81,10 @@ class BonConfig(BaseModel):
 
 class TaxRateAggregation(BaseModel):
     tax_name: str
-    tax_rate: float
-    total_price: float
-    total_tax: float
-    total_no_tax: float
+    tax_rate: Decimal
+    total_price: Decimal
+    total_tax: Decimal
+    total_no_tax: Decimal
 
 
 class OrderWithTse(Order):

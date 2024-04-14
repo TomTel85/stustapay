@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 from uuid import UUID, uuid4
+from decimal import Decimal
 
 from pydantic import BaseModel
 
@@ -19,7 +20,7 @@ class BookingIdentifier:
     target_account_id: int
 
 
-async def book_prepared_bookings(*, conn: Connection, order_id: int, bookings: dict[BookingIdentifier, float]):
+async def book_prepared_bookings(*, conn: Connection, order_id: int, bookings: dict[BookingIdentifier, Decimal]):
     """
     insert the selected bookings into the database.
     bookings are (source, target, tax) -> amount
@@ -37,7 +38,7 @@ async def book_prepared_bookings(*, conn: Connection, order_id: int, bookings: d
 class NewLineItem(BaseModel):
     quantity: int
     product_id: int
-    product_price: float
+    product_price: Decimal
     tax_rate_id: int
 
 
@@ -54,8 +55,8 @@ async def book_money_transfer(
     node: Node,
     originating_user_id: int,
     cash_register_id: int,
-    bookings: dict[BookingIdentifier, float],
-    amount: float,
+    bookings: dict[BookingIdentifier, Decimal],
+    amount: Decimal,
     till_id: int,
 ) -> OrderInfo:
     transfer_product = await fetch_money_transfer_product(conn=conn, node=node)
@@ -88,7 +89,7 @@ async def book_order(
     cashier_id: Optional[int],
     till_id: Optional[int],
     line_items: list[NewLineItem],
-    bookings: dict[BookingIdentifier, float],
+    bookings: dict[BookingIdentifier, Decimal],
     uuid: Optional[UUID] = None,
     cancels_order: Optional[int] = None,
     customer_account_id: Optional[int] = None,
@@ -126,7 +127,7 @@ async def book_order(
             order_id,
             i,
             line_item.product_id,
-            round(line_item.product_price,2),
+            line_item.product_price,
             line_item.quantity,
             line_item.tax_rate_id,
         )

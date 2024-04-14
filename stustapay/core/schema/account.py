@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, computed_field
+from decimal import Decimal
 
 from stustapay.core.schema.order import OrderType
 from stustapay.core.schema.product import Product, ProductRestriction
@@ -82,7 +83,7 @@ class Account(BaseModel):
     type: AccountType
     name: Optional[str]
     comment: Optional[str]
-    balance: float
+    balance: Decimal
     vouchers: int
 
     # metadata relevant to a tag

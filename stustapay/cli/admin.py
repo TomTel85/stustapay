@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Optional
+from decimal import Decimal
 
 import typer
 
@@ -158,7 +159,7 @@ def customer_bank_export(
         ),
     ] = None,
     max_payout_sum: Annotated[
-        float,
+        Decimal,
         typer.Option(
             "--max-payout-sum",
             "-s",
@@ -166,7 +167,7 @@ def customer_bank_export(
             "Relevant is the bank only accepts a certain max. number that one can spend per day. "
             "If not given, the default is 50.000€.",
         ),
-    ] = 50_000.0,
+    ] = Decimal(50_000.0),
     dry_run: Annotated[bool, typer.Option(help="If set, don't perform any database modifications.")] = False,
 ):
     asyncio.run(

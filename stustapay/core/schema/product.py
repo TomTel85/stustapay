@@ -1,5 +1,6 @@
 import enum
 from typing import Optional
+from decimal import Decimal
 
 from pydantic import BaseModel
 
@@ -21,7 +22,7 @@ class ProductType(enum.Enum):
 
 class NewProduct(BaseModel):
     name: str
-    price: Optional[float]
+    price: Optional[Decimal]
     fixed_price: bool = True
     price_in_vouchers: Optional[int] = None
     tax_rate_id: int
@@ -36,10 +37,10 @@ class Product(NewProduct):
     node_id: int
     id: int
     tax_name: str
-    tax_rate: float
+    tax_rate: Decimal
     fixed_price: bool
     type: ProductType
-    price_per_voucher: Optional[float] = None
+    price_per_voucher: Optional[Decimal] = None
     restrictions: list[ProductRestriction]
     is_locked: bool
     is_returnable: bool

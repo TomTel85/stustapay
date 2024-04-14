@@ -3,6 +3,8 @@ from typing import Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from decimal import Decimal
+
 from stustapay.core.http.auth_user import CurrentAuthToken
 from stustapay.core.http.context import ContextAccountService
 from stustapay.core.http.normalize_data import NormalizedList, normalize_list
@@ -53,7 +55,7 @@ async def disable_account(
 
 
 class UpdateBalancePayload(BaseModel):
-    new_balance: float
+    new_balance: Decimal
 
 
 @router.post("/accounts/{account_id}/update-balance")

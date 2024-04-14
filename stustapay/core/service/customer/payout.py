@@ -4,6 +4,7 @@ import io
 import logging
 import re
 from typing import Iterator, Optional
+from decimal import Decimal
 
 import asyncpg
 from schwifty import IBAN
@@ -43,7 +44,7 @@ async def get_number_of_payouts(conn: Connection, event_node_id: int, payout_run
 
 
 async def create_payout_run(
-    conn: Connection, event_node_id: int, created_by: str, max_payout_sum: float
+    conn: Connection, event_node_id: int, created_by: str, max_payout_sum: Decimal
 ) -> tuple[int, int]:
     """
     Args:
@@ -153,7 +154,7 @@ def dump_payout_run_as_csv(
                     "customer_account_id": customer.customer_account_id,
                     "beneficiary_name": customer.account_name,
                     "iban": customer.iban,
-                    "amount": round(customer.balance, 2),
+                    "amount": customer.balance,
                     "currency": currency_ident,
                     "reference": sepa_config.description.format(
                         user_tag_uid=format_user_tag_uid(customer.user_tag_uid)

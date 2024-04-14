@@ -1,6 +1,11 @@
 # pylint: disable=attribute-defined-outside-init,unexpected-keyword-arg,missing-kwoa,redefined-outer-name
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal
+
+from decimal import Decimal, getcontext
+
+getcontext().prec = 2
 
 import pytest
 
@@ -197,7 +202,7 @@ async def test_basic_sale_flow(
     customer_info = await till_service.get_customer(token=terminal_token, customer_tag_uid=customer.tag.uid)
     assert customer_info is not None
     assert starting_balance == customer_info.balance
-    await assert_system_account_balance(account_type=AccountType.sale_exit, expected_balance=0)
+    await assert_system_account_balance(account_type=AccountType.sale_exit, expected_balance=Decimal(0))
 
     # after logging out a user with bookings the z_nr should not be incremented
     await till_service.logout_user(token=terminal_token)
@@ -258,7 +263,7 @@ async def test_basic_sale_flow_with_deposit(
     # this test also checks if we can temporarily go below 0 balance due to different account bookings
     assert sale_products.beer_product.price is not None
     assert sale_products.deposit_product.price is not None
-    start_balance = sale_products.beer_product.price * 5.0 - sale_products.deposit_product.price / 2.0
+    start_balance = sale_products.beer_product.price * Decimal(5.0) - sale_products.deposit_product.price / Decimal(2.0)
     await db_connection.execute("update account set balance = $1 where id = $2", start_balance, customer.account_id)
     sale_exit_start_balance = await get_system_account_balance(AccountType.sale_exit)
     new_sale = NewSale(
@@ -518,7 +523,7 @@ async def test_cashier_close_out(
 
     cashier_info = await cashier_service.get_cashier(token=admin_token, node_id=event_node.id, cashier_id=cashier.id)
     assert cashier_info is not None
-    actual_balance = 458.2
+    actual_balance = Decimal(458.2)
     with pytest.raises(InvalidCloseOutException):
         await cashier_service.close_out_cashier(
             token=admin_token,

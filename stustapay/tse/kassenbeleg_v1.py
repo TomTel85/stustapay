@@ -1,5 +1,5 @@
 import re
-
+from decimal import Decimal
 
 class Kassenbeleg_V1:
     # mapping from tax_name (as given in the database) to KassSichV Kassenbeleg-V1 tax index
@@ -27,7 +27,7 @@ class Kassenbeleg_V1:
             raise RuntimeError(f"invalid tax name {tax_name!r}") from None
         self.brutto_steuerumsaetze[tax_rate_index] += price
 
-    def add_zahlung(self, betrag: float, zahlungsart: str, waehrung="EUR"):
+    def add_zahlung(self, betrag: Decimal, zahlungsart: str, waehrung="EUR"):
         zahlungsart = zahlungsart.capitalize()
         if zahlungsart not in self.ZAHLUNGSARTEN:
             raise RuntimeError(f"{zahlungsart=!r} must be one of {self.ZAHLUNGSARTEN}")

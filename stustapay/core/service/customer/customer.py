@@ -3,6 +3,7 @@
 import logging
 import re
 from typing import Optional
+from decimal import Decimal
 
 import asyncpg
 from pydantic import BaseModel
@@ -46,7 +47,7 @@ class CustomerBank(BaseModel):
     iban: str
     account_name: str
     email: str
-    donation: float = 0.0
+    donation: Decimal = Decimal(0.0)
 
 
 class CustomerService(DBService):
@@ -111,6 +112,7 @@ class CustomerService(DBService):
             "select * from order_value_with_bon where customer_account_id = $1 order by booked_at DESC",
             current_customer.id,
         )
+
 
     @with_db_transaction
     @requires_customer

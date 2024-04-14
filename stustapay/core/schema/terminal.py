@@ -1,5 +1,6 @@
 from typing import Optional
 from uuid import UUID
+from decimal import Decimal
 
 from pydantic import BaseModel
 
@@ -33,10 +34,10 @@ class TerminalSecrets(BaseModel):
 class TerminalButton(BaseModel):
     id: int
     name: str
-    price: Optional[float]
-    default_price: Optional[float] = None  # for variably priced products a default price might be interesting?
+    price: Optional[Decimal]
+    default_price: Optional[Decimal] = None  # for variably priced products a default price might be interesting?
     price_in_vouchers: Optional[int] = None
-    price_per_voucher: Optional[float] = None
+    price_per_voucher: Optional[Decimal] = None
     is_returnable: bool
     fixed_price: bool
 

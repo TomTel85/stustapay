@@ -1,10 +1,15 @@
 import os
+from pathlib import Path
 
 import yaml
 from pydantic import BaseModel
 
 from stustapay.framework.database import DatabaseConfig
 
+import decimal
+
+# Set the default precision to 2
+decimal.getcontext().prec = 2
 
 class HTTPServerConfig(BaseModel):
     base_url: str
@@ -38,6 +43,7 @@ class CustomerPortalApiConfig(HTTPServerConfig):
     base_url: str
     host: str = "localhost"
     port: int = 8082
+    base_bon_url: str
 
 
 class BonConfig(BaseModel):

@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+from decimal import Decimal
 
 import asyncpg
 from pydantic import BaseModel
@@ -40,13 +41,13 @@ class InvalidCloseOutException(ServiceException):
 
 class CloseOut(BaseModel):
     comment: str
-    actual_cash_drawer_balance: float
+    actual_cash_drawer_balance: Decimal
     closing_out_user_id: int
 
 
 class CloseOutResult(BaseModel):
     cashier_id: int
-    imbalance: float
+    imbalance: Decimal
 
 
 async def _book_imbalance_order(
@@ -56,7 +57,7 @@ async def _book_imbalance_order(
     node: Node,
     cashier_account_id: int,
     cash_register_id: int,
-    imbalance: float,
+    imbalance: Decimal,
 ) -> OrderInfo:
     difference_product = await fetch_money_difference_product(conn=conn, node=node)
     line_items = [
@@ -72,7 +73,7 @@ async def _book_imbalance_order(
         conn=conn, node=node, account_type=AccountType.cash_imbalance
     )
 
-    bookings: dict[BookingIdentifier, float] = {
+    bookings: dict[BookingIdentifier, Decimal] = {
         BookingIdentifier(source_account_id=cashier_account_id, target_account_id=cash_imbalance_acc.id): -imbalance,
     }
     virtual_till = await fetch_virtual_till(conn=conn, node=node)
@@ -90,7 +91,7 @@ async def _book_imbalance_order(
 
 
 async def _book_money_transfer_close_out_start(
-    *, conn: Connection, current_user: CurrentUser, node: Node, cash_register_id: int, amount: float
+    *, conn: Connection, current_user: CurrentUser, node: Node, cash_register_id: int, amount: Decimal
 ) -> OrderInfo:
     virtual_till = await fetch_virtual_till(conn=conn, node=node)
     return await book_money_transfer(
@@ -111,10 +112,10 @@ async def _book_money_transfer_cash_vault_order(
     node: Node,
     cashier_account_id: int,
     cash_register_id: int,
-    amount: float,
+    amount: Decimal,
 ) -> OrderInfo:
     cash_vault_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.cash_vault)
-    bookings: dict[BookingIdentifier, float] = {
+    bookings: dict[BookingIdentifier, Decimal] = {
         BookingIdentifier(source_account_id=cashier_account_id, target_account_id=cash_vault_acc.id): amount,
     }
     virtual_till = await fetch_virtual_till(conn=conn, node=node)
@@ -138,9 +139,7 @@ class CashierService(DBService):
     @requires_node()
     @requires_user([Privilege.node_administration])
     async def list_cashiers(self, *, conn: Connection, node: Node) -> list[Cashier]:
-        return await conn.fetch_many(
-            Cashier, "select * from cashier where node_id = any($1) order by login", node.ids_to_event_node
-        )
+        return await conn.fetch_many(Cashier, "select * from cashier where node_id = any($1)", node.ids_to_event_node)
 
     @with_db_transaction(read_only=True)
     @requires_node()
@@ -228,9 +227,7 @@ class CashierService(DBService):
             product = await fetch_product(conn=conn, node=node, product_id=row["product_id"])
             if product is None:
                 continue
-            stats.booked_products.append(
-                CashierShiftStats.CashierProductStats(product=product, quantity=row["quantity"])
-            )
+            stats.booked_products.append(CashierShiftStats.ProductStats(product=product, quantity=row["quantity"]))
         return stats
 
     @with_retryable_db_transaction()
