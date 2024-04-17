@@ -9,6 +9,6 @@ export const useCurrencyFormatter = (): CurrencyFormatter => {
     if (value === null) {
       return "";
     }
-    return `${value.toFixed(2)} ${currencySymbol}`;
+    return `${Number(value).toFixed(2)} ${currencySymbol}`;
   };
 };

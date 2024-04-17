@@ -36,7 +36,7 @@ export const SumUpTransactionDetail: React.FC = () => {
           <ListItem>
             <ListItemText
               primary={t("sumup.checkout.amount")}
-              secondary={`${transaction.amount.toFixed(2)} ${transaction.currency}`}
+              secondary={`${Number(transaction.amount).toFixed(2)} ${transaction.currency}`}
             />
           </ListItem>
           <ListItem>

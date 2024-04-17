@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from stustapay.core.http.auth_till import CurrentAuthToken
 from stustapay.core.http.context import ContextTillService
 from stustapay.core.schema.till import CashRegister
+from decimal import Decimal
 
 router = APIRouter(
     prefix="",
@@ -18,7 +19,7 @@ router = APIRouter(
 
 class CashierAccountChangePayload(BaseModel):
     cashier_tag_uid: int
-    amount: float
+    amount: Decimal
 
 
 @router.post(
@@ -35,7 +36,7 @@ async def change_cash_register_balance(
 
 class TransportAccountChangePayload(BaseModel):
     orga_tag_uid: int
-    amount: float
+    amount: Decimal
 
 
 @router.post(

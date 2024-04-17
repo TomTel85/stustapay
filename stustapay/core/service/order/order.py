@@ -77,6 +77,7 @@ from .voucher import VoucherService
 
 logger = logging.getLogger(__name__)
 
+from decimal import Decimal
 
 class NotEnoughFundsException(ServiceException):
     """
@@ -85,7 +86,7 @@ class NotEnoughFundsException(ServiceException):
 
     id = "NotEnoughFunds"
 
-    def __init__(self, needed_fund: float, available_fund: float):
+    def __init__(self, needed_fund: Decimal, available_fund: Decimal):
         self.needed_fund = needed_fund
         self.available_fund = available_fund
 
@@ -165,14 +166,14 @@ class CustomerNotFound(ServiceException):
 class BookedButton(BaseModel):
     id: int
     quantity: Optional[int] = None
-    price: Optional[float] = None
+    price: Optional[Decimal] = None
     is_product: bool
 
 
 class BookedProduct(BaseModel):
     product: Product
     quantity: Optional[int] = None
-    price: Optional[float] = None
+    price: Optional[Decimal] = None
 
 
 class PendingTicket(BaseModel):
@@ -274,7 +275,7 @@ class OrderService(DBService):
                     raise InvalidArgument("The line item price was set for a fixed price item")
                 # other case (not fixed_price and not item_price) is implicitly checked with the database constraints,
                 # pydantic constraints and previous test
-                price: float | None = product.price
+                price: Decimal | None = product.price
                 if not product.fixed_price:
                     price = booked_product.price
                     booked_product.quantity = 1
@@ -645,12 +646,12 @@ class OrderService(DBService):
         sale_exit_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.sale_exit)
 
         # combine booking based on (source, target) -> amount
-        bookings: Dict[BookingIdentifier, float] = defaultdict(lambda: 0.0)
+        bookings: Dict[BookingIdentifier, Decimal] = defaultdict(lambda: Decimal(0.0))
         for line_item in pending_sale.line_items:
             product = line_item.product
             source_acc_id = get_source_account(OrderType.sale, pending_sale.customer_account_id)
             target_acc_id = get_target_account(OrderType.sale, product, sale_exit_acc.id)
-            bookings[BookingIdentifier(source_account_id=source_acc_id, target_account_id=target_acc_id)] += float(
+            bookings[BookingIdentifier(source_account_id=source_acc_id, target_account_id=target_acc_id)] += Decimal(
                 line_item.total_price
             )
 
@@ -990,7 +991,7 @@ class OrderService(DBService):
         )
         cash_exit_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.cash_exit)
 
-        prepared_bookings: Dict[BookingIdentifier, float] = {
+        prepared_bookings: Dict[BookingIdentifier, Decimal] = {
             BookingIdentifier(
                 source_account_id=pending_pay_out.customer_account_id, target_account_id=cash_topup_acc.id
             ): -pending_pay_out.amount,
@@ -1182,7 +1183,7 @@ class OrderService(DBService):
         )
 
     @staticmethod
-    def _find_oldest_customer(customers: dict[int, tuple[float, Optional[str]]]) -> int:
+    def _find_oldest_customer(customers: dict[int, tuple[Decimal, Optional[str]]]) -> int:
         oldest_customer = None
         for account_id, restriction in customers.items():
             if oldest_customer is None:
@@ -1228,7 +1229,7 @@ class OrderService(DBService):
 
         # create a new customer account for the given tag ,
         # store the initial topup amount as well as restriction for each newly created customer
-        customers: dict[int, tuple[float, Optional[str]]] = {}
+        customers: dict[int, tuple[Decimal, Optional[str]]] = {}
         for scanned_ticket in pending_ticket_sale.scanned_tickets:
             restriction = await conn.fetchval(
                 "select restriction from user_tag where uid = $1", scanned_ticket.customer_tag_uid
@@ -1253,7 +1254,7 @@ class OrderService(DBService):
                 )
             )
 
-        total_ticket_price = 0.0
+        total_ticket_price = Decimal(0.0)
         for line_item in pending_ticket_sale.line_items:
             if line_item.product.type != ProductType.topup:
                 total_ticket_price += line_item.total_price
@@ -1265,7 +1266,7 @@ class OrderService(DBService):
         sumup_entry_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.sumup_entry)
         sale_exit_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.sale_exit)
 
-        prepared_bookings: dict[BookingIdentifier, float] = {}
+        prepared_bookings: dict[BookingIdentifier, Decimal] = {}
         if pending_ticket_sale.payment_method == PaymentMethod.cash:
             prepared_bookings[
                 BookingIdentifier(

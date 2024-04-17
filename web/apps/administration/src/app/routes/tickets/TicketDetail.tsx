@@ -89,7 +89,7 @@ export const TicketDetail: React.FC = () => {
               primary={t("ticket.taxRate")}
               secondary={
                 <span>
-                  {ticket.tax_name} ({(ticket.tax_rate * 100).toFixed(0)}%)
+                  {ticket.tax_name} ({Number((ticket.tax_rate * 100)).toFixed(0)}%)
                 </span>
               }
             />

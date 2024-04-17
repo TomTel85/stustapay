@@ -1,11 +1,11 @@
 from pydantic import BaseModel
-
+from decimal import Decimal
 TAX_NONE = "none"
 
 
 class NewTaxRate(BaseModel):
     name: str
-    rate: float
+    rate: Decimal
     description: str
 
 

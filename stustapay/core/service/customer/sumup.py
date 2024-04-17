@@ -47,6 +47,7 @@ from stustapay.payment.sumup.api import (
     SumUpCreateCheckout,
 )
 
+from decimal import Decimal
 
 class SumUpError(ServiceException):
     id = "SumUpError"
@@ -63,7 +64,7 @@ class PendingCheckoutAlreadyExists(ServiceException):
 
 
 class CreateCheckout(BaseModel):
-    amount: float
+    amount: Decimal
 
 
 def requires_sumup_enabled(func):
@@ -301,7 +302,7 @@ class SumupService(DBService):
     @with_db_transaction
     @requires_customer
     @requires_sumup_enabled
-    async def create_checkout(self, *, conn: Connection, current_customer: Customer, amount: float) -> SumUpCheckout:
+    async def create_checkout(self, *, conn: Connection, current_customer: Customer, amount: Decimal) -> SumUpCheckout:
         event_node = await fetch_event_node_for_node(conn=conn, node_id=current_customer.node_id)
         assert event_node is not None
         event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=current_customer.node_id)

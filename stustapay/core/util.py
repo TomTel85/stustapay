@@ -5,9 +5,9 @@ import signal
 import sys
 import traceback
 from typing import Awaitable, Callable, Optional
-
+from decimal import Decimal 
 # convenience infinity.
-INF = float("inf")
+INF = Decimal("inf")
 
 LOGGER = logging.getLogger(__name__)
 

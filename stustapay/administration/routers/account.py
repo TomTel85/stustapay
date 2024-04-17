@@ -8,6 +8,8 @@ from stustapay.core.http.context import ContextAccountService
 from stustapay.core.http.normalize_data import NormalizedList, normalize_list
 from stustapay.core.schema.account import Account
 
+from decimal import Decimal
+
 router = APIRouter(
     prefix="",
     tags=["accounts"],
@@ -53,7 +55,7 @@ async def disable_account(
 
 
 class UpdateBalancePayload(BaseModel):
-    new_balance: float
+    new_balance: Decimal
 
 
 @router.post("/accounts/{account_id}/update-balance")

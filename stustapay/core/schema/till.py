@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pydantic import BaseModel
-
+from decimal import Decimal 
 from stustapay.core.schema.user import UserWithoutId
 
 
@@ -13,7 +13,7 @@ class NewTillButton(BaseModel):
 class TillButton(NewTillButton):
     node_id: int
     id: int
-    price: float
+    price: Decimal
 
 
 class NewTillLayout(BaseModel):
@@ -58,7 +58,7 @@ class Till(NewTill):
     active_user_role_id: Optional[int] = None
 
     current_cash_register_name: Optional[str] = None
-    current_cash_register_balance: Optional[float] = None
+    current_cash_register_balance: Optional[Decimal] = None
 
     tse_serial: Optional[str] = None
 
@@ -73,7 +73,7 @@ class CashRegister(NewCashRegister):
     current_cashier_id: Optional[int]
     current_cashier_tag_uid: Optional[int]
     current_till_id: Optional[int]
-    current_balance: float
+    current_balance: Decimal
 
 
 class NewCashRegisterStocking(BaseModel):
@@ -92,19 +92,19 @@ class NewCashRegisterStocking(BaseModel):
     cent5: int = 0
     cent2: int = 0
     cent1: int = 0
-    variable_in_euro: float = 0.0
+    variable_in_euro: Decimal = Decimal(0.0)
 
 
 class CashRegisterStocking(NewCashRegisterStocking):
     node_id: int
     id: int
-    total: float
+    total: Decimal
 
 
 class UserInfo(UserWithoutId):
     user_tag_uid: int
     cash_register_id: Optional[int] = None
     cash_register_name: Optional[str] = None
-    cash_drawer_balance: Optional[float] = None
-    transport_account_balance: Optional[float] = None
+    cash_drawer_balance: Optional[Decimal] = None
+    transport_account_balance: Optional[Decimal] = None
     role_names: Optional[list[str]] = None

@@ -11,7 +11,7 @@ from stustapay.core.schema.user import Privilege, UserRole
 
 ROOT_NODE_ID = 0
 INITIAL_EVENT_NODE_ID = 1
-
+from decimal import Decimal
 
 class Language(enum.Enum):
     en_US = "en-US"
@@ -20,7 +20,7 @@ class Language(enum.Enum):
 
 class _BaseEvent(BaseModel):
     currency_identifier: str
-    max_account_balance: float
+    max_account_balance: Decimal
 
     start_date: datetime | None = None
     end_date: datetime | None = None

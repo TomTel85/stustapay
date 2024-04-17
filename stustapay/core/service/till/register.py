@@ -33,6 +33,7 @@ from stustapay.core.service.transaction import book_transaction
 from stustapay.core.service.tree.common import fetch_node
 from stustapay.framework.database import Connection
 
+from decimal import Decimal
 
 async def get_cash_register(conn: Connection, node: Node, register_id: int) -> Optional[CashRegister]:
     return await conn.fetch_maybe_one(
@@ -306,7 +307,7 @@ class TillRegisterService(DBService):
         node: Node,
         current_user: CurrentUser,
         cashier_tag_uid: int,
-        amount: float,
+        amount: Decimal,
     ):
         # TODO: TREE visibility
         row = await conn.fetchrow(
@@ -339,7 +340,7 @@ class TillRegisterService(DBService):
                 f"Insufficient balance on transport account. Current balance is {transport_account.balance}"
             )
 
-        bookings: dict[BookingIdentifier, float] = {
+        bookings: dict[BookingIdentifier, Decimal] = {
             BookingIdentifier(source_account_id=transport_account.id, target_account_id=cashier_account.id): amount
         }
 
@@ -363,7 +364,7 @@ class TillRegisterService(DBService):
         current_user: CurrentUser,
         current_terminal: CurrentTerminal,
         orga_tag_uid: int,
-        amount: float,
+        amount: Decimal,
     ):
         # TODO: TREE visibility
         transport_account = await get_transport_account_by_tag_uid(conn=conn, orga_tag_uid=orga_tag_uid)

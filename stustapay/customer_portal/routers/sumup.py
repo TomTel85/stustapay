@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from stustapay.core.http.auth_customer import CurrentAuthToken
 from stustapay.core.http.context import ContextCustomerService
 from stustapay.core.schema.customer import SumUpCheckoutStatus
+from decimal import Decimal
 
 router = APIRouter(
     prefix="/sumup",
@@ -17,7 +18,7 @@ router = APIRouter(
 
 
 class CreateCheckoutPayload(BaseModel):
-    amount: float
+    amount: Decimal
 
 
 class CreateCheckoutResponse(BaseModel):

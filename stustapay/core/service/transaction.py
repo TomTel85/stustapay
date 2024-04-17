@@ -1,5 +1,5 @@
 from typing import Optional
-
+from decimal import Decimal
 from stustapay.framework.database import Connection
 
 
@@ -9,7 +9,7 @@ async def book_transaction(
     source_account_id: int,
     target_account_id: int,
     conducting_user_id: Optional[int] = None,
-    amount: float = 0,
+    amount: Decimal = Decimal(0),
     voucher_amount: int = 0,
     description: str = "",
     order_id: Optional[int] = None,

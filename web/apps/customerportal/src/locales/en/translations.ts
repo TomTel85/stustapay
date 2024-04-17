@@ -14,7 +14,7 @@ export const translations = {
   loginFailed: "Login failed: {{reason}}.",
   errorLoadingCustomer: "Error loading customer",
   payoutInfo:
-    "To get your payout after the festival, please <1>enter your bank account details here</1>. The first payout is scheduled approximately 3 weeks after the end of the event.",
+    "To get your payout after the event, please <1>enter your bank account details here</1>. The first payout is scheduled approximately 3 weeks after the end of the event.",
   about: "About",
   contact: "Contact",
   wristbandTagExample: "Voucher card Tag Example",

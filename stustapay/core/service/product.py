@@ -83,7 +83,7 @@ class ProductService(DBService):
             "returning id",
             node.id,
             product.name,
-            round(product.price,2),
+            round(product.price, 2) if product.price is not None else None,
             product.tax_rate_id,
             product.target_account_id,
             product.fixed_price,

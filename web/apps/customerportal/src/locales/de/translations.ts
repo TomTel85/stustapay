@@ -14,7 +14,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
   loginFailed: "Login fehlgeschlagen: {{reason}}.",
   errorLoadingCustomer: "Fehler beim Laden der Kundendaten",
   payoutInfo:
-    "Um dein Restguthaben nach dem Festival zu erhalten, <1>trage bitte deine Bankdaten hier ein</1>. Die erste Auszahlung findet voraussichtlich 3 Wochen nach Veranstaltungsende statt.",
+    "Um dein Restguthaben nach der Veranstaltung zu erhalten, <1>trage bitte deine Bankdaten hier ein</1>. Die erste Auszahlung findet voraussichtlich 3 Wochen nach Veranstaltungsende statt.",
   about: "Impressum",
   contact: "Kontakt",
   wristbandTagExample: "Beispiel einer Guthabenkarte",
@@ -63,7 +63,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
     privacyPolicyCheck: "Ich habe die <1>Datenschutzerklärung</1> gelesen und akzeptiere sie.",
     errorFetchingData: "Fehler beim laden der Daten.",
     updatedBankData:
-      "Bankdaten erfolgreich aktualisiert. Die erste Auszahlung erfolgt voraussichtlich 3 Wochen nach Festivalende.",
+      "Bankdaten erfolgreich aktualisiert. Die erste Auszahlung erfolgt voraussichtlich 3 Wochen nach Veranstaltungsende.",
     errorWhileUpdatingBankData: "Fehler beim aktualisieren der Bankdaten.",
     donationMustBePositive: "Das Spende muss positiv sein",
     donationExceedsBalance: "Die Spende darf nicht den Kontostand überschreiten",
@@ -78,7 +78,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
   },
   topup: {
     onlineTopUp: "Online-Aufladung",
-    description: "Du kannst dein Festival-Guthaben hier mit Kreditkarte aufladen.",
+    description: "Du kannst dein Guthaben hier mit Kreditkarte aufladen.",
     amount: "Betrag",
     errorWhileCreatingCheckout: "Fehler beim erstellen der SumUp-Zahlung.",
     errorAmountGreaterZero: "Betrag muss größer als 0 sein.",

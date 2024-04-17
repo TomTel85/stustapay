@@ -222,11 +222,11 @@ export const CashierCloseOut: React.FC = () => {
                     <TableCell align="right">{formatCurrency(computeSum(formik.values))}</TableCell>
                     <TableCell align="right">
                       {formatCurrency(computeDifference(formik.values, cashier.cash_drawer_balance))} (
-                      {(
+                      {Number((
                         Math.abs(
                           computeDifference(formik.values, cashier.cash_drawer_balance) / cashier.cash_drawer_balance
                         ) * 100
-                      ).toFixed(2)}
+                      )).toFixed(2)}
                       %)
                     </TableCell>
                   </TableRow>

@@ -37,6 +37,8 @@ from stustapay.framework.database import Connection
 from ..conftest import Cashier, CreateRandomUserTag
 from ..conftest import UserTag as TestUserTag
 
+from decimal import Decimal
+
 START_BALANCE = 100
 
 
@@ -134,12 +136,12 @@ async def assign_cash_register(
 
 
 class GetAccountBalance(Protocol):
-    def __call__(self, account_id: int) -> Awaitable[float]: ...
+    def __call__(self, account_id: int) -> Awaitable[Decimal]: ...
 
 
 @pytest.fixture
 async def get_account_balance(account_service: AccountService, event_node: Node, admin_token: str):
-    async def func(account_id: int) -> float:
+    async def func(account_id: int) -> Decimal:
         account = await account_service.get_account(token=admin_token, node_id=event_node.id, account_id=account_id)
         assert account is not None
         return account.balance
@@ -148,12 +150,12 @@ async def get_account_balance(account_service: AccountService, event_node: Node,
 
 
 class AssertAccountBalance(Protocol):
-    def __call__(self, account_id: int, expected_balance: float) -> Awaitable: ...
+    def __call__(self, account_id: int, expected_balance: Decimal) -> Awaitable: ...
 
 
 @pytest.fixture
 async def assert_account_balance(get_account_balance: GetAccountBalance):
-    async def func(account_id: int, expected_balance: float):
+    async def func(account_id: int, expected_balance: Decimal):
         balance = await get_account_balance(account_id=account_id)
         assert expected_balance == balance
 
@@ -161,7 +163,7 @@ async def assert_account_balance(get_account_balance: GetAccountBalance):
 
 
 class GetSystemAccountBalance(Protocol):
-    def __call__(self, account_type: AccountType) -> Awaitable[float]: ...
+    def __call__(self, account_type: AccountType) -> Awaitable[Decimal]: ...
 
 
 @pytest.fixture
@@ -174,14 +176,14 @@ async def get_system_account_balance(db_connection: Connection, event_node: Node
 
 
 class AssertSystemAccountBalance(Protocol):
-    def __call__(self, account_type: AccountType, expected_balance: float) -> Awaitable: ...
+    def __call__(self, account_type: AccountType, expected_balance: Decimal) -> Awaitable: ...
 
 
 @pytest.fixture
 async def assert_system_account_balance(
     get_system_account_balance: GetSystemAccountBalance,
 ) -> AssertSystemAccountBalance:
-    async def func(account_type: AccountType, expected_balance: float):
+    async def func(account_type: AccountType, expected_balance: Decimal):
         balance = await get_system_account_balance(account_type=account_type)
         assert expected_balance == balance
 

@@ -8,7 +8,7 @@ import typer
 
 from stustapay.core import admin, populate
 from stustapay.core.customer_bank_export import export_customer_payouts
-
+from decimal import Decimal
 admin_cli = typer.Typer()
 
 

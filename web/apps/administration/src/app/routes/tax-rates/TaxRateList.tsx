@@ -61,7 +61,7 @@ export const TaxRateList: React.FC = () => {
       align: "right",
       type: "number",
       valueGetter: (params) => params.row.rate * 100,
-      valueFormatter: ({ value }) => `${value.toFixed(2)} %`,
+      valueFormatter: ({ value }) => `${Number(value).toFixed(2)} %`,
     },
     {
       field: "node_id",

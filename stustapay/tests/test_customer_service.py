@@ -49,25 +49,25 @@ from stustapay.core.service.order.order import fetch_order
 from stustapay.core.service.product import ProductService
 from stustapay.framework.database import Connection
 from stustapay.tests.conftest import Cashier, CreateRandomUserTag
-
+from decimal import Decimal
 
 @dataclass
 class CustomerTest:
     account_id: int
     uid: int
     pin: str
-    balance: float
+    balance: Decimal
 
 
 @dataclass
 class CustomerTestInfo:
     uid: int
     pin: str
-    balance: float
+    balance: Decimal
     iban: str
     account_name: str
     email: str
-    donation: float
+    donation: Decimal
     payout_export: bool
 
 
@@ -102,7 +102,7 @@ async def test_customer(
         "private",
     )
 
-    return CustomerTest(account_id=account_id, pin=tag.pin, uid=tag.uid, balance=120)
+    return CustomerTest(account_id=account_id, pin=tag.pin, uid=tag.uid, balance=Decimal(120))
 
 
 @pytest.fixture
@@ -122,7 +122,7 @@ async def order_with_bon(
         node_id=event_node.id,
         product=NewProduct(
             name="Bier",
-            price=5.0,
+            price=Decimal(5.0),
             tax_rate_id=tax_rate_ust.id,
             restrictions=[],
             is_locked=True,
@@ -191,11 +191,11 @@ async def customers(
     n_customers = 10
     customers = []
     for i in range(n_customers):
-        balance = 10.321 * i + 0.0012
+        balance = Decimal(10.321 * i + 0.0012)
         iban = "DE89370400440532013000"
         account_name = f"Rolf{i}"
         email = "rolf@lol.de"
-        donation = balance if i == n_customers - 1 else 1.0 * i
+        donation = Decimal(balance if i == n_customers - 1 else 1.0 * i)
         payout_export = True
         tag = await create_random_user_tag()
 
@@ -245,9 +245,9 @@ def check_sepa_xml(xml_file, customers, sepa_config: SEPAConfig):
     tree = ET.parse(xml_file)
     p = "{urn:iso:std:iso:20022:tech:xsd:pain.001.001.03}"
 
-    group_sum = float(tree.find(f"{p}CstmrCdtTrfInitn/{p}GrpHdr/{p}CtrlSum").text)
+    group_sum = Decimal(tree.find(f"{p}CstmrCdtTrfInitn/{p}GrpHdr/{p}CtrlSum").text)
 
-    total_sum = float(tree.find(f"{p}CstmrCdtTrfInitn/{p}PmtInf/{p}CtrlSum").text)
+    total_sum = Decimal(tree.find(f"{p}CstmrCdtTrfInitn/{p}PmtInf/{p}CtrlSum").text)
 
     assert group_sum == total_sum
 
@@ -257,7 +257,7 @@ def check_sepa_xml(xml_file, customers, sepa_config: SEPAConfig):
     total_sum = 0
     for i, customer in enumerate(customers):
         # check amount
-        assert float(
+        assert Decimal(
             tree.find(f"{p}CstmrCdtTrfInitn/{p}PmtInf/{p}CdtTrfTxInf[{i + 1}]/{p}Amt/{p}InstdAmt").text
         ) == round(customer.balance - customer.donation, 2)
         total_sum += round(customer.balance - customer.donation, 2)
@@ -377,7 +377,7 @@ async def test_max_payout_sum(
     output_path.mkdir(parents=True, exist_ok=True)
 
     num = 2
-    s = sum(customer.balance - customer.donation for customer in customers_to_transfer[:num])
+    s = Decimal(sum(customer.balance - customer.donation for customer in customers_to_transfer[:num]))
 
     payout_run_id = await export_customer_payouts(
         config=config,
@@ -408,7 +408,7 @@ async def test_zero_payouts(
     output_path.mkdir(parents=True, exist_ok=True)
 
     num = 1
-    s = sum(customer.balance - customer.donation for customer in customers_to_transfer[:num])
+    s = Decimal(sum(customer.balance - customer.donation for customer in customers_to_transfer[:num]))
     with pytest.raises(InvalidArgument):
         _ = await export_customer_payouts(
             config=config,
@@ -537,7 +537,7 @@ async def test_get_customer_bank_data(
 
     # create payout run
     payout_run_id, number_of_payouts = await create_payout_run(
-        db_connection, event_node_id=event_node.id, created_by="Test", max_payout_sum=50000.0
+        db_connection, event_node_id=event_node.id, created_by="Test", max_payout_sum=Decimal(50000.0)
     )
     assert number_of_payouts == len(customers_to_transfer)
 
@@ -560,7 +560,7 @@ async def test_csv_export(
     sepa_config = event.sepa_config
     assert sepa_config is not None
     payout_run_id, number_of_payouts = await create_payout_run(
-        db_connection, event_node_id=event_node.id, created_by="Test", max_payout_sum=50000.0
+        db_connection, event_node_id=event_node.id, created_by="Test", max_payout_sum=Decimal(50000.0)
     )
     assert number_of_payouts == len(customers_to_transfer)
 
@@ -574,7 +574,7 @@ async def test_csv_export(
         )
     )
 
-    export_sum = 0.0
+    export_sum = Decimal(0.0)
 
     # read the csv back in
     csvfile = StringIO(csv_batches[0])
@@ -585,14 +585,14 @@ async def test_csv_export(
     for row, customer in zip(rows, customers_to_transfer):
         assert row["beneficiary_name"] == customer.account_name
         assert row["iban"] == customer.iban
-        assert float(row["amount"]) == round(customer.balance - customer.donation, 2)
+        assert row["amount"] == Decimal(customer.balance - customer.donation)
         assert row["currency"] == event.currency_identifier
         assert row["reference"] == sepa_config.description.format(user_tag_uid=format_user_tag_uid(customer.uid))
         assert row["email"] == customer.email
         assert int(row["uid"]) == customer.uid
-        export_sum += float(row["amount"])
+        export_sum += Decimal(row["amount"])
 
-    sql_sum = float(
+    sql_sum = Decimal(
         await db_connection.fetchval(
             "select sum(round(balance, 2)) from payout where node_id = any($1)", event_node.ids_to_event_node
         ),
@@ -610,7 +610,7 @@ async def test_sepa_export(
     assert sepa_config is not None
     execution_date = datetime.date.today()
     payout_run_id, number_of_payouts = await create_payout_run(
-        db_connection, event_node_id=event_node.id, created_by="Test", max_payout_sum=50000.0
+        db_connection, event_node_id=event_node.id, created_by="Test", max_payout_sum=Decimal(50000.0)
     )
     assert number_of_payouts == len(customers_to_transfer)
     customers_bank_data = await get_customer_bank_data(db_connection, payout_run_id)
@@ -671,7 +671,7 @@ async def test_sepa_export(
 
     # test invalid amount
     tmp_bank_data = copy.deepcopy(customers_bank_data)
-    tmp_bank_data[0].balance = -1
+    tmp_bank_data[0].balance = Decimal(-1)
     with pytest.raises(ValueError):
         list(
             dump_payout_run_as_sepa_xml(

@@ -31,6 +31,7 @@ from stustapay.core.service.config import ConfigService
 from stustapay.core.service.tree.common import fetch_event_node_for_node
 from stustapay.framework.database import Connection
 
+from decimal import Decimal
 
 async def get_number_of_payouts(conn: Connection, event_node_id: int, payout_run_id: int | None = None) -> int:
     if payout_run_id is None:
@@ -43,12 +44,12 @@ async def get_number_of_payouts(conn: Connection, event_node_id: int, payout_run
 
 
 async def create_payout_run(
-    conn: Connection, event_node_id: int, created_by: str, max_payout_sum: float
+    conn: Connection, event_node_id: int, created_by: str, max_payout_sum: Decimal
 ) -> tuple[int, int]:
     """
     Args:
         created_by (str): Person who initiated the payout, can be used for documentation reasons
-        max_payout_sum (float): Respected as the maximum amount of money payed out in this run.
+        max_payout_sum (Decimal): Respected as the maximum amount of money payed out in this run.
             This is useful if your bank only allows to transfer a maximum amount of money per transaction.
     Raises:
         InvalidArgument: Thrown if no the payout does not contain any payouts.

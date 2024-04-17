@@ -7,14 +7,14 @@ from pydantic import BaseModel
 from stustapay.core.schema.account import Account
 from stustapay.core.schema.order import Order
 from stustapay.payment.sumup.api import SumUpCheckoutStatus
-
+from decimal import Decimal
 
 class Customer(Account):
     iban: Optional[str]
     account_name: Optional[str]
     email: Optional[str]
-    donation: Optional[float]
-    payout_amount: Optional[float]
+    donation: Optional[Decimal]
+    payout_amount: Optional[Decimal]
     payout_error: Optional[str]
     payout_run_id: Optional[int]
     payout_export: Optional[bool]
@@ -26,7 +26,7 @@ class OrderWithBon(Order):
 
 class CustomerCheckout(BaseModel):
     checkout_reference: uuid.UUID
-    amount: float
+    amount: Decimal
     currency: str
     merchant_code: str
     description: str

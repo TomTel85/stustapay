@@ -6,7 +6,7 @@ import time
 import traceback
 import typing
 from typing import Callable
-
+from decimal import Decimal
 import asyncpg
 
 from stustapay.core.util import create_task_protected
@@ -348,7 +348,7 @@ class TSEWrapper:
         if payment_method is None:
             raise RuntimeError(f"invalid order {order_id!r}")
         beleg = Kassenbeleg_V1()
-        total = 0
+        total = Decimal(0)
         try:
             zahlungsart = PAYMENT_METHOD_TO_ZAHLUNGSART[payment_method]
         except KeyError as exc:

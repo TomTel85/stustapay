@@ -32,6 +32,7 @@ from .product import fetch_money_difference_product, fetch_product
 from .till.common import fetch_virtual_till
 from .user import AuthService
 
+from decimal import Decimal
 
 class InvalidCloseOutException(ServiceException):
     id = "InvalidCloseOut"
@@ -40,13 +41,13 @@ class InvalidCloseOutException(ServiceException):
 
 class CloseOut(BaseModel):
     comment: str
-    actual_cash_drawer_balance: float
+    actual_cash_drawer_balance: Decimal
     closing_out_user_id: int
 
 
 class CloseOutResult(BaseModel):
     cashier_id: int
-    imbalance: float
+    imbalance: Decimal
 
 
 async def _book_imbalance_order(
@@ -56,7 +57,7 @@ async def _book_imbalance_order(
     node: Node,
     cashier_account_id: int,
     cash_register_id: int,
-    imbalance: float,
+    imbalance: Decimal,
 ) -> OrderInfo:
     difference_product = await fetch_money_difference_product(conn=conn, node=node)
     line_items = [
@@ -72,7 +73,7 @@ async def _book_imbalance_order(
         conn=conn, node=node, account_type=AccountType.cash_imbalance
     )
 
-    bookings: dict[BookingIdentifier, float] = {
+    bookings: dict[BookingIdentifier, Decimal] = {
         BookingIdentifier(source_account_id=cashier_account_id, target_account_id=cash_imbalance_acc.id): -imbalance,
     }
     virtual_till = await fetch_virtual_till(conn=conn, node=node)
@@ -90,7 +91,7 @@ async def _book_imbalance_order(
 
 
 async def _book_money_transfer_close_out_start(
-    *, conn: Connection, current_user: CurrentUser, node: Node, cash_register_id: int, amount: float
+    *, conn: Connection, current_user: CurrentUser, node: Node, cash_register_id: int, amount: Decimal
 ) -> OrderInfo:
     virtual_till = await fetch_virtual_till(conn=conn, node=node)
     return await book_money_transfer(
@@ -111,10 +112,10 @@ async def _book_money_transfer_cash_vault_order(
     node: Node,
     cashier_account_id: int,
     cash_register_id: int,
-    amount: float,
+    amount: Decimal,
 ) -> OrderInfo:
     cash_vault_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.cash_vault)
-    bookings: dict[BookingIdentifier, float] = {
+    bookings: dict[BookingIdentifier, Decimal] = {
         BookingIdentifier(source_account_id=cashier_account_id, target_account_id=cash_vault_acc.id): amount,
     }
     virtual_till = await fetch_virtual_till(conn=conn, node=node)

@@ -20,6 +20,7 @@ from stustapay.core.service.product import fetch_top_up_product
 from stustapay.core.service.tree.common import fetch_event_for_node
 from stustapay.framework.database import Connection
 
+from decimal import Decimal
 
 class ProductSoldStats(Product):
     quantity_sold: int
@@ -38,7 +39,7 @@ class StatInterval(BaseModel):
     from_time: datetime
     to_time: datetime
     count: int
-    revenue: float
+    revenue: Decimal
 
 
 class Timeseries(BaseModel):

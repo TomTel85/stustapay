@@ -24,6 +24,7 @@ from stustapay.core.service.customer.sumup import SumupService
 from stustapay.core.service.tree.common import fetch_event_node_for_node
 from stustapay.framework.database import Connection
 
+from decimal import Decimal 
 
 class CustomerPortalApiConfig(BaseModel):
     test_mode: bool
@@ -46,7 +47,7 @@ class CustomerBank(BaseModel):
     iban: str
     account_name: str
     email: str
-    donation: float = 0.0
+    donation: Decimal = Decimal(0.0)
 
 
 class CustomerService(DBService):

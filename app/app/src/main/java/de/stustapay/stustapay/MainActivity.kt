@@ -36,8 +36,8 @@ class MainActivity : ComponentActivity(), SysUiController {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // disable all automatic screen rotation
-        // requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        // Set default orientation based on device type
+        setDefaultOrientation();
 
         // things that need the activity
         nfcHandler.onCreate(this)
@@ -47,6 +47,22 @@ class MainActivity : ComponentActivity(), SysUiController {
             Main(this)
         }
     }
+
+    private fun setDefaultOrientation() {
+        // Get the screen width and height
+        val screenWidth = resources.displayMetrics.widthPixels
+        val screenHeight = resources.displayMetrics.heightPixels
+
+        // Check if the device is primarily used in landscape or portrait
+        requestedOrientation = if (screenWidth > screenHeight) {
+            // Landscape device
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            // Portrait device
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+        }
+    }
+
 
     public override fun onPause() {
         super.onPause()

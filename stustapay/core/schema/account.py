@@ -7,7 +7,7 @@ from pydantic import BaseModel, computed_field
 from stustapay.core.schema.order import OrderType
 from stustapay.core.schema.product import Product, ProductRestriction
 from stustapay.core.schema.user import format_user_tag_uid
-
+from decimal import Decimal
 
 class AccountType(enum.Enum):
     private = "private"
@@ -82,7 +82,7 @@ class Account(BaseModel):
     type: AccountType
     name: Optional[str]
     comment: Optional[str]
-    balance: float
+    balance: Decimal
     vouchers: int
 
     # metadata relevant to a tag

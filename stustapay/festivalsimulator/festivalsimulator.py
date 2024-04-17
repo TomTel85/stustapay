@@ -16,6 +16,7 @@ from stustapay.core.schema.terminal import Terminal as _Terminal
 from stustapay.core.schema.terminal import TerminalConfig, TerminalRegistrationSuccess
 from stustapay.framework.database import create_db_pool
 
+from decimal import Decimal 
 
 def ith_chunk(lst: list, n_chunks: int, index: int):
     n = len(lst) // n_chunks

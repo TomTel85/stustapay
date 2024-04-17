@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from stustapay.core.schema.till import Till
 from stustapay.core.schema.user import Privilege, UserRole
-
+from decimal import Decimal
 
 class NewTerminal(BaseModel):
     name: str
@@ -33,10 +33,10 @@ class TerminalSecrets(BaseModel):
 class TerminalButton(BaseModel):
     id: int
     name: str
-    price: Optional[float]
-    default_price: Optional[float] = None  # for variably priced products a default price might be interesting?
+    price: Optional[Decimal]
+    default_price: Optional[Decimal] = None  # for variably priced products a default price might be interesting?
     price_in_vouchers: Optional[int] = None
-    price_per_voucher: Optional[float] = None
+    price_per_voucher: Optional[Decimal] = None
     is_returnable: bool
     fixed_price: bool
 

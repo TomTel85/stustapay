@@ -2,7 +2,7 @@ import datetime
 import logging
 from pathlib import Path
 from typing import Optional
-
+from decimal import Decimal 
 import asyncpg
 
 from stustapay.core.service.customer.payout import (
@@ -36,7 +36,7 @@ async def _export_customer_payouts(
     dry_run: bool,
     payout_run_id: Optional[int],
     output_path: Optional[Path],
-    max_payout_sum: float,
+    max_payout_sum: Decimal,
 ) -> int:
     if output_path is None:
         output_path = Path.cwd()

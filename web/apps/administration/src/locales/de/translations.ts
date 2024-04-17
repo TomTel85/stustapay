@@ -50,7 +50,12 @@ export const translations: NestedPartialAsStrings<Translations> = {
       id: "ID",
       definedAtNode: "Knoten",
       loadingError: "Fehler beim Laden der Seite",
-      configLoadFailed: "Fehler beim Laden der Seitenkonfiguration: {{what}}",
+      configLoadFailed: "Beim Laden der Seitenkonfiguration ist ein Fehler aufgetreten: {{what}}",
+      overview: "Übersicht",
+      search: "Suche",
+      email: "E-Mail",
+      name: "Name",
+      description: "Beschreibung",
     },
     nodes: {
       overview: "Übersicht",
@@ -522,7 +527,32 @@ export const translations: NestedPartialAsStrings<Translations> = {
       },
     },
     customer: {
+      search: "Suche",
+      customers: "Kunden",
       bankAccountHolder: "Kontoinhaber",
+      donation: "Spende",
+      payoutRun: "Aus-Zahlungslauf",
+      noPayoutRunAssigned: "Keinem Zahlungslauf zugeordnet",
+      noPayoutError: "Kein Auszahlungsfehler",
+      payoutRunError: "Fehler während der Auszahlung",
+      iban: "IBAN",
+    },
+    terminal: {
+      terminals: "Terminals",
+      till: "Kasse",
+      id: "ID",
+      registrationUUID: "Registrierungs-ID",
+      loggedIn: "Terminal registriert",
+      logout: "Terminal abmelden",
+      create: "Ein neues Terminal hinzufügen",
+      update: "Terminal aktualisieren",
+      delete: "Terminal löschen",
+      deleteDescription: "Löschung des Terminals bestätigen",
+      forceLogoutUserDescription:
+        "Benutzer am Terminal zwangsabmelden. Dies sollte NIEMALS erfolgen, während ein Kassierer das Terminal noch benutzt",
+      unregisterTerminal: "Ein Terminal zwangsabmelden",
+      unregisterTerminalDescription:
+        "Ein Terminal zwangsabmelden. Dies sollte NIEMALS erfolgen, während ein Kassierer das Terminal noch benutzt",
     },
 } as const;
 

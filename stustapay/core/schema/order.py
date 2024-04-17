@@ -8,7 +8,7 @@ from pydantic import BaseModel, computed_field, field_validator, model_validator
 from stustapay.core.schema.product import Product
 from stustapay.core.schema.ticket import Ticket
 from stustapay.core.schema.user import format_user_tag_uid
-
+from decimal import Decimal
 
 class OrderType(enum.Enum):
     sale = "sale"
@@ -37,7 +37,7 @@ class NewTopUp(BaseModel):
     uuid: UUID
     payment_method: PaymentMethod
 
-    amount: float
+    amount: Decimal
     customer_tag_uid: int
 
     _validate_payment_method = field_validator("payment_method")(is_non_tag_payment_method)
@@ -46,8 +46,8 @@ class NewTopUp(BaseModel):
 class PendingTopUp(NewTopUp):
     customer_account_id: int
 
-    old_balance: float
-    new_balance: float
+    old_balance: Decimal
+    new_balance: Decimal
 
 
 class CompletedTopUp(BaseModel):
@@ -56,9 +56,9 @@ class CompletedTopUp(BaseModel):
     customer_tag_uid: int
     customer_account_id: int
 
-    amount: float
-    old_balance: float
-    new_balance: float
+    amount: Decimal
+    old_balance: Decimal
+    new_balance: Decimal
 
     uuid: UUID
     booked_at: datetime.datetime
@@ -71,16 +71,16 @@ class NewPayOut(BaseModel):
     # if no amount is passed, the current customer account balance is assumed as payout
     uuid: UUID
     customer_tag_uid: int
-    amount: Optional[float] = None
+    amount: Optional[Decimal] = None
 
 
 class PendingPayOut(NewPayOut):
-    amount: float
+    amount: Decimal
 
     customer_account_id: int
 
-    old_balance: float
-    new_balance: float
+    old_balance: Decimal
+    new_balance: Decimal
 
 
 class CompletedPayOut(PendingPayOut):
@@ -96,7 +96,7 @@ class Button(BaseModel):
     # for products with a fixed price, the quantity must be specified
     # for products with variable price the used price must be set
     quantity: Optional[int] = None
-    price: Optional[float] = None
+    price: Optional[Decimal] = None
 
     # check for new Items if either quantity or price is set
     @model_validator(mode="after")  # type: ignore
@@ -113,7 +113,7 @@ class BookedProduct(BaseModel):
     # for products with a fixed price, the quantity must be specified
     # for products with variable price the used price must be set
     quantity: Optional[int] = None
-    price: Optional[float] = None
+    price: Optional[Decimal] = None
 
     # check for new Items if either quantity or price is set
     @model_validator(mode="after")  # type: ignore
@@ -148,14 +148,14 @@ class PendingLineItem(BaseModel):
     quantity: int
     product: Product
     # the following members are also in Product, but maybe they were updated in the meantime
-    product_price: float
+    product_price: Decimal
     tax_rate_id: int
     tax_name: str
-    tax_rate: float
+    tax_rate: Decimal
 
     @computed_field  # type: ignore[misc]
     @property
-    def total_price(self) -> float:
+    def total_price(self) -> Decimal:
         # pylint false positive
         return round(self.product_price,2) * self.quantity  # pylint: disable=no-member
 
@@ -163,8 +163,8 @@ class PendingLineItem(BaseModel):
 class PendingSaleBase(BaseModel):
     uuid: UUID
 
-    old_balance: float
-    new_balance: float
+    old_balance: Decimal
+    new_balance: Decimal
 
     old_voucher_balance: int
     new_voucher_balance: int
@@ -185,8 +185,8 @@ class PendingSaleBase(BaseModel):
 
     @computed_field  # type: ignore[misc]
     @property
-    def total_price(self) -> float:
-        agg = 0.0
+    def total_price(self) -> Decimal:
+        agg = Decimal(0.0)
         for line_item in self.line_items:
             agg += line_item.total_price
         return agg
@@ -255,8 +255,8 @@ class PendingTicketSale(BaseModel):
 
     @computed_field  # type: ignore[misc]
     @property
-    def total_price(self) -> float:
-        agg = 0.0
+    def total_price(self) -> Decimal:
+        agg = Decimal(0.0)
         for line_item in self.line_items:
             agg += line_item.total_price
         return agg
@@ -276,7 +276,7 @@ class CompletedTicketSale(PendingTicketSale):
 
 class LineItem(PendingLineItem):
     item_id: int
-    total_tax: float
+    total_tax: Decimal
 
 
 class Order(BaseModel):
@@ -287,9 +287,9 @@ class Order(BaseModel):
     id: int
     uuid: UUID
 
-    total_price: float
-    total_tax: float
-    total_no_tax: float
+    total_price: Decimal
+    total_tax: Decimal
+    total_no_tax: Decimal
     cancels_order: Optional[int]
 
     booked_at: datetime.datetime

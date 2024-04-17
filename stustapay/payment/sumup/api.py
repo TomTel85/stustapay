@@ -8,7 +8,7 @@ import aiohttp
 from pydantic import BaseModel
 
 from stustapay.core.service.common.error import ServiceException
-
+from decimal import Decimal
 
 class SumUpError(ServiceException):
     id = "SumUpError"
@@ -23,14 +23,14 @@ class _SumUpErrorFormat(BaseModel):
 
 class SumUpCreateCheckout(BaseModel):
     checkout_reference: uuid.UUID
-    amount: float
+    amount: Decimal
     currency: str
     merchant_code: str
     description: str
 
 
 class SumUpTransaction(BaseModel):
-    amount: float
+    amount: Decimal
     currency: str
     id: str
     payment_type: str | None = None

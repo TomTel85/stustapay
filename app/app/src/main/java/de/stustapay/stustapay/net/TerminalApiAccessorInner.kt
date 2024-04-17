@@ -84,9 +84,9 @@ class TerminalApiAccessorInner(
         }
 
         conf.install(HttpTimeout) {
-            connectTimeoutMillis = 5000
-            requestTimeoutMillis = 10000
-            socketTimeoutMillis = 10000
+            connectTimeoutMillis = 10000
+            requestTimeoutMillis = 15000
+            socketTimeoutMillis = 15000
         }
 
         if (logRequests) {
@@ -94,7 +94,7 @@ class TerminalApiAccessorInner(
                 level = LogLevel.ALL
                 logger = object : Logger {
                     override fun log(message: String) {
-                        Log.d("StuStaPay req", message)
+                        Log.d("TeamFestlichPay req", message)
                     }
                 }
             }
