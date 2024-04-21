@@ -5,7 +5,7 @@ import { fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
 const siteHost = window.location.host;
 const siteProtocol = window.location.protocol;
-const customerApiBaseUrl = `${siteProtocol}//${siteHost}/api`;
+const customerApiBaseUrl = `${siteProtocol}//${siteHost}/api/customer`;
 
 const prepareAuthHeaders = (
   headers: Headers,

@@ -10,6 +10,8 @@ from stustapay.core.http.context import ContextTerminalService, ContextTillServi
 from stustapay.core.schema.terminal import TerminalConfig
 from stustapay.core.schema.till import CashRegister, CashRegisterStocking, UserInfo
 
+from aiocache import cached
+
 router = APIRouter(
     prefix="",
     tags=["base"],
@@ -27,6 +29,7 @@ async def health():
 
 
 @router.get("/config", summary="obtain the current terminal config", response_model=TerminalConfig)
+@cached(ttl=60)
 async def config(
     token: CurrentAuthToken,
     terminal_service: ContextTerminalService,

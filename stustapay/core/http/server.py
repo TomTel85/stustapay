@@ -11,6 +11,8 @@ import uvicorn
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
+from aiocache import Cache
+from aiocache.serializers import JsonSerializer
 
 from stustapay import __version__
 from stustapay.core.config import DatabaseConfig, HTTPServerConfig
@@ -54,6 +56,10 @@ class Server:
             license_info={"name": "AGPL-3.0"},
             root_path=root_path,
         )
+
+        # Cache configuration
+        self.cache = Cache(Cache.MEMORY, serializer=JsonSerializer(), namespace="main")
+
 
         self.api.add_exception_handler(NotFound, not_found_exception_handler)
         self.api.add_exception_handler(ServiceException, service_exception_handler)
