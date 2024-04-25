@@ -35,7 +35,7 @@ dependencies = [
     "ecdsa==0.18.0",
     "dateutils==0.6.12",
     "pydantic[email]==2.4",
-    "aiocache==0.12.2,
+    "aiocache==0.12.2",
 ]
 
 [project.scripts]
