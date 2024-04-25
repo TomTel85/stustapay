@@ -140,8 +140,8 @@ class TerminalService(DBService):
             node.id,
         )
         if id_ is None:
-            raise NotFound(element_typ="terminal", element_id=terminal_id)
-        await conn.execute("update till set terminal_id = null where terminal_id = $1", terminal_id)
+            await conn.execute("update till set terminal_id = null where terminal_id = $1", terminal_id)
+            raise NotFound(element_typ="terminal", element_id=terminal_id)      
         return True
 
     @with_db_transaction
