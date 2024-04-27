@@ -210,6 +210,11 @@ class TerminalService(DBService):
 
         available_roles = await list_user_roles(conn=conn, node=node)
 
+        sumup_payment_enabled = await conn.fetchval(
+            "SELECT sumup_payment_enabled FROM event WHERE id = $1",
+            node.event_node_id
+        ) 
+
         return TerminalConfig(
             id=current_terminal.id,
             name=current_terminal.name,
@@ -230,6 +235,7 @@ class TerminalService(DBService):
                 available_roles=available_roles,
                 active_user_id=current_terminal.till.active_user_id,
             ),
+            sumup_payment_enabled=sumup_payment_enabled,
             test_mode=self.cfg.core.test_mode,
             test_mode_message=self.cfg.core.test_mode_message,
         )

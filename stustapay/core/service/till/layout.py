@@ -89,8 +89,9 @@ class TillLayoutService(DBService):
             button.name,
         )
         if row is None:
+            await conn.execute("delete from till_button_product where button_id = $1", button_id)
             raise NotFound(element_typ="button", element_id=button_id)
-        await conn.execute("delete from till_button_product where button_id = $1", button_id)
+        
         for product_id in button.product_ids:
             await conn.execute(
                 "insert into till_button_product (button_id, product_id) values ($1, $2)",
