@@ -215,6 +215,8 @@ class TerminalService(DBService):
             node.event_node_id
         ) 
 
+        sumup_payment_enabled = bool(sumup_payment_enabled)
+        
         return TerminalConfig(
             id=current_terminal.id,
             name=current_terminal.name,
