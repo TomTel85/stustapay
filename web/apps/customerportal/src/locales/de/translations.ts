@@ -56,7 +56,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
     iban: "IBAN",
     bankAccountHolder: "Kontoinhaber",
     email: "E-Mail",
-    info: "Damit wir dein Restguthaben überweisen können, trage bitte deine Bankdaten hier ein. Du kannst auch einen Teil oder Dein gesamtes Guthaben an uns spenden, um unser ehrenamtliches Engagement zu unterstützen. Die erste Auszahlung findet voraussichtlich 3 Wochen nach Veranstaltungsende statt.",
+    info: "Damit wir dein Restguthaben überweisen können, trage bitte Deine Bankdaten hier ein. Wenn Du unser ehrenamtliches Engagement unterstützen möchtest, kannst Du bei dem Punkt „Spendenbetrag“ einen Betrag Deiner Wahl eingegeben. Das System errechnet nach dem Drücken des Buttons „Bankdaten speichern“ dann automatisch den Auszahlungsbetrag. Möchtest Du keinen Betrag spenden bitte einfach nur den Button „Bankdaten speichern“ drücken, der auf der Karte verfügbare Betrag wird dann zur Auszahlung vorgemerkt.Die erste Auszahlung findet voraussichtlich 3 Wochen nach Veranstaltungsende statt.",
     ibanNotValid: "ungültige IBAN",
     countryCodeNotSupported: "IBAN Ländercode wird nicht unterstützt",
     mustAcceptPrivacyPolicy: "Sie müssen die Datenschutserklärung akzeptieren",

@@ -65,7 +65,7 @@ class TerminalConfig(BaseModel):
     description: str
 
     till: TerminalTillConfig | None
-    sumup_payment_enabled: bool
+    sumup_payment_enabled: bool 
     test_mode: bool
     test_mode_message: str
 

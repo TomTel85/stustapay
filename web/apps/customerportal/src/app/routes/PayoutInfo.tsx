@@ -31,11 +31,12 @@ export const PayoutInfo: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const config = usePublicConfig();
+  
 
   const { data: customer, error: customerError, isLoading: isCustomerLoading } = useGetCustomerQuery();
 
   const [updateCustomerInfo] = useUpdateCustomerInfoMutation();
-  const [updateCustomerDonateAll] = useUpdateCustomerInfoDonateAllMutation();
+  //const [updateCustomerDonateAll] = useUpdateCustomerInfoDonateAllMutation();
 
   const formatCurrency = useCurrencyFormatter();
   const currencySymbol = useCurrencySymbol();
@@ -92,8 +93,8 @@ export const PayoutInfo: React.FC = () => {
     account_name: customer.account_name ?? "",
     email: customer.email ?? "",
     privacy_policy: false,
-    donation: customer.donation ?? 0.0,
-    payout_amount: customer.payout_amount ?? 0.0,
+    donation: Number(customer.donation ?? 0),
+    payout_amount: Number(customer.payout_amount ?? 0),
   };
 
   const onSubmit = (values: FormVal, { setSubmitting }: FormikHelpers<FormVal>) => {
@@ -112,18 +113,18 @@ export const PayoutInfo: React.FC = () => {
         setSubmitting(false);
       });
   };
-  const onAllTipClick = () => {
-    updateCustomerDonateAll()
-      .unwrap()
-      .then(() => {
-        toast.success(t("payout.updatedBankData"));
-        navigate("/");
-      })
-      .catch((error) => {
-        toast.error(t("payout.errorWhileUpdatingBankData"));
-        console.error(error);
-      });
-  };
+  // const onAllTipClick = () => {
+  //   updateCustomerDonateAll()
+  //     .unwrap()
+  //     .then(() => {
+  //       toast.success(t("payout.updatedBankData"));
+  //       navigate("/");
+  //     })
+  //     .catch((error) => {
+  //       toast.error(t("payout.errorWhileUpdatingBankData"));
+  //       console.error(error);
+  //     });
+  // };
 
   return (
     <Grid container justifyItems="center" justifyContent="center" sx={{ paddingX: 0.5 }}>
@@ -131,16 +132,17 @@ export const PayoutInfo: React.FC = () => {
         <Alert severity="info" variant="outlined" sx={{ mb: 2 }}>
           {t("payout.info")}
         </Alert>
-        <h3>{t("payout.donationTitle")}</h3>
+        {/* <h3>{t("payout.donationTitle")}</h3>
         <Button variant="contained" color="primary" sx={{ width: "100%" }} onClick={onAllTipClick}>
           {t("payout.donateRemainingBalanceOf") + formatCurrency(customer.balance)}
-        </Button>
+        </Button> */}
 
         <h3>{t("payout.payoutTitle")}</h3>
         <Formik
           initialValues={initialValues}
           validationSchema={toFormikValidationSchema(FormSchema)}
           onSubmit={onSubmit}
+          enableReinitialize  
         >
           {(formik) => (
             <form onSubmit={formik.handleSubmit}>

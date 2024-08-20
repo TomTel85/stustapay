@@ -14,7 +14,7 @@ export const translations = {
   loginFailed: "Login failed: {{reason}}.",
   errorLoadingCustomer: "Error loading customer",
   payoutInfo:
-    "To get your payout after the event, please <1>enter your bank account details here</1>. The first payout is scheduled approximately 3 weeks after the end of the event.",
+    "To enable us to transfer your remaining credit, please enter your bank details here. If you would like to support our volunteer efforts, you can enter an amount of your choice at the point 'Donation Amount'. The system will automatically calculate the payout amount after pressing the 'Save Bank Data' button. If you do not wish to donate any amount, simply press the 'Save Bank Data' button, and the amount available on the card will then be earmarked for payout. The first payout is expected to take place approximately 3 weeks after the end of the event.",
   about: "About",
   contact: "Contact",
   wristbandTagExample: "Voucher card Tag Example",
