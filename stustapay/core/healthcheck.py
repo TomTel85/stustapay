@@ -19,10 +19,17 @@ class Healtcheck(BaseModel):
 
 
 def get_healthcheck_dir() -> Path:
-    prod_path = Path("/run/stustapay") / str(getpass.getuser())
-    if not prod_path.is_dir():
-        prod_path = Path("/run/user") / str(os.getuid()) / "stustapay"
-        prod_path.mkdir(exist_ok=True, parents=True)
+    
+    if os.name=='nt':
+        prod_path = Path("./run/stustapay") 
+        if not prod_path.is_dir():
+                prod_path = Path("./run/stustapay") 
+                prod_path.mkdir(exist_ok=True, parents=True)
+    else:
+        prod_path = Path("/run/stustapay") / str(getpass.getuser())
+        if not prod_path.is_dir():
+                prod_path = Path("/run/user") / str(os.getuid()) / "stustapay"
+                prod_path.mkdir(exist_ok=True, parents=True)
     return prod_path
 
 
