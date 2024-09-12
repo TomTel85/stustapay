@@ -8,7 +8,7 @@ from stustapay.core.schema.tse import NewTse, Tse, UpdateTse
 from stustapay.core.schema.user import Privilege
 from stustapay.core.service.auth import AuthService
 from stustapay.core.service.common.decorators import requires_node, requires_user
-from stustapay.core.service.common.error import NotFound
+from sftkit.error import NotFound
 
 
 async def list_tses(conn: Connection, node: Node) -> list[Tse]:

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import aiohttp
 from pydantic import BaseModel
 
-from stustapay.core.service.common.error import ServiceException
+from sftkit.error import ServiceException
 
 logger = logging.getLogger(__name__)
 

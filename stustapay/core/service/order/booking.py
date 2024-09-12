@@ -8,7 +8,7 @@ from sftkit.database import Connection
 
 from stustapay.core.schema.order import OrderType, PaymentMethod
 from stustapay.core.schema.tree import Node
-from stustapay.core.service.common.error import InvalidArgument
+from sftkit.error import InvalidArgument
 from stustapay.core.service.product import fetch_money_transfer_product
 from stustapay.core.service.transaction import book_transaction
 

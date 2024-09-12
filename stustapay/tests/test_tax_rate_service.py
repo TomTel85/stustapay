@@ -3,7 +3,7 @@ import pytest
 
 from stustapay.core.schema.tax_rate import NewTaxRate
 from stustapay.core.schema.tree import Node
-from stustapay.core.service.common.error import AccessDenied
+from sftkit.error import AccessDenied
 from stustapay.core.service.tax_rate import TaxRateService
 
 from .conftest import Cashier

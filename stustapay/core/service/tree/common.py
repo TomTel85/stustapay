@@ -9,7 +9,7 @@ from stustapay.core.schema.tree import (
     RestrictedEventSettings,
 )
 from stustapay.core.schema.user import CurrentUser
-from stustapay.core.service.common.error import NotFound
+from sftkit.error import NotFound
 
 
 class TranslationText(BaseModel):

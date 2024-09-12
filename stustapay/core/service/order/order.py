@@ -58,7 +58,7 @@ from stustapay.core.service.common.decorators import (
     requires_terminal,
     requires_user,
 )
-from stustapay.core.service.common.error import InvalidArgument, ServiceException
+from sftkit.error import InvalidArgument, ServiceException
 from stustapay.core.service.product import (
     fetch_discount_product,
     fetch_pay_out_product,

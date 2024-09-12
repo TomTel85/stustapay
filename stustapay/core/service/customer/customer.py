@@ -20,7 +20,7 @@ from stustapay.core.schema.customer import (
 from stustapay.core.schema.tree import Language
 from stustapay.core.service.auth import AuthService, CustomerTokenMetadata
 from stustapay.core.service.common.decorators import requires_customer
-from stustapay.core.service.common.error import AccessDenied, InvalidArgument
+from sftkit.error import AccessDenied, InvalidArgument
 from stustapay.core.service.config import ConfigService
 from stustapay.core.service.customer.payout import PayoutService
 from stustapay.core.service.customer.sumup import SumupService

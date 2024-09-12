@@ -14,7 +14,7 @@ from stustapay.core.schema.customer import Customer
 from stustapay.core.schema.payout import NewPayoutRun, PayoutRunWithStats
 from stustapay.core.schema.tree import Node, RestrictedEventSettings
 from stustapay.core.schema.user import format_user_tag_uid
-from stustapay.core.service.common.error import InvalidArgument
+from sftkit.error import InvalidArgument
 from stustapay.core.service.customer.customer import CustomerService
 from stustapay.core.service.customer.payout import Payout, dump_payout_run_as_sepa_xml
 from stustapay.core.service.mail import MailService

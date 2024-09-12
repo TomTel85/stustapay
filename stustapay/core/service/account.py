@@ -16,7 +16,7 @@ from stustapay.core.service.common.decorators import (
     requires_terminal,
     requires_user,
 )
-from stustapay.core.service.common.error import InvalidArgument, NotFound
+from sftkit.error import InvalidArgument, NotFound
 from stustapay.core.service.customer.common import fetch_customer
 from stustapay.core.service.transaction import book_transaction
 

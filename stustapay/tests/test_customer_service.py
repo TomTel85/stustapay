@@ -10,7 +10,7 @@ from stustapay.core.schema.product import NewProduct, Product
 from stustapay.core.schema.tax_rate import TaxRate
 from stustapay.core.schema.till import Till
 from stustapay.core.schema.tree import Node
-from stustapay.core.service.common.error import (
+from sftkit.error import (
     AccessDenied,
     InvalidArgument,
     Unauthorized,

@@ -27,7 +27,7 @@ from stustapay.core.service.common.decorators import (
     requires_terminal,
     requires_user,
 )
-from stustapay.core.service.common.error import AccessDenied, NotFound
+from sftkit.error import AccessDenied, NotFound
 from stustapay.core.service.till.till import (
     assign_till_to_terminal,
     remove_terminal_from_till,

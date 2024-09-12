@@ -2,7 +2,7 @@
 import pytest
 
 from stustapay.core.schema.user import ADMIN_ROLE_ID
-from stustapay.core.service.common.error import AccessDenied
+from sftkit.error import AccessDenied
 from stustapay.core.service.till import TillService
 from stustapay.tests.conftest import Cashier, UserTag
 from stustapay.tests.terminal.conftest import LoginSupervisedUser

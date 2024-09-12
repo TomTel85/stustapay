@@ -24,7 +24,7 @@ from stustapay.core.schema.user import CurrentUser, Privilege, format_user_tag_u
 from stustapay.core.service.account import get_system_account_for_node
 from stustapay.core.service.auth import AuthService
 from stustapay.core.service.common.decorators import requires_node, requires_user
-from stustapay.core.service.common.error import InvalidArgument, NotFound
+from sftkit.error import InvalidArgument, NotFound
 from stustapay.core.service.config import ConfigService
 from stustapay.core.service.customer.common import fetch_customer
 from stustapay.core.service.mail import MailService

@@ -18,7 +18,7 @@ from stustapay.core.schema.tree import RestrictedEventSettings
 from stustapay.core.service.account import get_system_account_for_node
 from stustapay.core.service.auth import AuthService
 from stustapay.core.service.common.decorators import requires_customer
-from stustapay.core.service.common.error import (
+from sftkit.error import (
     AccessDenied,
     InvalidArgument,
     NotFound,

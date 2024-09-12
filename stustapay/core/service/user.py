@@ -28,7 +28,7 @@ from stustapay.core.service.common.decorators import (
     requires_terminal,
     requires_user,
 )
-from stustapay.core.service.common.error import AccessDenied, InvalidArgument, NotFound
+from sftkit.error import AccessDenied, InvalidArgument, NotFound
 from stustapay.core.service.tree.common import fetch_node
 from stustapay.core.service.user_tag import get_or_assign_user_tag
 

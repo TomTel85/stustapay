@@ -16,7 +16,7 @@ from stustapay.core.service.common.decorators import (
     requires_terminal,
     requires_user,
 )
-from stustapay.core.service.common.error import InvalidArgument
+from sftkit.error import InvalidArgument
 from stustapay.core.service.product import fetch_pay_out_product, fetch_top_up_product
 from stustapay.core.service.tree.common import fetch_event_for_node
 

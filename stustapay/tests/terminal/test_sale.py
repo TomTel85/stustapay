@@ -25,7 +25,7 @@ from stustapay.core.service.cashier import (
     CloseOut,
     InvalidCloseOutException,
 )
-from stustapay.core.service.common.error import InvalidArgument
+from sftkit.error import InvalidArgument
 from stustapay.core.service.order import NotEnoughVouchersException, OrderService
 from stustapay.core.service.order.order import InvalidSaleException
 from stustapay.core.service.product import ProductService
