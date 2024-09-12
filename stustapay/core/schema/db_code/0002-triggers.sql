@@ -235,11 +235,11 @@ begin
     -- the insert / update.
     select balance into locals.new_balance from account where id = NEW.id;
 
-    if NEW.type = 'private' and locals.new_balance > locals.max_balance then
+    if NEW.type = 'private' and round(locals.new_balance, 2) > round(locals.max_balance, 2) then
         raise 'Customers can have a maximum balance of at most %. New balance would be %.', locals.max_balance, locals.new_balance;
     end if;
 
-    if NEW.type = 'private' and locals.new_balance < 0 then
+    if NEW.type = 'private' and round(locals.new_balance, 2) < 0 then
         raise 'Customers cannot have a negative balance. New balance would be %.', locals.new_balance;
     end if;
 

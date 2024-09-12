@@ -16,6 +16,9 @@ $$
 begin
     if vouchers_amount * amount < 0 then raise 'vouchers_amount and amount must have the same sign'; end if;
 
+    -- Round the amount to ensure only two decimals
+    amount := round(amount, 2);
+
     if amount < 0 or vouchers_amount < 0 then
         -- swap account on negative amount, as only non-negative transactions are allowed
         temp_account_id = source_account_id;
@@ -48,7 +51,7 @@ begin
     return locals.transaction_id;
 
 end;
-$$ language plpgsql
+$$ language plpgsql;
     set search_path = "$user", public;
 
 create or replace function user_privileges_at_node(
