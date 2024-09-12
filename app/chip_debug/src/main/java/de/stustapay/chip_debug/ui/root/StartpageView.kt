@@ -63,7 +63,7 @@ fun StartpageView(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = "StuStaPay", fontSize = 30.sp, modifier = Modifier.padding(top = 10.dp)
+                text = "TeamFestlichPay", fontSize = 30.sp, modifier = Modifier.padding(top = 10.dp)
             )
 
             Text(

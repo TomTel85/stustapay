@@ -1,5 +1,5 @@
 [Unit]
-Description=StuStaPay Administration API
+Description=TeamFestlichPay Administration API
 After=postgresql.service
 
 [Service]

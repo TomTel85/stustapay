@@ -17,7 +17,7 @@ class ActivityCallback @Inject constructor(
     /** register a new activity callback handler */
     fun registerHandler(id: Int, func: (Int, Bundle?) -> Unit) {
         if (map.contains(id)) {
-            Log.e("StuStaPay", "registering activity result handler for id $id again!")
+            Log.e("TeamFestlichPay", "registering activity result handler for id $id again!")
         }
         map[id] = func
     }

@@ -1,5 +1,5 @@
 export const translations = {
-  StuStaPay: "StuStaPay",
+  TeamFestlichPay: "TeamFestlichPay",
   logout: "Logout",
   login: "Login",
   userTagUid: "Wristband Tag ID",

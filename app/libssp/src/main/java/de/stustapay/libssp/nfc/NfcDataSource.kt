@@ -25,7 +25,7 @@ class NfcDataSource @Inject constructor() {
     private val scanRequest = MutableStateFlow<NfcScanRequestState>(NfcScanRequestState.None)
 
     suspend fun scan(req: NfcScanRequest): NfcScanResult {
-        Log.i("StuStaPay", "nfc scan requested")
+        Log.i("TeamFestlichPay", "nfc scan requested")
         try {
             scanResult.update { NfcScanResultState.None }
             scanRequest.update { NfcScanRequestState.Active(req) }
@@ -38,7 +38,7 @@ class NfcDataSource @Inject constructor() {
     }
 
     fun getScanRequest(): NfcScanRequest? {
-        Log.i("StuStaPay", "nfc scan fetching...")
+        Log.i("TeamFestlichPay", "nfc scan fetching...")
         val req = scanRequest.value
         return if (req is NfcScanRequestState.Active) {
             scanRequest.update { NfcScanRequestState.None }
@@ -49,7 +49,7 @@ class NfcDataSource @Inject constructor() {
     }
 
     fun setScanResult(res: NfcScanResult) {
-        Log.i("StuStaPay", "nfc scan result: $res")
+        Log.i("TeamFestlichPay", "nfc scan result: $res")
         scanRequest.update { NfcScanRequestState.None }
         scanResult.update { NfcScanResultState.Done(res) }
     }

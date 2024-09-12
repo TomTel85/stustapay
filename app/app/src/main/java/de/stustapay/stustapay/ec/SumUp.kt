@@ -155,7 +155,7 @@ class SumUp @Inject constructor(
         val needsLogin = sumUpActionDependencies[sumUpPaymentState.targetAction]
         if (needsLogin == null) {
             Log.e(
-                "StuStaPay",
+                "TeamFestlichPay",
                 "unknown ec action login requirement for ${sumUpPaymentState.targetAction}"
             )
             return
@@ -261,7 +261,7 @@ class SumUp @Inject constructor(
                     terminal = ECTerminalConfig(
                         name = cfg.name,
                         id = cfg.id.toString(),
-                        eventName = cfg.till?.eventName ?: "StuStaPay event",
+                        eventName = cfg.till?.eventName ?: "TeamFestlichPay event",
                     )
                 )
             }

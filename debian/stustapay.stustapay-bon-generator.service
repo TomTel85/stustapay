@@ -1,5 +1,5 @@
 [Unit]
-Description=StuStaPay Bon Generator
+Description=TeamFestlichPay Bon Generator
 After=postgresql.service
 
 [Service]

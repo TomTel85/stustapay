@@ -44,9 +44,9 @@ alter table event add column email_smtp_host text;
 alter table event add column email_smtp_port int;
 alter table event add column email_smtp_username text;
 alter table event add column email_smtp_password text;
-alter table event add column payout_done_subject text default '[StuStaPay] Payout Completed' not null;
+alter table event add column payout_done_subject text default '[TeamFestlichPay] Payout Completed' not null;
 alter table event add column payout_done_message text default 'Thank you for your patience. The payout process has been completed and the funds should arrive within the next days to your specified bank account.' not null;
-alter table event add column payout_registered_subject text default '[StuStaPay] Registered for Payout' not null;
+alter table event add column payout_registered_subject text default '[TeamFestlichPay] Registered for Payout' not null;
 alter table event add column payout_registered_message text default 'Thank you for being part of our festival. Your remaining funds are registered for payout. They will be transferred to the specified bank account in our next manual payout. You will receive another email once we transferred the funds.' not null;
 alter table event add column payout_sender text;
 

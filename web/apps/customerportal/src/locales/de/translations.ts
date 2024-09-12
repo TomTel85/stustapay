@@ -5,7 +5,7 @@ type NestedPartialAsStrings<T extends object> = {
 };
 
 export const translations: NestedPartialAsStrings<Translations> = {
-  StuStaPay: "StuStaPay",
+  TeamFestlichPay: "TeamFestlichPay",
   logout: "Logout",
   login: "Login",
   userTagUid: "Bändchen-Chip ID",

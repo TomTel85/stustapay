@@ -20,7 +20,7 @@ from .routers import auth, base, sumup
 
 def get_server(config: Config):
     server = Server(
-        title="StuStaPay Customer Portal API",
+        title="TeamFestlichPay Customer Portal API",
         config=config.customerportal,
         license_name="AGPL-3.0",
         version=__version__,

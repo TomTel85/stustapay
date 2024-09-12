@@ -1,5 +1,5 @@
 [Unit]
-Description=StuStaPay TSE Controller
+Description=TeamFestlichPay TSE Controller
 After=postgresql.service
 
 [Service]

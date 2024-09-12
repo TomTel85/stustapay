@@ -40,7 +40,7 @@ open class TerminalApiAccessor(
         } catch (e: JsonConvertException) {
             Response.Error.BadResponse(e.localizedMessage.orEmpty())
         } catch (e: Exception) {
-            Log.e("StuStaPay req", "request failed: ${e.localizedMessage}")
+            Log.e("TeamFestlichPay req", "request failed: ${e.localizedMessage}")
             Response.Error.Request(null, e)
         }
     }

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">StuStaPay</string>
-    <string name="welcome_to_stustapay">Welcome to StuStaPay!</string>
+    <string name="app_name" translatable="false">TeamFestlichPay</string>
+    <string name="welcome_to_stustapay">Welcome to TeamFestlichPay!</string>
     <string name="credit_amount">Credit: %.2f€</string>
     <string name="payout">Payout</string>
     <string name="credit_left">Credit left</string>

@@ -101,7 +101,7 @@ class RegistrationRepository @Inject constructor(
             )
 
         } catch (e: Exception) {
-            Log.e("StuStaPay", "exception during registration", e)
+            Log.e("TeamFestlichPay", "exception during registration", e)
             return RegistrationState.Error(
                 message = "error: ${e.javaClass.name}: ${e.localizedMessage}",
             )

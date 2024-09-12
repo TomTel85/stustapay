@@ -159,7 +159,7 @@ data class SaleStatus(
             }
 
             is SaleItemPrice.FreePrice -> {
-                Log.e("StuStaPay", "increment on free price item invalid!")
+                Log.e("TeamFestlichPay", "increment on free price item invalid!")
             }
         }
         statusSerial += 1u
@@ -197,7 +197,7 @@ data class SaleStatus(
             }
 
             is SaleItemPrice.FreePrice -> {
-                Log.e("StuStaPay", "decrement on free price item invalid!")
+                Log.e("TeamFestlichPay", "decrement on free price item invalid!")
             }
         }
         statusSerial += 1u
@@ -232,7 +232,7 @@ data class SaleStatus(
 
             is SaleItemPrice.FixedPrice,
             is SaleItemPrice.Returnable -> {
-                Log.e("StuStaPay", "adjustprice on non-free-price item invalid!")
+                Log.e("TeamFestlichPay", "adjustprice on non-free-price item invalid!")
             }
         }
         statusSerial += 1u

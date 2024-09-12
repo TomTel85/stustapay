@@ -77,7 +77,7 @@ export const AuthenticatedRoot: React.FC = () => {
             <Toolbar disableGutters>
               <Typography variant="h6" component="div" sx={{ mr: 2, display: { xs: "none", md: "flex" } }}>
                 <RouterLink to="/" style={{ textDecoration: "none", color: "inherit" }}>
-                  {t("StuStaPay")}
+                  {t("TeamFestlichPay")}
                 </RouterLink>
               </Typography>
 
@@ -126,7 +126,7 @@ export const AuthenticatedRoot: React.FC = () => {
                 }}
               >
                 <RouterLink to="/" style={{ textDecoration: "none", color: "inherit" }}>
-                  {t("StuStaPay")}
+                  {t("TeamFestlichPay")}
                 </RouterLink>
               </Typography>
 

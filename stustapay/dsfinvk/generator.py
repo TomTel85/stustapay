@@ -435,10 +435,10 @@ class Generator:
         a.Z_KASSE_ID = Z_KASSE_ID
         a.Z_ERSTELLUNG = Z_ERSTELLUNG
         a.Z_NR = Z_NR
-        a.KASSE_BRAND = "StuStaPay"
+        a.KASSE_BRAND = "TeamFestlichPay"
         a.KASSE_MODELL = "v0"  # TODO version?
         a.KASSE_SERIENNR = str(Z_KASSE_ID)
-        a.KASSE_SW_BRAND = "StuStaPay Enterprise Payment Solutions Festival Edition Pro"
+        a.KASSE_SW_BRAND = "TeamFestlichPay Enterprise Payment Solutions Festival Edition Pro"
         a.KASSE_SW_VERSION = "v0"  # TODO version?
         a.KASSE_BASISWAEH_CODE = event_settings.currency_identifier
         a.KASSE_UST_ZUORDNUNG = ""  # puh?

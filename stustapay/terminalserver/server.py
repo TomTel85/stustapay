@@ -33,7 +33,7 @@ from stustapay.terminalserver.router import (
 
 def get_server(config: Config):
     server = Server(
-        title="StuStaPay Terminal API",
+        title="TeamFestlichPay Terminal API",
         config=config.terminalserver,
         license_name="AGPL-3.0",
         version=__version__,

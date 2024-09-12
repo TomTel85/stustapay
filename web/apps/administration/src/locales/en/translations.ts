@@ -1,5 +1,5 @@
 export const translations = {
-  StuStaPay: "StuStaPay",
+  TeamFestlichPay: "TeamFestlichPay",
   cashiers: "Cashiers",
   advanced: "Advanced",
   accounts: "Accounts",

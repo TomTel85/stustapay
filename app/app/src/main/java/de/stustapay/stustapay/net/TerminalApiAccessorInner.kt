@@ -155,7 +155,7 @@ class TerminalApiAccessorInner(
                 level = LogLevel.ALL
                 logger = object : Logger {
                     override fun log(message: String) {
-                        Log.d("StuStaPay req", message)
+                        Log.d("TeamFestlichPay req", message)
                     }
                 }
             }

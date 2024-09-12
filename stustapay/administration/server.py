@@ -54,7 +54,7 @@ from .routers import (
 
 def get_server(config: Config):
     server = Server(
-        title="StuStaPay Administration API",
+        title="TeamFestlichPay Administration API",
         config=config.administration,
         license_name="AGPL-3.0",
         version=__version__,
