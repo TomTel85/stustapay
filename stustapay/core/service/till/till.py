@@ -185,7 +185,7 @@ class TillService(Service[Config]):
                 "have permission to login at a terminal"
             )
 
-        new_user_id = await conn.fetchval("select id from user_with_tag where user_tag_uid = $1", user_tag.uid)
+        new_user_id = await conn.fetchval("select id from user_with_tag where user_tag_uid = $1 and node_id = $2", user_tag.uid, node.id)
         assert new_user_id is not None
 
         new_user_is_supervisor = await conn.fetchval(
@@ -228,7 +228,7 @@ class TillService(Service[Config]):
         if not any(x.id == user_role_id for x in available_roles):
             raise AccessDenied("The user does not have the requested role")
 
-        user_id = await conn.fetchval("select id from user_with_tag where user_tag_uid = $1", user_tag.uid)
+        user_id = await conn.fetchval("select id from user_with_tag where user_tag_uid = $1 and node_id = $2", user_tag.uid, current_terminal.node_id)
         assert user_id is not None
 
         t_id = await conn.fetchval(
