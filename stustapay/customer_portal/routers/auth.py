@@ -22,6 +22,13 @@ class LoginResponse(BaseModel):
     grant_type: str = "bearer"
 
 
+@router.get("/login/qr", summary="customer login via QR code")
+async def login_with_qr(pin: str, customer_service: ContextCustomerService):
+    # Process the QR code login
+    response = await customer_service.login_customer(pin=pin)
+    return {"customer": response.customer, "access_token": response.token, "grant_type": "bearer"}
+
+
 @router.post("/login", summary="customer login with wristband hardware tag and pin", response_model=LoginResponse)
 async def login(
     payload: LoginPayload,

@@ -3,6 +3,7 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { ErrorPage } from "./ErrorPage";
 import { AuthenticatedRoot } from "./routes/AuthenticatedRoot";
 import { Login } from "./routes/auth/Login";
+import { QRCodeLogin } from "./routes/auth/QRCodeLogin";
 import { UnauthenticatedRoot } from "./routes/UnauthenticatedRoot";
 import { Logout } from "./routes/auth/Logout";
 import { Index } from "./routes/Index";
@@ -43,6 +44,10 @@ const router = createBrowserRouter([
       {
         path: "/login",
         element: <Login />,
+      },
+      {
+        path: "/login/qr",
+        element: <QRCodeLogin />, // This is the new component for QR code login
       },
       {
         path: "/faq",
