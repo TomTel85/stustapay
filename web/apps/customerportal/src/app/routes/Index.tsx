@@ -20,7 +20,12 @@ export const Index: React.FC = () => {
   const { data: customer, error: customerError, isLoading: isCustomerLoading } = useGetCustomerQuery();
   const { data: payoutInfo, error: payoutInfoError, isLoading: isPayoutInfoLoading } = usePayoutInfoQuery();
 
-  if (isCustomerLoading || (!customer && !customerError) || isPayoutInfoLoading || (!payoutInfo && !payoutInfoError)) {
+  if (
+    isCustomerLoading ||
+    (!customer && !customerError) ||
+    isPayoutInfoLoading ||
+    (!payoutInfo && !payoutInfoError)
+  ) {
     return <Loading />;
   }
 
@@ -29,15 +34,13 @@ export const Index: React.FC = () => {
     return null;
   }
 
-  // TODO: depending on the order_type we want to show different stuff
-  // we also might want to show the balance of the account after each order
-
-
   let payout_info;
-  if (payoutInfo.in_payout_run && !payoutInfo.payout_date){
+  if (payoutInfo.in_payout_run && !payoutInfo.payout_date) {
     payout_info = t("payout.infoPayoutScheduled");
-  }else if (payoutInfo.in_payout_run && payoutInfo.payout_date){
-    payout_info = t("payout.infoPayoutCompleted", { payout_date: new Date(payoutInfo.payout_date).toLocaleString() });
+  } else if (payoutInfo.in_payout_run && payoutInfo.payout_date) {
+    payout_info = t("payout.infoPayoutCompleted", {
+      payout_date: new Date(payoutInfo.payout_date).toLocaleString(),
+    });
   } else if (customer.has_entered_info) {
     payout_info = t("payout.infoPayoutInitiated");
   } else {
@@ -48,7 +51,7 @@ export const Index: React.FC = () => {
           enter bank account details here
         </Link>
       </Trans>
-  )
+    );
   }
 
   return (
@@ -106,11 +109,17 @@ export const Index: React.FC = () => {
         </Grid>
       </Grid>
 
-      <Grid item xs={12} sm={8}>
-        <Alert severity="info" variant="outlined" style={{ marginBottom: "1em", width: "100%" }}>
-          { payout_info }
-        </Alert>
-      </Grid>
+      {config.payout_enabled && (
+        <Grid item xs={12} sm={8}>
+          <Alert
+            severity="info"
+            variant="outlined"
+            style={{ marginBottom: "1em", width: "100%" }}
+          >
+            {payout_info}
+          </Alert>
+        </Grid>
+      )}
 
       <Grid item xs={12} sm={8}>
         <OrderList />
