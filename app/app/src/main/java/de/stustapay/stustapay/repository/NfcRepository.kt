@@ -32,10 +32,10 @@ class NfcRepository @Inject constructor(
 
     suspend fun read(): NfcScanResult {
         return nfcDataSource.scan(
-            NfcScanRequest.Read(
+            NfcScanRequest.FastRead(
                 uidRetrKey.value ?: return NfcScanResult.Fail(
                     NfcScanFailure.NoKey
-                ), dataProtKey.value
+                )
             )
         )
     }

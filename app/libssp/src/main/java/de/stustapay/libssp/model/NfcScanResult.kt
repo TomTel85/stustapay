@@ -1,7 +1,18 @@
 package de.stustapay.libssp.model
 
 sealed interface NfcScanResult {
+
+
     fun msg(): String
+
+    data class FastRead(
+        val tag: NfcTag
+    ): NfcScanResult {
+        override fun msg(): String {
+            return "read ${tag.uidHex()}"
+        }
+    }
+
     data class Read(
         val tag: NfcTag
     ) : NfcScanResult {
