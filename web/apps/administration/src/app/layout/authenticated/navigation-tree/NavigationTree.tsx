@@ -20,8 +20,10 @@ import {
 import { SimpleTreeView } from "@mui/x-tree-view";
 import * as React from "react";
 import { useLocation } from "react-router-dom";
+import { useTranslation } from 'react-i18next';
 import { NavigationTreeItem } from "./NavigationTreeItem";
 import { NodeMenu, isMenuEntryValidAtNode, nodeMenuEntryDefinitions } from "./NodeMenu";
+
 
 const getNavigationTreeItemLabel = (node: Node) => {
   if (node.event) {
@@ -45,6 +47,7 @@ const computeMenuIds = (node: NodeSeenByUser) => {
 };
 
 export const NavigationTree: React.FC = () => {
+  const { t } = useTranslation();
   const tree = useTreeForCurrentUser();
   const location = useLocation();
   const expanded = useAppSelector(selectExpandedNodes);
@@ -102,7 +105,7 @@ export const NavigationTree: React.FC = () => {
       key={node.id}
       itemId={`/node/${node.id}`}
       to={`/node/${node.id}`}
-      labelText={node.name}
+      labelText={t(node.name)}
       labelIcon={getNavigationTreeItemLabel(node)}
       suffixIcon={node.read_only ? EditOffIcon : undefined}
     >

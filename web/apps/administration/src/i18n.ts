@@ -15,7 +15,7 @@ i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    lng: "en",
+    lng: "de-DE",
     fallbackLng: "en",
     ns: ["translations"],
     debug: true,

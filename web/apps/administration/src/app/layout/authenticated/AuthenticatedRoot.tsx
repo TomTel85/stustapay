@@ -1,6 +1,6 @@
 import { useGetTreeForCurrentUserQuery } from "@/api";
 import { config } from "@/api/common";
-import { AppBar, DrawerHeader, Main } from "@/components";
+import { AppBar, DrawerHeader, Main, LanguageSelect} from "@/components";
 import { drawerWidth } from "@/components/layouts/constants";
 import { selectCurrentUser, useAppSelector } from "@/store";
 import {
@@ -73,6 +73,7 @@ export const AuthenticatedRoot: React.FC = () => {
           <Button component={RouterLink} color="inherit" to="/profile">
             {t("auth.profile")}
           </Button>
+          <LanguageSelect sx={{ color: "inherit" }} variant="outlined" />
           <Button component={RouterLink} color="inherit" to="/logout">
             {t("logout")}
           </Button>
