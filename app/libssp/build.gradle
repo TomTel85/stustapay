@@ -37,7 +37,7 @@ android {
     compileSdk 33
 
     defaultConfig {
-        minSdk 28
+        minSdk 27
         targetSdk 33
         versionCode getVersionCode()
         versionName getVersionName()

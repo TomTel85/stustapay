@@ -17,12 +17,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.LaunchedEffect
 import de.stustapay.libssp.ui.common.Spinner
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ui.common.CloseContent
 import de.stustapay.stustapay.ui.nav.NavDest
 import kotlinx.coroutines.launch
-
+import kotlinx.coroutines.delay
 
 @Composable
 fun AccountStatus(
@@ -32,6 +33,12 @@ fun AccountStatus(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val commentVisible by viewModel.commentVisible.collectAsStateWithLifecycle()
 
+    // LaunchedEffect to keep this view active for 10 seconds
+    LaunchedEffect(key1 = Unit) {
+        delay(10000) 
+        navigateTo(CustomerStatusNavDests.scan)  
+    }
+    
     Scaffold(content = {
         CloseContent(
             modifier = Modifier
