@@ -38,12 +38,12 @@ export const PayoutSettingsSchema = z
       .string()
       .optional()
       .transform((val) => val ?? ""),
-    sepa_allowed_country_codes: z.array(z.string()).default([]),
-    payout_done_subject: z.string(),
-    payout_done_message: z.string(),
-    payout_registered_subject: z.string(),
-    payout_registered_message: z.string(),
-    payout_sender: z.string().email().optional().nullable(),
+    sepa_allowed_country_codes: z.array(z.string()).optional().default([]),
+    payout_done_subject: z.string().optional().transform((val) => val ?? ""),
+    payout_done_message: z.string().optional().transform((val) => val ?? ""),
+    payout_registered_subject: z.string().optional().transform((val) => val ?? ""),
+    payout_registered_message: z.string().optional().transform((val) => val ?? ""),
+    payout_sender: z.string().optional().transform((val) => val ?? ""),
   })
   .superRefine((data, ctx) => {
     if (!data.sepa_enabled) {
