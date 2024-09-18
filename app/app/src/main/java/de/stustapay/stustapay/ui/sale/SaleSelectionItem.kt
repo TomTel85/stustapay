@@ -110,14 +110,24 @@ fun SaleSelectionItem(
         }
 
         is SaleSelectionItemType.Returnable -> {
-            sameSizeButtons = true
-            val amount: Int = type.amount?.amount ?: 0
-            itemPrice = "%.02f€".format(type.price.price)
-            itemAmount = "%2d".format(amount)
-            rightButtonText = type.incrementText
-            rightButtonStyle = ProductButtonStyle
-            leftButtonColors = errorButtonColors()
-            rightButtonColors = okButtonColors()
+
+            if (caption.contains("Pfand")) {
+                sameSizeButtons = true
+                val amount: Int = type.amount?.amount ?: 0
+                itemPrice = "%.02f€".format(type.price.price)
+                itemAmount = "%2d".format(amount)
+                rightButtonText = type.incrementText
+                rightButtonStyle = ProductButtonStyle
+                leftButtonColors = errorButtonColors()
+                rightButtonColors = okButtonColors()
+            }
+            else {
+                val amount: Int = type.amount?.amount ?: 0
+                itemPrice = "%.02f€".format(type.price.price)
+                itemAmount = "%2d".format(amount)
+                leftButtonColors = errorButtonColors()
+                rightButtonText = "‒"
+            }
         }
 
         is SaleSelectionItemType.FreePrice -> {
