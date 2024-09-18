@@ -111,6 +111,12 @@ class NfcScanDialogViewModel @Inject constructor(
                     val res = nfcRepository.read()
 
                     when (res) {
+
+                        is NfcScanResult.FastRead -> {
+                            _scanState.update { NfcScanUiState.Success(res.tag) }
+                            trying = false
+                        }
+
                         is NfcScanResult.Read -> {
                             _scanState.update { NfcScanUiState.Success(res.tag) }
                             trying = false
