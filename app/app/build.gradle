@@ -40,7 +40,7 @@ android {
     compileSdk 33
 
     defaultConfig {
-        applicationId "de.stustapay.stustapay"
+        applicationId "de.teamfestlichpay.teamfestlichpay"
         minSdk 27
         targetSdk 33
         versionCode getVersionCode()
