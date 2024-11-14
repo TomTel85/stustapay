@@ -56,6 +56,8 @@ create table event (
 
     daily_end_time time,
 
+    post_payment_allowed bool not null default false,
+
     -- previous values in settings / no other place to put them yet
     ust_id text not null,
     bon_issuer text not null,

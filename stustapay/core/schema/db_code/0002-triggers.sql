@@ -226,22 +226,22 @@ create or replace function check_account_balance() returns trigger as
 $$
 <<locals>> declare
     new_balance numeric;
-    max_balance numeric;
+    --max_balance numeric;
 begin
-    select value::numeric into locals.max_balance from config where key = 'max_account_balance';
+    -- select value::numeric into locals.max_balance from config where key = 'max_account_balance';
 
     -- Since this constraint function runs at the end of a db transaction we need to fetch the current balance
     -- from the table manually. If we were to use NEW.balance we'd still have the old balance at the time of
     -- the insert / update.
     select balance into locals.new_balance from account where id = NEW.id;
 
-    if NEW.type = 'private' and round(locals.new_balance, 2) > round(locals.max_balance, 2) then
-        raise 'Customers can have a maximum balance of at most %. New balance would be %.', locals.max_balance, locals.new_balance;
-    end if;
+    -- if NEW.type = 'private' and round(locals.new_balance, 2) > round(locals.max_balance, 2) then
+    --     raise 'Customers can have a maximum balance of at most %. New balance would be %.', locals.max_balance, locals.new_balance;
+    -- end if;
 
-    if NEW.type = 'private' and round(locals.new_balance, 2) < 0 then
-        raise 'Customers cannot have a negative balance. New balance would be %.', locals.new_balance;
-    end if;
+    -- if NEW.type = 'private' and round(locals.new_balance, 2) < 0 then
+    --     raise 'Customers cannot have a negative balance. New balance would be %.', locals.new_balance;
+    -- end if;
 
     return NEW;
 end

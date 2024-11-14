@@ -191,9 +191,9 @@ async def create_event(conn: Connection, parent_id: int, event: NewEvent) -> Nod
         "sumup_merchant_code, start_date, end_date, daily_end_time, email_enabled, email_default_sender, "
         "email_smtp_host, email_smtp_port, email_smtp_username, email_smtp_password, payout_done_subject, "
         "payout_done_message, payout_registered_subject, payout_registered_message, payout_sender, "
-        " sumup_oauth_client_id, sumup_oauth_client_secret) "
+        " sumup_oauth_client_id, sumup_oauth_client_secret, post_payment_allowed) "
         "values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, "
-        " $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)"
+        " $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)"
         "returning id",
         event.currency_identifier,
         event.sumup_topup_enabled,
@@ -231,6 +231,7 @@ async def create_event(conn: Connection, parent_id: int, event: NewEvent) -> Nod
         event.payout_sender,
         event.sumup_oauth_client_id,
         event.sumup_oauth_client_secret,
+        event.post_payment_allowed,
     )
     for lang_code, translation in event.translation_texts.items():
         for text_type, content in translation.items():
@@ -306,7 +307,7 @@ class TreeService(Service[Config]):
             "   email_smtp_port = $28, email_smtp_username = $29, email_smtp_password = $30, "
             "   payout_done_subject = $31, payout_done_message = $32, payout_registered_subject = $33, "
             "   payout_registered_message = $34, payout_sender = $35, sumup_oauth_client_id = $36, "
-            "   sumup_oauth_client_secret = $37 "
+            "   sumup_oauth_client_secret = $37, post_payment_allowed = $38 "
             "where id = $1",
             event_id,
             event.currency_identifier,
@@ -345,6 +346,7 @@ class TreeService(Service[Config]):
             event.payout_sender,
             event.sumup_oauth_client_id,
             event.sumup_oauth_client_secret,
+            event.post_payment_allowed,
         )
         await conn.execute("delete from translation_text where event_id = $1", event_id)
         for lang_code, translation in event.translation_texts.items():

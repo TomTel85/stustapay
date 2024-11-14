@@ -62,6 +62,10 @@ class TerminalTillConfig(BaseModel):
 
     available_roles: list[UserRole]
 
+    post_payment_allowed: bool
+    sumup_payment_enabled: bool 
+
+
 
 class TerminalConfig(BaseModel):
     id: int

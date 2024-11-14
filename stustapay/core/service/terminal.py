@@ -280,6 +280,7 @@ class TerminalService(Service[Config]):
             )
             sumup_api_oauth_token = oauth_token.access_token if oauth_token is not None else ""
             sumup_api_oauth_valid_until = oauth_token.expires_at if oauth_token is not None else None
+            
 
         secrets = TerminalSecrets(
             sumup_affiliate_key=sumup_affiliate_key,
@@ -293,6 +294,9 @@ class TerminalService(Service[Config]):
             available_roles = await list_assignable_roles_for_user_at_node(
                 conn=conn, node=node, user_id=till.active_user_id
             )
+
+        post_payment_allowed = event_settings.post_payment_allowed
+        sumup_payment_enabled = event_settings.sumup_payment_enabled
 
         return TerminalTillConfig(
             id=till.id,
@@ -310,6 +314,8 @@ class TerminalService(Service[Config]):
             secrets=secrets,
             available_roles=available_roles,
             active_user_id=till.active_user_id,
+            post_payment_allowed=post_payment_allowed,
+            sumup_payment_enabled=sumup_payment_enabled,
         )
 
     @with_db_transaction(read_only=True)

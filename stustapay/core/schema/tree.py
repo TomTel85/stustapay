@@ -24,6 +24,7 @@ class _BaseEvent(BaseModel):
     start_date: datetime | None = None
     end_date: datetime | None = None
     daily_end_time: time | None = None
+    post_payment_allowed: bool = False
 
     sumup_topup_enabled: bool
     sumup_payment_enabled: bool

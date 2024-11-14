@@ -9,7 +9,7 @@ import {
 } from "@stustapay/form-components";
 import { z } from "zod";
 import { FormikProps } from "formik";
-import { Container, InputAdornment, Stack, Typography } from "@mui/material";
+import { Container, InputAdornment, Stack, Typography, Switch, FormControlLabel } from "@mui/material";
 import { useCreateEventMutation } from "@/api";
 import { useCurrentNode } from "@/hooks";
 import { SumUpSettings, SumUpSettingsSchema, SumupSettingsForm } from "./event-settings/TabSumUp";
@@ -42,6 +42,7 @@ const GeneralFormSchema = z
     start_date: z.string().optional().nullable(),
     end_date: z.string().optional().nullable(),
     daily_end_time: z.string().optional().nullable(), // TODO: validation
+    post_payment_allowed: z.boolean(), // Added field
   })
   .refine(
     (values) => {
@@ -52,6 +53,7 @@ const GeneralFormSchema = z
     },
     { message: i18n.t("settings.general.start_end_date_must_be_set_same"), path: ["end_date"] }
   );
+
 
 type GeneralFormValues = z.infer<typeof GeneralFormSchema>;
 
@@ -99,6 +101,7 @@ const generalFormStep: FormStep = {
     start_date: null,
     end_date: null,
     daily_end_date: null,
+    post_payment_allowed: false,
   },
   schema: GeneralFormSchema,
   form: GeneralForm,

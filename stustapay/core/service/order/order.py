@@ -527,24 +527,44 @@ class OrderService(Service[Config]):
         order.new_voucher_balance = customer_account.vouchers - voucher_usage.used_vouchers
         order.line_items.extend(voucher_usage.additional_line_items)
 
-        if customer_account.balance < order.total_price:
-            raise NotEnoughFundsException(needed_fund=order.total_price, available_fund=customer_account.balance)
-        order.new_balance = customer_account.balance - order.total_price
+        if event_settings.post_payment_allowed:
+            # Allow negative balance (post-payment)
+            order.new_balance = customer_account.balance - order.total_price
+            max_negative_balance = -1 * event_settings.max_account_balance
 
-        max_limit = event_settings.max_account_balance
-        if order.new_balance > max_limit:
-            too_much = order.new_balance - max_limit
-            raise InvalidArgument(
-                f"More than {max_limit:.02f}€ on accounts is disallowed! "
-                f"New balance would be {order.new_balance:.02f}€, which is {too_much:.02f}€ too much."
-            )
+            # Check if the new balance exceeds the allowed debt
+            if order.new_balance < max_negative_balance:
+                too_much = order.new_balance - max_negative_balance
+                raise InvalidArgument(
+                    f"More than {event_settings.max_account_balance:.02f}€ of debt is disallowed! "
+                    f"New balance would be {order.new_balance:.02f}€, which exceeds the limit by {too_much:.02f}€."
+                )
+        else:
+            # Disallow post-payment; ensure sufficient funds
+            if customer_account.balance < order.total_price:
+                raise NotEnoughFundsException(
+                    needed_fund=order.total_price, 
+                    available_fund=customer_account.balance
+                )
 
-        if order.new_balance < 0:
-            raise InvalidArgument(
-                f"Account balance would be less than 0€. New balance would be {order.new_balance:.02f}€"
-            )
+            order.new_balance = customer_account.balance - order.total_price
+
+            # Ensure the balance does not exceed maximum allowed balance
+            if order.new_balance > event_settings.max_account_balance:
+                too_much = order.new_balance - event_settings.max_account_balance
+                raise InvalidArgument(
+                    f"More than {event_settings.max_account_balance:.02f}€ on accounts is disallowed! "
+                    f"New balance would be {order.new_balance:.02f}€, which is {too_much:.02f}€ too much."
+                )
+
+            # Ensure balance does not go below zero
+            if order.new_balance < 0:
+                raise InvalidArgument(
+                    f"Account balance cannot be negative. New balance would be {order.new_balance:.02f}€"
+                )
 
         return order
+
 
     @with_db_transaction(read_only=True)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
@@ -934,31 +954,79 @@ class OrderService(Service[Config]):
     async def check_pay_out(
         self, *, conn: Connection, node: Node, current_till: Till, new_pay_out: NewPayOut
     ) -> PendingPayOut:
-        if new_pay_out.amount is not None and new_pay_out.amount > 0.0:
-            raise InvalidArgument("Only payouts with a negative amount are allowed")
-
-        uuid_exists = await conn.fetchval("select exists(select from ordr where uuid = $1)", new_pay_out.uuid)
+        # Check for duplicate UUID
+        uuid_exists = await conn.fetchval(
+            "SELECT EXISTS(SELECT FROM ordr WHERE uuid = $1)", new_pay_out.uuid
+        )
         if uuid_exists:
-            # raise AlreadyProcessedException("This order has already been booked (duplicate order uuid)")
             raise AlreadyProcessedException("Successfully booked order")
 
+        # Check terminal permissions
         can_pay_out = await conn.fetchval(
-            "select allow_cash_out from till_profile where id = $1", current_till.active_profile_id
+            "SELECT allow_cash_out FROM till_profile WHERE id = $1", current_till.active_profile_id
         )
         if not can_pay_out:
             raise TillPermissionException("This terminal is not allowed to pay out customers")
 
+        # Fetch customer account
         customer_account = await self._fetch_customer_by_user_tag(
             conn=conn, node=node, customer_tag_uid=new_pay_out.customer_tag_uid
         )
 
-        if new_pay_out.amount is None:
-            new_pay_out.amount = -customer_account.balance
+        if node.event.post_payment_allowed:
+            # Post-payment is allowed; customers can only pay in to reduce their debt
+            if new_pay_out.amount is not None and new_pay_out.amount <= 0.0:
+                raise InvalidArgument("In post-payment mode, only positive amounts are allowed to pay off debt")
+            
 
-        new_balance = customer_account.balance + new_pay_out.amount
+            if new_pay_out.amount is None:
+                # Set amount to pay out the entire balance
+                new_pay_out.amount = -1 * customer_account.balance
 
-        if new_balance < 0:
-            raise NotEnoughFundsException(needed_fund=abs(new_pay_out.amount), available_fund=customer_account.balance)
+            new_balance = customer_account.balance + new_pay_out.amount
+
+            # Customers cannot have a positive balance
+            if new_balance > 0.0:
+                too_much = new_balance
+                raise InvalidArgument(
+                    f"Cannot have a positive balance in post-payment mode. "
+                    f"New balance would be {new_balance:.02f}€, which is {too_much:.02f}€ too much."
+                )
+
+            # Check if new balance exceeds maximum allowed debt (negative balance)
+            max_negative_balance = -1 * node.event.max_account_balance  # Should be negative
+            if new_balance < max_negative_balance:
+                too_much = max_negative_balance - new_balance
+                raise InvalidArgument(
+                    f"More than {abs(max_negative_balance):.02f}€ of debt is disallowed! "
+                    f"New balance would be {new_balance:.02f}€, which exceeds the limit by {too_much:.02f}€."
+                )
+        else:
+            # Post-payment is not allowed; customers can receive payouts to reduce their positive balance
+            if new_pay_out.amount is not None and new_pay_out.amount > 0.0:
+                raise InvalidArgument("Only payouts with a negative amount are allowed")
+
+            if new_pay_out.amount is None:
+                # Set amount to pay out the entire balance
+                new_pay_out.amount = -customer_account.balance
+
+            new_balance = customer_account.balance + new_pay_out.amount
+
+            # Customers cannot have a negative balance
+            if new_balance < 0.0:
+                raise NotEnoughFundsException(
+                    needed_fund=abs(new_pay_out.amount),
+                    available_fund=customer_account.balance
+                )
+
+            # Check if new balance exceeds maximum allowed positive balance
+            max_positive_balance = node.event.max_account_balance
+            if new_balance > max_positive_balance:
+                too_much = new_balance - max_positive_balance
+                raise InvalidArgument(
+                    f"More than {max_positive_balance:.02f}€ on accounts is disallowed! "
+                    f"New balance would be {new_balance:.02f}€, which is {too_much:.02f}€ too much."
+                )
 
         return PendingPayOut(
             uuid=new_pay_out.uuid,
@@ -968,6 +1036,7 @@ class OrderService(Service[Config]):
             old_balance=customer_account.balance,
             new_balance=new_balance,
         )
+
 
     @with_db_transaction(read_only=False)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
