@@ -30,6 +30,7 @@
     <string name="root_item_ticket">Eintritt</string>
     <string name="root_item_sale">Verkauf</string>
     <string name="root_item_topup">Einzahlen / Auszahlen</string>
+    <string name="root_item_post_payment">Kassieren</string>
     <string name="root_item_rewards">Gutscheine</string>
     <string name="root_item_settings">Einstellungen</string>
     <string name="root_item_development">Entwicklung</string>

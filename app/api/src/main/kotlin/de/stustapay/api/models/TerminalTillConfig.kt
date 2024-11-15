@@ -40,7 +40,9 @@ import kotlinx.serialization.Contextual
  * @param buttons 
  * @param secrets 
  * @param activeUserId 
- * @param availableRoles 
+ * @param availableRoles
+ * @param postPaymentAllowed 
+ * @param sumupPaymentEnabled 
  */
 @Serializable
 
@@ -89,7 +91,13 @@ data class TerminalTillConfig (
     val activeUserId: @Contextual com.ionspin.kotlin.bignum.integer.BigInteger?,
 
     @SerialName(value = "available_roles")
-    val availableRoles: kotlin.collections.List<UserRole>
+    val availableRoles: kotlin.collections.List<UserRole>,
+
+    @SerialName(value = "post_payment_allowed") 
+    val postPaymentAllowed: kotlin.Boolean? = null,
+  
+    @SerialName(value = "sumup_payment_enabled") 
+    val sumupPaymentEnabled: kotlin.Boolean? = null
 
 )
 
