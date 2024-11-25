@@ -3,6 +3,7 @@
     <string name="app_name" translatable="false">TeamFestlichPay</string>
     <string name="welcome_to_stustapay">Welcome to TeamFestlichPay!</string>
     <string name="credit_amount">Credit: %.2f€</string>
+    <string name="debit_amount">Debit: %.2f€</string>
     <string name="payout">Payout</string>
     <string name="credit_left">Credit left</string>
     <string name="success">Success!</string>
@@ -17,6 +18,7 @@
     <string name="voucher">Voucher</string>
     <string name="edit">↢ Edit</string>
     <string name="no_balance_for_payout">No balance for payout</string>
+    <string name="no_expenses">No expenses</string>
 
     <string name="common_status_fetching">Fetching</string>
     <string name="common_status_idle">Idle</string>
@@ -152,6 +154,7 @@
     <string name="infallible_popup_transaction_pending">Transaction pending:</string>
     <string name="infallible_popup_restart">Try restarting the app.</string>
     <string name="payout_payout">🪙 Pay out...</string>
+    <string name="post_payment_pay">🪙 Pay ...</string>
     <string name="sale_check_your_order">Check your order</string>
     <string name="book_order">Book ✓</string>
 </resources>

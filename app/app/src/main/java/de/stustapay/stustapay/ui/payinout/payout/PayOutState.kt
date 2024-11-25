@@ -8,7 +8,7 @@ import java.util.UUID
 
 data class PayOutState(
     /** what tag is this payout for? */
-    private var tag: NfcTag? = null,
+    var tag: NfcTag? = null,
 
     /**
      * desired cash-out amount in cents.

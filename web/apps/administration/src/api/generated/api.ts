@@ -2640,6 +2640,7 @@ export type RestrictedEventSettings = {
   start_date?: string | null;
   end_date?: string | null;
   daily_end_time?: string | null;
+  post_payment_allowed: boolean;
   sumup_topup_enabled: boolean;
   sumup_payment_enabled: boolean;
   customer_portal_url: string;

@@ -10,6 +10,7 @@ object RootNavDests : NavDestinations() {
     val ticket = NavDest("ticket", showSystemUI = false)
     val sale = NavDest("sale", showSystemUI = false)
     val topup = NavDest("topup", showSystemUI = false)
+    val postpayment = NavDest("postpayment", showSystemUI = false)
     val status = NavDest("status")
     val user = NavDest("user")
     val settings = NavDest("settings")

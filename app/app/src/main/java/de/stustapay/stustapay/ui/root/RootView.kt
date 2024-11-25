@@ -20,6 +20,7 @@ import de.stustapay.stustapay.ui.swap.SwapView
 import de.stustapay.stustapay.ui.ticket.TicketView
 import de.stustapay.stustapay.ui.user.UserView
 import de.stustapay.stustapay.ui.vault.VaultView
+import de.stustapay.stustapay.ui.payinout.postpayment.PostPaymentView
 
 
 @Composable
@@ -51,6 +52,9 @@ fun RootView(uictrl: SysUiController? = null) {
         }
         composable(RootNavDests.topup.route) {
             CashInOutView(leaveView = { navController.navigateUp() })
+        }
+        composable(RootNavDests.postpayment.route) {
+            PostPaymentView(leaveView = { navController.navigateUp() })
         }
         composable(RootNavDests.status.route) {
             AccountView(leaveView = { navController.navigateUp() })

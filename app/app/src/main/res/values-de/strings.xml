@@ -2,6 +2,7 @@
 <resources>
     <string name="welcome_to_stustapay">Wilkommen bei TeamFestlichPay!</string>
     <string name="credit_amount">Guthaben: %.2f€</string>
+    <string name="debit_amount">Ausgaben: %.2f€</string>
     <string name="payout">Auszahlung</string>
     <string name="credit_left">Übriges Guthaben</string>
     <string name="success">Erfolgreich!</string>
@@ -16,6 +17,7 @@
     <string name="voucher">Gutschein</string>
     <string name="edit">↢ Zurück</string>
     <string name="no_balance_for_payout">Kein Guthaben zum Auszahlen</string>
+    <string name="no_expenses">Keine Ausgaben vorhanden</string>
 
     <string name="common_status_fetching">Anfrage wird ausgeführt</string>
     <string name="common_status_idle">Bereit</string>
@@ -151,6 +153,7 @@
     <string name="infallible_popup_transaction_pending">Buchung nicht fertig:</string>
     <string name="infallible_popup_restart">App-Neustart empfohlen</string>
     <string name="payout_payout">🪙 Auszahlen...</string>
+    <string name="post_payment_pay">🪙 Zahlen ...</string>
     <string name="sale_check_your_order">Bestellung prüfen</string>
     <string name="book_order">Buchen ✓</string>
 </resources>
