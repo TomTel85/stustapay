@@ -5,6 +5,7 @@ import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import de.stustapay.api.models.CompletedPayOut
 import de.stustapay.api.models.CompletedTopUp
 import de.stustapay.api.models.NewTopUp
 import de.stustapay.api.models.PaymentMethod
@@ -66,6 +67,9 @@ class PostPaymentViewModel @Inject constructor(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage = _errorMessage.asStateFlow()
 
+    private val _completedPayOut = MutableStateFlow<CompletedPayOut?>(null)
+    val completedPayOut = _completedPayOut.asStateFlow()
+
     private val _successMessage = MutableStateFlow<String?>(null)
     val successMessage = _successMessage.asStateFlow()
 
@@ -83,6 +87,10 @@ class PostPaymentViewModel @Inject constructor(
     // todo: remove :)
     private val _actuallyOk = MutableStateFlow(false)
     val actuallyOk = _actuallyOk.asStateFlow()
+
+    private val _showPayOutConfirm = MutableStateFlow(false)
+    val showPayOutConfirm = _showPayOutConfirm.asStateFlow()
+
 
     val requestActive = infallibleRepository.active
 
@@ -162,7 +170,7 @@ class PostPaymentViewModel @Inject constructor(
         _payOutState.update { it.copy(tag = null) }
     }
 
-    fun clearCheckPAyout() {
+    fun clearCheckPayout() {
         _payOutState.update { it.copy(tag = null) }
     }
 
@@ -176,7 +184,7 @@ class PostPaymentViewModel @Inject constructor(
 
     fun checkAmountLocal(amount: Double): Boolean {
         val minimum = 1.0
-        if (amount < minimum) {
+        if (amount != 0.0) {
             _status.update { "Mindestbetrag %.2f €".format(minimum) }
             return false
         }
@@ -190,10 +198,6 @@ class PostPaymentViewModel @Inject constructor(
      * validates the amount so we can continue to checkout
      */
     private suspend fun checkTopUp(newTopUp: NewTopUp): Boolean {
-        // device-local checks
-        if (!checkAmountLocal(newTopUp.amount)) {
-            return false
-        }
 
         // server-side check
         return when (val response = topUpRepository.checkTopUp(newTopUp)) {
@@ -215,6 +219,63 @@ class PostPaymentViewModel @Inject constructor(
             }
         }
     }
+
+    fun clearAmount() {
+        _payOutState.update {
+            val newState = it.copy()
+            newState.setAmount(0u)
+            newState
+        }
+    }
+
+    /** the big payout button was pressed */
+    suspend fun requestPayOut() {
+        var showConfirm = true
+        if (_payOutState.value.wasChanged()) {
+            showConfirm = checkPayOut()
+        }
+
+        if (showConfirm) {
+            _showPayOutConfirm.update { true }
+        }
+    }
+
+    /** when the confirmation dialog is confirmed */
+    suspend fun confirmPayOut() {
+        _showPayOutConfirm.update { false }
+        _status.update { "Processing payout..." }
+
+        bookPayOut()
+    }
+
+    /** when the confirmation dialog is dismissed */
+    fun dismissPayOutConfirm() {
+        _showPayOutConfirm.update { false }
+    }
+
+    private suspend fun bookPayOut() {
+        val newPayOut = _payOutState.value.getCheckedNewPayout()
+
+        if (newPayOut == null) {
+            _status.update { "Payout was not checked before" }
+            return
+        }
+
+        _status.update { "Pay-Out in progress..." }
+
+        when (val response = payOutRepository.bookPayOut(newPayOut)) {
+            is Response.OK -> {
+                clearDraft()
+                _completedPayOut.update { response.data }
+                _status.update { "Pay-Out booked successfully" }
+            }
+
+            is Response.Error -> {
+                _status.update { "Failed Pay-Out booking! ${response.msg()}" }
+            }
+        }
+    }
+
 
     /**
      * creates a ec payment with new id for the current selected sum.

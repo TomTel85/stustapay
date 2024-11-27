@@ -99,7 +99,7 @@ fun PostPaymentCashECSelection(
     goToEC: () -> Unit,
     onPayRequested: CashECCallback,
     ready: Boolean,
-    checkAmount: () -> Boolean,
+    checkAmount: () -> Boolean = { true },
     existingTag: NfcTag? = null, // Accept the existing tag
     viewModel: CashECSelectionViewModel = hiltViewModel(),
     status: @Composable () -> Unit = {},

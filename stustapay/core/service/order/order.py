@@ -975,23 +975,12 @@ class OrderService(Service[Config]):
 
         if node.event.post_payment_allowed:
             # Post-payment is allowed; customers can only pay in to reduce their debt
-            if new_pay_out.amount is not None and new_pay_out.amount <= 0.0:
-                raise InvalidArgument("In post-payment mode, only positive amounts are allowed to pay off debt")
-            
 
             if new_pay_out.amount is None:
                 # Set amount to pay out the entire balance
                 new_pay_out.amount = -1 * customer_account.balance
 
             new_balance = customer_account.balance + new_pay_out.amount
-
-            # Customers cannot have a positive balance
-            if new_balance > 0.0:
-                too_much = new_balance
-                raise InvalidArgument(
-                    f"Cannot have a positive balance in post-payment mode. "
-                    f"New balance would be {new_balance:.02f}€, which is {too_much:.02f}€ too much."
-                )
 
             # Check if new balance exceeds maximum allowed debt (negative balance)
             max_negative_balance = -1 * node.event.max_account_balance  # Should be negative
