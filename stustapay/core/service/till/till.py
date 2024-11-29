@@ -289,8 +289,9 @@ class TillService(Service[Config]):
             "left join account cash_a on cash_a.id = u.cashier_account_id "
             "left join account transp_a on transp_a.id = u.transport_account_id "
             "left join cash_register cr on u.cash_register_id = cr.id "
-            "where u.user_tag_uid = $1",
+            "where u.user_tag_uid = $1 and u.node_id = any($2)",
             user_tag_uid,
+            node.ids_to_event_node,
         )
         if info is None:
             raise InvalidArgument(f"There is no user registered for tag {format_user_tag_uid(user_tag_uid)}")
