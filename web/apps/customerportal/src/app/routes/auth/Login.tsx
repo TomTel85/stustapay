@@ -13,12 +13,15 @@ import { toast } from "react-toastify";
 import { z } from "zod";
 
 const validationSchema = z.object({
+  userTagUid: z.string(),
   userTagPin: z.string(),
 });
+
 
 type FormSchema = z.infer<typeof validationSchema>;
 
 const initialValues: FormSchema = {
+  userTagUid: "",
   userTagPin: "",
 };
 
@@ -36,7 +39,7 @@ export const Login: React.FC = () => {
 
   const handleSubmit = (values: FormSchema, { setSubmitting }: FormikHelpers<FormSchema>) => {
     setSubmitting(true);
-    login({ loginPayload: { pin: values.userTagPin } })
+    login({ loginPayload: { username: values.userTagUid,  pin: values.userTagPin } })
       .unwrap()
       .then(() => {
         setSubmitting(false);
@@ -75,6 +78,15 @@ export const Login: React.FC = () => {
                   autoComplete="current-password"
                   name="userTagPin"
                   label={t("userTagPin")}
+                  formik={formik}
+                />
+
+                <FormTextField
+                  variant="outlined"
+                  type="text"
+                  autoComplete="username"
+                  label={t("userTagUid")}
+                  name="userTagUid"
                   formik={formik}
                 />
 

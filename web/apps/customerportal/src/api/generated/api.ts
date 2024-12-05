@@ -221,6 +221,7 @@ export type HttpValidationError = {
   detail?: ValidationError[];
 };
 export type LoginPayload = {
+  username: string; 
   pin: string;
 };
 export type PaymentMethod = "cash" | "sumup" | "tag" | "sumup_online";

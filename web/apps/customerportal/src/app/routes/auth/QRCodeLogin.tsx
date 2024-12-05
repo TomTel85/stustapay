@@ -10,16 +10,16 @@ export const QRCodeLogin: React.FC = () => {
 
   // Extract the pin from the query params
   const pin = searchParams.get("pin");
-
+  const username = searchParams.get("id");
   React.useEffect(() => {
-    if (!pin) {
-      toast.error("Invalid QR code, missing PIN.");
+    if (!pin || !username) {
+      toast.error("Invalid QR code, missing PIN or username.");
       navigate("/login"); // Redirect to login if there's no pin
       return;
     }
 
     // Perform the login with the pin
-    login({ loginPayload: { pin } })
+    login({ loginPayload: { username, pin } })
       .unwrap()
       .then(() => {
         navigate("/"); // Redirect to the home page on success
@@ -29,7 +29,7 @@ export const QRCodeLogin: React.FC = () => {
         toast.error("QR code login failed");
         navigate("/login"); // Redirect to login on failure
       });
-  }, [pin, login, navigate]);
+  }, [username, pin, login, navigate]);
 
   return <div>Logging in with QR code...</div>;
 };

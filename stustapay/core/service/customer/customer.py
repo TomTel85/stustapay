@@ -69,17 +69,20 @@ class CustomerService(Service[Config]):
         )
 
     @with_db_transaction
-    async def login_customer(self, *, conn: Connection, pin: str) -> CustomerLoginSuccess:
+    async def login_customer(self, *, conn: Connection, uid: int , pin: str) -> CustomerLoginSuccess:
         # Customer has hardware tag and pin
+        print(uid)
+        print(pin)
         customer = await conn.fetch_maybe_one(
             Customer,
-            "select c.* from user_tag ut join customer c on ut.id = c.user_tag_id where ut.pin = $1 or ut.pin = $2",
+            "select c.* from user_tag ut join customer c on ut.id = c.user_tag_id where (ut.pin = $1 or ut.pin = $2) AND ut.uid = $3",
             # TODO: restore case sensitivity
             pin.lower(),  # for simulator
             pin.upper(),  # for humans
+            uid,
         )
         if customer is None:
-            raise AccessDenied("Invalid pin")
+            raise AccessDenied("Invalid user tag or pin")
 
         session_id = await conn.fetchval(
             "insert into customer_session (customer) values ($1) returning id", customer.id
