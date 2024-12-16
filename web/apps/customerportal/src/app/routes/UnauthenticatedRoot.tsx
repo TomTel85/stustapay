@@ -18,7 +18,7 @@ export const UnauthenticatedRoot: React.FC = () => {
             <Toolbar disableGutters>
               <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                 <RouterLink to="/" style={{ textDecoration: "none", color: "inherit" }}>
-                  {t("TeamFestlichPay")}
+                  {t(config.apiConfig.event_name)}
                 </RouterLink>
               </Typography>
               <LanguageSelect sx={{ color: "inherit" }} variant="outlined" />

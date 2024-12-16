@@ -42,6 +42,7 @@ class CustomerPortalApiConfig(BaseModel):
     sumup_topup_enabled: bool
     allowed_country_codes: Optional[list[str]]
     translation_texts: dict[Language, dict[str, str]]
+    event_name: str
 
 
 class CustomerLoginSuccess(BaseModel):
@@ -256,6 +257,7 @@ class CustomerService(Service[Config]):
             sumup_topup_enabled=self.config.core.sumup_enabled and node.event.sumup_topup_enabled,
             translation_texts=node.event.translation_texts,
             currency_identifier=node.event.currency_identifier,
+            event_name=node.name,
         )
 
     @with_db_transaction

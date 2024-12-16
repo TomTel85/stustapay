@@ -341,6 +341,7 @@ export type CustomerPortalApiConfig = {
       [key: string]: string;
     };
   };
+  event_name: string;
 };
 export type CreateCheckoutResponse = {
   checkout_id: string;

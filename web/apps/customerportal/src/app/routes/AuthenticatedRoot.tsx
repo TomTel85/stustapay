@@ -74,7 +74,7 @@ export const AuthenticatedRoot: React.FC = () => {
             <Toolbar disableGutters>
               <Typography variant="h6" component="div" sx={{ mr: 2, display: { xs: "none", md: "flex" } }}>
                 <RouterLink to="/" style={{ textDecoration: "none", color: "inherit" }}>
-                  {t("TeamFestlichPay")}
+                  {t(config.apiConfig.event_name)}
                 </RouterLink>
               </Typography>
 
