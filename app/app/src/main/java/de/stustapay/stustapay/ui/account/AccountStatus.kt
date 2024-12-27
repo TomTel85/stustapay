@@ -35,7 +35,7 @@ fun AccountStatus(
 
     // LaunchedEffect to keep this view active for 10 seconds
     LaunchedEffect(key1 = Unit) {
-        delay(10000) 
+        delay(5000)
         navigateTo(CustomerStatusNavDests.scan)  
     }
     
