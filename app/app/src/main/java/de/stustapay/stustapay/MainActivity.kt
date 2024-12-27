@@ -86,10 +86,10 @@ class MainActivity : ComponentActivity(), SysUiController {
         // Check if the device is primarily used in landscape or portrait
         requestedOrientation = if (screenWidth > screenHeight) {
             // Landscape device
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         } else {
             // Portrait device
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
     }
 
