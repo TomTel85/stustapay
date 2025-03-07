@@ -87,6 +87,36 @@ class TopUpViewModel @Inject constructor(
         initialValue = TerminalLoginState(),
     )
 
+    // Flag to track if token refresh is active
+    private val _tokenRefreshActive = MutableStateFlow(false)
+    
+    init {
+        // Start token refresh job when ViewModel is created
+        startTokenRefresh()
+    }
+    
+    private fun startTokenRefresh() {
+        viewModelScope.launch {
+            _tokenRefreshActive.update { true }
+            try {
+                while (_tokenRefreshActive.value) {
+                    // Check and refresh token if needed
+                    terminalConfigRepository.tokenRefresh()
+                    // Wait for 2 minutes before checking again
+                    delay(2 * 60 * 1000)
+                }
+            } catch (e: Exception) {
+                _status.update { "Token refresh error: ${e.message}" }
+            }
+        }
+    }
+    
+    // Make sure to stop token refresh when ViewModel is cleared
+    override fun onCleared() {
+        super.onCleared()
+        _tokenRefreshActive.update { false }
+    }
+
     fun setAmount(amount: UInt) {
         _topUpState.update {
             it.copy(currentAmount = amount)
@@ -156,6 +186,9 @@ class TopUpViewModel @Inject constructor(
         // TODO: move this even before the chip scan
         // CashECPay could get a prepareEC callback function for that.
         ecPaymentRepository.wakeup()
+        
+        // Check and refresh token if needed before payment
+        terminalConfigRepository.tokenRefresh()
 
         val newTopUp = NewTopUp(
             amount = _topUpState.value.currentAmount.toDouble() / 100,
@@ -244,6 +277,14 @@ class TopUpViewModel @Inject constructor(
 
     fun navigateTo(target: TopUpPage) {
         _navState.update { target }
+        
+        // When navigating to the selection screen, ensure we have a fresh token
+        if (target == TopUpPage.Selection) {
+            viewModelScope.launch {
+                // Refresh token if needed
+                terminalConfigRepository.tokenRefresh()
+            }
+        }
     }
 
     /** when a topup was successful and the confirmation was dismissed */
