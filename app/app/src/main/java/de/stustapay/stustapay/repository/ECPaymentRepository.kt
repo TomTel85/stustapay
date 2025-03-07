@@ -1,4 +1,4 @@
-package de.stustapay.stustapay.repository
+<<<<package de.stustapay.stustapay.repository
 
 import android.app.Activity
 import de.stustapay.libssp.util.waitFor
@@ -17,12 +17,13 @@ sealed interface ECPaymentResult {
 @Singleton
 class ECPaymentRepository @Inject constructor(
     private val sumUp: SumUp,
-) {
-    suspend fun wakeup() {
+    private val terminalConfigRepository: TerminalConfigRepository  +
         sumUp.wakeup()
     }
 
     suspend fun pay(context: Activity, ecPayment: ECPayment): ECPaymentResult {
+        // Refresh terminal configuration to ensure we have the latest SumUp token
+        terminalConfigRepository.fetchConfig(keepTrying = false)
 
         // perform sumup flow
         sumUp.pay(context, ecPayment)
