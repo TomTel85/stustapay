@@ -21,4 +21,5 @@ object RootNavDests : NavDestinations() {
     val cashier = NavDest("cashier")
     val vault = NavDest("vault")
     val swap = NavDest("swap")
+    val device_test = NavDest("device_test")
 }
