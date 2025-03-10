@@ -3,6 +3,7 @@ package de.stustapay.stustapay.ui.root
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.DeviceHub
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
@@ -61,4 +62,8 @@ val startpageItems = listOf(
         label = R.string.root_item_stats,
         navDestination = RootNavDests.stats,
         canAccess = { u, _ -> Access.canViewStats(u) }),
+    StartpageItem(icon = Icons.Filled.DeviceHub,
+        label = R.string.device_test_title,
+        navDestination = RootNavDests.device_test,
+        canAccess = { _, _ -> true }),
 )

@@ -31,11 +31,17 @@ fun CashInOutView(
     leaveView: () -> Unit = {},
     viewModel: PayInOutViewModel = hiltViewModel()
 ) {
-    BackHandler {
-        leaveView()
+    // Disable back button functionality for users with only can_topup privilege
+    val loginState by viewModel.terminalLoginState.collectAsStateWithLifecycle()
+    if (!loginState.hasOnlyTopUpPrivilege()) {
+        BackHandler {
+            leaveView()
+        }
+    } else {
+        // For users with only can_topup privilege, prevent back button functionality
+        BackHandler {}
     }
 
-    val loginState by viewModel.terminalLoginState.collectAsStateWithLifecycle()
     val activeTab by viewModel.activeCashInOutTab.collectAsStateWithLifecycle()
     val tabList by viewModel.tabList.collectAsStateWithLifecycle()
 
@@ -53,9 +59,12 @@ fun CashInOutView(
         topBar = {
             TopAppBar(
                 title = { Text(loginState.title().title) },
-                icon = TopAppBarIcon(type = TopAppBarIcon.Type.BACK) {
-                    leaveView()
-                },
+                // Only show back button if user does not have only the can_topup privilege
+                icon = if (!loginState.hasOnlyTopUpPrivilege()) {
+                    TopAppBarIcon(type = TopAppBarIcon.Type.BACK) {
+                        leaveView()
+                    }
+                } else null,
             )
         }
     ) { paddingValues ->

@@ -2,7 +2,9 @@ package de.stustapay.stustapay.ui.common
 
 
 import de.stustapay.api.models.CurrentUser
+import de.stustapay.api.models.Privilege
 import de.stustapay.api.models.TerminalConfig
+import de.stustapay.stustapay.model.Access
 import de.stustapay.stustapay.model.UserState
 import de.stustapay.stustapay.repository.TerminalConfigState
 
@@ -42,5 +44,17 @@ class TerminalLoginState(
             return false;
         }
         return terminal.config.till?.cashRegisterId != null;
+    }
+    
+    /**
+     * Check if the user has only the can_topup privilege but not the can_book_orders privilege.
+     * Such users should have restricted UI access (no back button, auto-navigate to topup)
+     */
+    fun hasOnlyTopUpPrivilege(): Boolean {
+        if (user !is UserState.LoggedIn) {
+            return false
+        }
+        
+        return Access.hasOnlyTopUpPrivilege(user.user)
     }
 }

@@ -121,22 +121,25 @@ fun PostPaymentCashECSelection(
 
                 Row(modifier = Modifier.padding(top = 5.dp)) {
                     // Cash flow
-                    Button(
-                        modifier = Modifier
-                            .fillMaxWidth(0.5f)
-                            .padding(end = 10.dp),
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            goToCash()
-                        },
-                        enabled = ready && config.canHandleCash(),
-                    ) {
-                        // Unicode "Coin"
-                        Text(
-                            stringResource(R.string.pay_cash),
-                            textAlign = TextAlign.Center,
-                            style = LargeButtonStyle,
-                        )
+                    // Hide the Cash button for users with only the can_topup privilege
+                    if (!config.hasOnlyTopUpPrivilege()) {
+                        Button(
+                            modifier = Modifier
+                                .fillMaxWidth(0.5f)
+                                .padding(end = 10.dp),
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                goToCash()
+                            },
+                            enabled = ready && config.canHandleCash(),
+                        ) {
+                            // unicode "Coin"
+                            Text(
+                                stringResource(R.string.pay_cash),
+                                textAlign = TextAlign.Center,
+                                style = LargeButtonStyle,
+                            )
+                        }
                     }
 
                     // EC Flow
@@ -146,44 +149,61 @@ fun PostPaymentCashECSelection(
                         onScan = { tag ->
                             when (onPayRequested) {
                                 is CashECCallback.Tag -> {
-                                    onPayRequested.onEC(tag)
+                                    if (existingTag != null) {
+                                        // Use existing tag if available
+                                        onPayRequested.onEC(existingTag)
+                                    } else {
+                                        onPayRequested.onEC(tag)
+                                    }
                                 }
                                 is CashECCallback.NoTag -> {
-                                    // Never reached
-                                    error("NFC scanned in EC NoTag mode")
+                                    // never reached.
+                                    error("nfc scanned in ec NoTag mode")
                                 }
                             }
                         }
                     )
 
                     Button(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 10.dp),
+                        modifier = if (config.hasOnlyTopUpPrivilege()) {
+                            // If the user only has the can_topup privilege, make the Card button take the full width
+                            Modifier
+                                .fillMaxWidth()
+                        } else {
+                            // Otherwise, take half the width with padding on the left
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(start = 10.dp)
+                        },
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             if (checkAmount()) {
                                 if (existingTag != null) {
-                                    // Use the provided tag for EC payment
+                                    // If we have an existing tag, go straight to EC payment
                                     when (onPayRequested) {
                                         is CashECCallback.Tag -> {
                                             onPayRequested.onEC(existingTag)
-                                            goToEC() // Navigate to confirmation
                                         }
                                         is CashECCallback.NoTag -> {
-                                            // Should not be reached
-                                            error("NoTag callback with an existing tag.")
+                                            onPayRequested.onEC()
                                         }
                                     }
                                 } else {
-                                    // Open NFC dialog for scanning
-                                    scanState.open()
+                                    // Otherwise scan for a tag
+                                    when (onPayRequested) {
+                                        is CashECCallback.Tag -> {
+                                            scanState.open()
+                                        }
+                                        is CashECCallback.NoTag -> {
+                                            onPayRequested.onEC()
+                                        }
+                                    }
                                 }
                             }
                         },
                         enabled = ready,
                     ) {
-                        // Unicode "Credit Card"
+                        // unicode "Credit Card"
                         Text(
                             stringResource(R.string.pay_card),
                             textAlign = TextAlign.Center,

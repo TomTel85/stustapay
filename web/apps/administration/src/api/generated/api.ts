@@ -1669,6 +1669,7 @@ export type Privilege =
   | "terminal_login"
   | "supervised_terminal_login"
   | "can_book_orders"
+  | "can_topup"
   | "grant_free_tickets"
   | "grant_vouchers";
 export type CreateUserPayload = {

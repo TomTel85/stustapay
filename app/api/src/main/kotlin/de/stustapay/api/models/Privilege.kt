@@ -60,6 +60,9 @@ enum class Privilege(val value: kotlin.String) {
     @SerialName(value = "can_book_orders")
     canBookOrders("can_book_orders"),
 
+    @SerialName(value = "can_topup")
+    canTopup("can_topup"),
+
     @SerialName(value = "grant_free_tickets")
     grantFreeTickets("grant_free_tickets"),
 

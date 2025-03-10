@@ -330,7 +330,7 @@ class OrderService(Service[Config]):
         return customer
 
     @with_db_transaction(read_only=True)
-    @requires_terminal(user_privileges=[Privilege.can_book_orders])
+    @requires_terminal(user_privileges=[Privilege.can_book_orders, Privilege.can_topup])
     async def check_topup(
         self,
         *,
@@ -386,7 +386,7 @@ class OrderService(Service[Config]):
         )
 
     @with_db_transaction(read_only=False)
-    @requires_terminal(user_privileges=[Privilege.can_book_orders])
+    @requires_terminal(user_privileges=[Privilege.can_book_orders, Privilege.can_topup])
     async def book_topup(
         self,
         *,

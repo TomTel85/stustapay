@@ -19,6 +19,7 @@ export const PrivilegeSchema = z.enum([
   // festival order / ticket / voucher flow privileges
   // which orders are available (sale, ticket, ...) is determined by the terminal profile
   "can_book_orders",
+  "can_topup",
   "grant_free_tickets",
   "grant_vouchers",
 ]);
