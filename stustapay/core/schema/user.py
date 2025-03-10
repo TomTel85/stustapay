@@ -38,6 +38,7 @@ class Privilege(enum.Enum):
     # festival order / ticket / voucher flow privileges
     # which orders are available (sale, ticket, ...) is determined by the terminal profile
     can_book_orders = "can_book_orders"
+    can_topup = "can_topup"  # Dedicated permission for topup functionality
     grant_free_tickets = "grant_free_tickets"
     grant_vouchers = "grant_vouchers"
 
