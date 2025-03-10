@@ -16,7 +16,8 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -25,11 +26,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ui.chipscan.NfcScanDialog
 import de.stustapay.stustapay.ui.chipscan.rememberNfcScanDialogState
 import de.stustapay.libssp.ui.theme.MoneyAmountStyle
 import kotlinx.coroutines.launch
+import javax.inject.Inject
+
 
 /**
  * To confirm one has received cash.
@@ -42,18 +47,28 @@ fun CashConfirmView(
     status: @Composable () -> Unit = {},
     question: String = stringResource(R.string.received_q),
     onPay: CashECCallback,
+    viewModel: CashECSelectionViewModel = hiltViewModel(),
 ) {
     val haptic = LocalHapticFeedback.current
-    val scanState = rememberNfcScanDialogState()
-    val scope = rememberCoroutineScope()
+    val config by viewModel.terminalLoginState.collectAsStateWithLifecycle()
+    
+    // If the user only has the can_topup privilege, don't show the cash confirmation dialog
+    if (config.hasOnlyTopUpPrivilege()) {
+        // Navigate back to avoid showing this screen
+        LaunchedEffect(Unit) {
+            goBack()
+        }
+        return
+    }
 
-    NfcScanDialog(state = scanState, onScan = { tag ->
-        scope.launch {
-            scanState.close()
+    // Check if we actually want to pay a tag without having to scan it again
+    val scanState = rememberNfcScanDialogState()
+    NfcScanDialog(
+        state = scanState,
+        onScan = { tag ->
             when (onPay) {
                 is CashECCallback.Tag -> {
                     onPay.onCash(tag)
-                    goBack()
                 }
 
                 is CashECCallback.NoTag -> {
@@ -62,7 +77,7 @@ fun CashConfirmView(
                 }
             }
         }
-    })
+    )
 
     Scaffold(
         content = { paddingValues ->

@@ -109,22 +109,25 @@ fun CashECSelection(
 
                 Row(modifier = Modifier.padding(top = 5.dp)) {
                     // Cash flow
-                    Button(
-                        modifier = Modifier
-                            .fillMaxWidth(0.5f)
-                            .padding(end = 10.dp),
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            goToCash()
-                        },
-                        enabled = ready && config.canHandleCash(),
-                    ) {
-                        // unicode "Coin"
-                        Text(
-                            stringResource(R.string.pay_cash),
-                            textAlign = TextAlign.Center,
-                            style = LargeButtonStyle,
-                        )
+                    // Hide the Cash button for users with only the can_topup privilege
+                    if (!config.hasOnlyTopUpPrivilege()) {
+                        Button(
+                            modifier = Modifier
+                                .fillMaxWidth(0.5f)
+                                .padding(end = 10.dp),
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                goToCash()
+                            },
+                            enabled = ready && config.canHandleCash(),
+                        ) {
+                            // unicode "Coin"
+                            Text(
+                                stringResource(R.string.pay_cash),
+                                textAlign = TextAlign.Center,
+                                style = LargeButtonStyle,
+                            )
+                        }
                     }
 
                     // EC Flow
@@ -146,9 +149,16 @@ fun CashECSelection(
                     )
 
                     Button(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 10.dp),
+                        modifier = if (config.hasOnlyTopUpPrivilege()) {
+                            // If the user only has the can_topup privilege, make the Card button take the full width
+                            Modifier
+                                .fillMaxWidth()
+                        } else {
+                            // Otherwise, take half the width with padding on the left
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(start = 10.dp)
+                        },
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             if (checkAmount()) {
