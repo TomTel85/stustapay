@@ -4,6 +4,7 @@ package de.stustapay.stustapay.ui.common
 import de.stustapay.api.models.CurrentUser
 import de.stustapay.api.models.Privilege
 import de.stustapay.api.models.TerminalConfig
+import de.stustapay.stustapay.model.Access
 import de.stustapay.stustapay.model.UserState
 import de.stustapay.stustapay.repository.TerminalConfigState
 
@@ -47,14 +48,13 @@ class TerminalLoginState(
     
     /**
      * Check if the user has only the can_topup privilege but not the can_book_orders privilege.
-     * Such users should not see the Cash button in the topup view.
+     * Such users should have restricted UI access (no back button, auto-navigate to topup)
      */
     fun hasOnlyTopUpPrivilege(): Boolean {
         if (user !is UserState.LoggedIn) {
             return false
         }
         
-        return user.user.privileges.contains(Privilege.canTopup) && 
-               !user.user.privileges.contains(Privilege.canBookOrders)
+        return Access.hasOnlyTopUpPrivilege(user.user)
     }
 }

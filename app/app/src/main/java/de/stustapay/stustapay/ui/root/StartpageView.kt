@@ -10,6 +10,7 @@ import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +36,15 @@ fun StartpageView(
         MaterialTheme.colors.onSecondary
     )
     val activity = LocalContext.current as Activity
+
+    // Automatically navigate to topup view for users with only the can_topup privilege
+    LaunchedEffect(loginState) {
+        if (loginState.hasConfig() && !configLoading) {
+            if (loginState.hasOnlyTopUpPrivilege()) {
+                navigateTo(RootNavDests.topup)
+            }
+        }
+    }
 
     val navigateToHook = { dest: NavDest ->
         // Only allow navigation if we have a config, but always allow entering settings
