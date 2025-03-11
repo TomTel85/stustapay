@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
+from fastapi import HTTPException
 
 from stustapay.core.http.auth_user import CurrentAuthToken
 from stustapay.core.http.context import ContextCashierService, ContextOrderService, ContextTillService
@@ -75,6 +76,53 @@ async def transfer_register(
         token=token,
         source_cashier_id=payload.source_cashier_id,
         target_cashier_id=payload.target_cashier_id,
+        node_id=node_id,
+    )
+
+
+class AssignRegisterPayload(BaseModel):
+    cashier_id: int
+    cash_register_id: int
+
+
+@router.post("/assign-register")
+async def assign_register(
+    token: CurrentAuthToken,
+    payload: AssignRegisterPayload,
+    till_service: ContextTillService,
+    node_id: int,
+):
+    return await till_service.register.assign_cash_register_admin(
+        token=token,
+        cashier_id=payload.cashier_id,
+        cash_register_id=payload.cash_register_id,
+        node_id=node_id,
+    )
+
+
+class ModifyRegisterBalancePayload(BaseModel):
+    cashier_id: int
+    amount: float
+
+
+@router.post("/modify-balance")
+async def modify_register_balance(
+    token: CurrentAuthToken,
+    payload: ModifyRegisterBalancePayload,
+    till_service: ContextTillService,
+    cashier_service: ContextCashierService,
+    node_id: int,
+):
+    # Get the cashier's user tag UID which is required by modify_cashier_account_balance
+    cashier = await cashier_service.get_cashier(token=token, node_id=node_id, cashier_id=payload.cashier_id)
+    if not cashier.user_tag_uid:
+        raise HTTPException(status_code=400, detail="Cashier does not have a user tag")
+    
+    return await till_service.register.modify_cashier_account_balance_admin(
+        token=token,
+        cashier_id=payload.cashier_id,
+        cashier_tag_uid=cashier.user_tag_uid,
+        amount=payload.amount,
         node_id=node_id,
     )
 

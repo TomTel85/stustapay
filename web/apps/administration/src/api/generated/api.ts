@@ -611,6 +611,17 @@ const injectedRtkApi = api
         }),
         invalidatesTags: ["till-registers"],
       }),
+      modifyRegisterBalance: build.mutation<ModifyRegisterBalanceApiResponse, ModifyRegisterBalanceApiArg>({
+        query: (queryArg) => ({
+          url: `/till-registers/modify-balance`,
+          method: "POST",
+          body: queryArg.modifyRegisterBalancePayload,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        invalidatesTags: ["till-registers"],
+      }),
       getPublicConfig: build.query<GetPublicConfigApiResponse, GetPublicConfigApiArg>({
         query: () => ({ url: `/public-config` }),
         providesTags: ["config"],
@@ -1614,6 +1625,11 @@ export type TransferRegisterApiArg = {
   nodeId: number;
   transferRegisterPayload: TransferRegisterPayload;
 };
+export type ModifyRegisterBalanceApiResponse = /** status 200 Successful Response */ any;
+export type ModifyRegisterBalanceApiArg = {
+  nodeId: number;
+  modifyRegisterBalancePayload: ModifyRegisterBalancePayload;
+};
 export type GetPublicConfigApiResponse = /** status 200 Successful Response */ Config;
 export type GetPublicConfigApiArg = void;
 export type ListConfigEntriesApiResponse = /** status 200 Successful Response */ NormalizedListConfigEntryStr;
@@ -2461,6 +2477,10 @@ export type NormalizedListTransactionInt = {
 export type TransferRegisterPayload = {
   source_cashier_id: number;
   target_cashier_id: number;
+};
+export type ModifyRegisterBalancePayload = {
+  cashier_id: number;
+  amount: number;
 };
 export type Config = {
   test_mode: boolean;
@@ -3405,6 +3425,7 @@ export const {
   useListTransactionsQuery,
   useLazyListTransactionsQuery,
   useTransferRegisterMutation,
+  useModifyRegisterBalanceMutation,
   useGetPublicConfigQuery,
   useLazyGetPublicConfigQuery,
   useListConfigEntriesQuery,

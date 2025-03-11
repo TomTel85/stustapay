@@ -11,7 +11,7 @@ import {
 import { CashierRoutes, CashRegistersRoutes, TillRoutes } from "@/app/routes";
 import { ListLayout } from "@/components";
 import { useCurrentNode, useCurrentUserHasPrivilege, useCurrentUserHasPrivilegeAtNode, useRenderNode } from "@/hooks";
-import { Delete as DeleteIcon, Edit as EditIcon, SwapHoriz as SwapHorizIcon } from "@mui/icons-material";
+import { Delete as DeleteIcon, Edit as EditIcon, SwapHoriz as SwapHorizIcon, PersonAdd as PersonAddIcon, MonetizationOn as MonetizationOnIcon } from "@mui/icons-material";
 import { Link } from "@mui/material";
 import { DataGrid, GridActionsCellItem, GridColDef } from "@stustapay/framework";
 import { Loading } from "@stustapay/components";
@@ -139,6 +139,20 @@ export const CashRegisterList: React.FC = () => {
                 label={t("register.transfer")}
                 disabled={params.row.current_cashier_id == null}
                 onClick={() => navigate(`${CashRegistersRoutes.detail(params.row.id)}/transfer`)}
+              />,
+              <GridActionsCellItem
+                icon={<PersonAddIcon />}
+                color="primary"
+                label={t("register.assign")}
+                disabled={params.row.current_cashier_id != null}
+                onClick={() => navigate(`${CashRegistersRoutes.detail(params.row.id)}/assign`)}
+              />,
+              <GridActionsCellItem
+                icon={<MonetizationOnIcon />}
+                color="primary"
+                label={t("register.modifyBalance")}
+                disabled={params.row.current_cashier_id == null}
+                onClick={() => navigate(`${CashRegistersRoutes.detail(params.row.id)}/modify-balance`)}
               />,
               <GridActionsCellItem
                 icon={<EditIcon />}

@@ -522,6 +522,13 @@ export const translations = {
     transferTargetCashier: "Cashier to transfer the register to",
     cannotTransferNotAssigned:
       "This cash register is not assigned to a cashier, we therefore cannot transfer it to another. Please use the stock up cashier functionality for that.",
+    assign: "Assign to cashier",
+    assignTargetCashier: "Cashier to assign the register to",
+    alreadyAssigned: "This cash register is already assigned to a cashier. Please use the transfer functionality instead.",
+    modifyBalance: "Add funds",
+    amount: "Amount",
+    modifyBalanceDescription: "Enter a positive amount to add funds to the cash register. The funds will be transferred from the cash vault.",
+    cannotModifyNotAssigned: "This cash register is not assigned to a cashier and cannot have funds added to it.",
     euro200: "Amount of 200€ bills",
     euro100: "Amount of 100€ bills",
     euro50: "Amount of 50€ bills",
