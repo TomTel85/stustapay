@@ -25,6 +25,7 @@ import {
   GenerateRevenueReportApiArg,
   UpdateUserTagCommentApiArg,
   UpdateUserTagVipStatusApiArg,
+  Transaction,
 } from "./generated/api";
 import { convertEntityAdaptorSelectors, generateCacheKeys } from "./utils";
 
@@ -59,6 +60,8 @@ const cashierShiftAdapter = createEntityAdapter<CashierShift>({
 });
 
 const orderAdapter = createEntityAdapter<Order>({ sortComparer: (a, b) => b.id - a.id });
+
+const transactionAdapter = createEntityAdapter<Transaction>({ sortComparer: (a, b) => b.id - a.id });
 
 const taxRateAdapter = createEntityAdapter<TaxRate>({
   sortComparer: (a, b) => a.name.localeCompare(b.name),
@@ -176,17 +179,6 @@ export const api = generatedApi.enhanceEndpoints({
     listPayoutRuns: {
       providesTags: (result) => generateCacheKeys("payouts", result),
     },
-    generateTestBon: {
-      query: (queryArg: GenerateTestBonApiArg) => ({
-        url: `/tree/events/${queryArg.nodeId}/generate-test-bon`,
-        method: "POST",
-        responseHandler: async (resp: Response) => {
-          const blob = await resp.blob();
-          return window.URL.createObjectURL(blob);
-        },
-      }),
-      invalidatesTags: [],
-    },
     generateTestReport: {
       query: (queryArg: GenerateTestReportApiArg) => ({
         url: `/tree/events/${queryArg.nodeId}/generate-test-report`,
@@ -262,6 +254,14 @@ export const {
 export const { selectOrderAll, selectOrderById, selectOrderEntities, selectOrderIds, selectOrderTotal } =
   convertEntityAdaptorSelectors("Order", orderAdapter.getSelectors());
 
+export const {
+  selectTransactionAll,
+  selectTransactionById,
+  selectTransactionEntities,
+  selectTransactionIds,
+  selectTransactionTotal,
+} = convertEntityAdaptorSelectors("Transaction", transactionAdapter.getSelectors());
+
 export const { selectTaxRateAll, selectTaxRateById, selectTaxRateEntities, selectTaxRateIds, selectTaxRateTotal } =
   convertEntityAdaptorSelectors("TaxRate", taxRateAdapter.getSelectors());
 
@@ -296,20 +296,20 @@ export const {
 } = convertEntityAdaptorSelectors("TillProfile", tillProfileAdapter.getSelectors());
 
 export const {
-  selectTillRegisterAll,
-  selectTillRegisterById,
-  selectTillRegisterEntities,
-  selectTillRegisterIds,
-  selectTillRegisterTotal,
-} = convertEntityAdaptorSelectors("TillRegister", cashRegisterAdapter.getSelectors());
+  selectCashRegisterAll,
+  selectCashRegisterById,
+  selectCashRegisterEntities,
+  selectCashRegisterIds,
+  selectCashRegisterTotal,
+} = convertEntityAdaptorSelectors("CashRegister", cashRegisterAdapter.getSelectors());
 
 export const {
-  selectTillRegisterStockingAll,
-  selectTillRegisterStockingById,
-  selectTillRegisterStockingEntities,
-  selectTillRegisterStockingIds,
-  selectTillRegisterStockingTotal,
-} = convertEntityAdaptorSelectors("TillRegisterStocking", cashRegisterStockingAdapter.getSelectors());
+  selectCashRegisterStockingAll,
+  selectCashRegisterStockingById,
+  selectCashRegisterStockingEntities,
+  selectCashRegisterStockingIds,
+  selectCashRegisterStockingTotal,
+} = convertEntityAdaptorSelectors("CashRegisterStocking", cashRegisterStockingAdapter.getSelectors());
 
 export const { selectAccountById, selectAccountEntities, selectAccountTotal, selectAccountIds, selectAccountAll } =
   convertEntityAdaptorSelectors("Account", accountAdapter.getSelectors());

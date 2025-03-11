@@ -158,4 +158,6 @@
     <string name="post_payment_pay">🪙 Pay ...</string>
     <string name="sale_check_your_order">Check your order</string>
     <string name="book_order">Book ✓</string>
+    <string name="pay_stustapay">🛜\nSSP</string>
+    <string name="pay_no_payment_method_configured">No payment method configured</string>
 </resources>

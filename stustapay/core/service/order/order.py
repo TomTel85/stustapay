@@ -1,13 +1,16 @@
 import logging
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Dict, Optional, Set
 from uuid import UUID
 
 import asyncpg
 from pydantic import BaseModel
 from sftkit.database import Connection
+from sftkit.error import NotFound
 from sftkit.service import Service, with_db_transaction
 
+from stustapay.bon.bon import BonJson
 from stustapay.core.config import Config
 from stustapay.core.schema.account import (
     Account,
@@ -33,6 +36,8 @@ from stustapay.core.schema.order import (
     OrderType,
     PaymentMethod,
     PendingLineItem,
+    PendingOrderStatus,
+    PendingOrderType,
     PendingPayOut,
     PendingSale,
     PendingSaleBase,
@@ -41,6 +46,7 @@ from stustapay.core.schema.order import (
     PendingTopUp,
     TicketScanResult,
     TicketScanResultEntry,
+    Transaction,
 )
 from stustapay.core.schema.product import Product, ProductRestriction, ProductType
 from stustapay.core.schema.terminal import CurrentTerminal
@@ -58,7 +64,17 @@ from stustapay.core.service.common.decorators import (
     requires_terminal,
     requires_user,
 )
-from sftkit.error import InvalidArgument, ServiceException
+from stustapay.core.service.common.error import InvalidArgument, ServiceException
+from stustapay.core.service.order.pending_order import (
+    fetch_pending_order,
+    load_pending_ticket_sale,
+    load_pending_topup,
+    make_ticket_sale_bookings,
+    make_topup_bookings,
+    save_pending_ticket_sale,
+    save_pending_topup,
+)
+from stustapay.core.service.order.sumup import SumupService
 from stustapay.core.service.product import (
     fetch_discount_product,
     fetch_pay_out_product,
@@ -69,6 +85,7 @@ from stustapay.core.service.till.common import fetch_virtual_till
 from stustapay.core.service.transaction import book_transaction
 from stustapay.core.service.tree.common import fetch_restricted_event_settings_for_node
 
+from ..till.common import get_cash_register_account_id
 from .booking import BookingIdentifier, NewLineItem, book_order
 from .stats import OrderStatsService
 from .voucher import VoucherService
@@ -191,7 +208,10 @@ class BookedProduct(BaseModel):
 class InternalNewSale(BaseModel):
     uuid: UUID
     buttons: list[BookedButton]
-    customer_tag_uid: int
+
+    customer_tag_uid: Optional[int]
+    payment_method: PaymentMethod
+
     used_vouchers: Optional[int] = None
 
 
@@ -210,12 +230,19 @@ async def fetch_order(*, conn: Connection, order_id: int) -> Optional[Order]:
     return await conn.fetch_maybe_one(Order, "select * from order_value where id = $1", order_id)
 
 
+async def fetch_transaction(*, conn: Connection, node: Node, transaction_id: int) -> Transaction:
+    del node  # unused
+    # TODO: tree permissions
+    return await conn.fetch_one(Transaction, "select * from transaction_with_order t where id = $1", transaction_id)
+
+
 class OrderService(Service[Config]):
     def __init__(self, db_pool: asyncpg.Pool, config: Config, auth_service: AuthService):
         super().__init__(db_pool, config)
         self.auth_service = auth_service
         self.voucher_service = VoucherService(db_pool=db_pool, config=config, auth_service=auth_service)
         self.stats = OrderStatsService(db_pool=db_pool, config=config, auth_service=auth_service)
+        self.sumup = SumupService(db_pool=db_pool, config=config, auth_service=auth_service)
 
     @staticmethod
     async def _get_products_from_buttons(
@@ -396,9 +423,8 @@ class OrderService(Service[Config]):
         node: Node,
         current_user: CurrentUser,
         new_topup: NewTopUp,
+        pending: bool = False,
     ) -> CompletedTopUp:
-        assert current_user.cashier_account_id is not None
-
         pending_top_up: PendingTopUp = await self.check_topup(  # pylint: disable=unexpected-keyword-arg,missing-kwoa
             conn=conn,
             node=node,
@@ -406,70 +432,68 @@ class OrderService(Service[Config]):
             current_user=current_user,
             new_topup=new_topup,
         )
+        if pending and not pending_top_up.payment_method == PaymentMethod.sumup:
+            raise InvalidArgument("Only sumup payments can be marked as pending")
 
-        top_up_product = await fetch_top_up_product(conn=conn, node=node)
+        booked_at = datetime.now(tz=timezone.utc)
 
-        line_items = [
-            NewLineItem(
-                quantity=1,
-                product_id=top_up_product.id,
-                product_price=pending_top_up.amount,
-                tax_rate_id=top_up_product.tax_rate_id,
+        if not pending:
+            await make_topup_bookings(
+                conn=conn,
+                current_till=current_till,
+                node=node,
+                current_user_id=current_user.id,
+                top_up=pending_top_up,
+                booked_at=booked_at,
             )
-        ]
 
-        cash_entry_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.cash_entry)
-        cash_topup_acc = await get_system_account_for_node(
-            conn=conn, node=node, account_type=AccountType.cash_topup_source
-        )
-        sumup_entry_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.sumup_entry)
-
-        if pending_top_up.payment_method == PaymentMethod.cash:
-            bookings = {
-                BookingIdentifier(
-                    source_account_id=cash_topup_acc.id,
-                    target_account_id=pending_top_up.customer_account_id,
-                ): pending_top_up.amount,
-                BookingIdentifier(
-                    source_account_id=cash_entry_acc.id,
-                    target_account_id=current_user.cashier_account_id,
-                ): pending_top_up.amount,
-            }
-        elif pending_top_up.payment_method == PaymentMethod.sumup:
-            bookings = {
-                BookingIdentifier(
-                    source_account_id=sumup_entry_acc.id,
-                    target_account_id=pending_top_up.customer_account_id,
-                ): pending_top_up.amount
-            }
-        else:
-            raise InvalidArgument("topups cannot be payed with a tag")
-
-        order_info = await book_order(
-            conn=conn,
-            uuid=pending_top_up.uuid,
-            order_type=OrderType.top_up,
-            payment_method=pending_top_up.payment_method,
-            cashier_id=current_user.id,
-            till_id=current_till.id,
-            customer_account_id=pending_top_up.customer_account_id,
-            cash_register_id=current_user.cash_register_id,
-            line_items=line_items,
-            bookings=bookings,
-        )
-
-        return CompletedTopUp(
+        completed_top_up = CompletedTopUp(
             amount=pending_top_up.amount,
             customer_tag_uid=pending_top_up.customer_tag_uid,
             customer_account_id=pending_top_up.customer_account_id,
             payment_method=pending_top_up.payment_method,
             old_balance=pending_top_up.old_balance,
             new_balance=pending_top_up.new_balance,
-            uuid=order_info.uuid,
-            booked_at=order_info.booked_at,
+            uuid=pending_top_up.uuid,
+            booked_at=booked_at,
             cashier_id=current_user.id,
             till_id=current_till.id,
         )
+
+        if pending:
+            await save_pending_topup(
+                conn=conn, node_id=node.id, till_id=current_till.id, cashier_id=current_user.id, topup=completed_top_up
+            )
+
+        return completed_top_up
+
+    @with_db_transaction(read_only=False)
+    @requires_terminal(user_privileges=[Privilege.can_book_orders])
+    async def check_pending_topup(
+        self,
+        *,
+        conn: Connection,
+        current_till: Till,
+        order_uuid: UUID,
+    ) -> CompletedTopUp | None:
+        pending_order = await fetch_pending_order(conn=conn, uuid=order_uuid)
+        if pending_order.till_id != current_till.id:
+            raise InvalidArgument("Cannot check an order for a different till")
+        if pending_order.order_type != PendingOrderType.topup:
+            raise InvalidArgument("Invalid order uuid")
+        if pending_order.status == PendingOrderStatus.booked:
+            return load_pending_topup(pending_order)
+
+        topup = await self.sumup.process_pending_order(conn=conn, pending_order=pending_order)
+        if topup is None:
+            return None
+        if isinstance(topup, CompletedTopUp):
+            return topup
+
+        logger.warning(
+            f"Weird order state for uuid = {order_uuid}. Sumup order was accepted but we have the wrong order type"
+        )
+        return None
 
     async def _check_sale(
         self,
@@ -484,48 +508,72 @@ class OrderService(Service[Config]):
         prepare the given order: checks all requirements.
         To finish the order, book_order is used.
         """
+        if new_sale.payment_method == PaymentMethod.sumup_online:
+            raise InvalidArgument("Cannot pay sales online")
+
+        if new_sale.payment_method == PaymentMethod.tag and new_sale.customer_tag_uid is None:
+            raise InvalidArgument("Tag UID required for tag payment")
+
+        if new_sale.payment_method != PaymentMethod.tag and new_sale.customer_tag_uid is not None:
+            raise InvalidArgument("Tag UID given for cash or card payment")
+
+        tag_payment = new_sale.payment_method == PaymentMethod.tag
+
         uuid_exists = await conn.fetchval("select exists(select from ordr where uuid = $1)", new_sale.uuid)
         if uuid_exists:
             # raise AlreadyProcessedException("This order has already been booked (duplicate order uuid)")
             raise AlreadyProcessedException("Successfully booked order")
 
-        customer_account = await self._fetch_customer_by_user_tag(
-            conn=conn, node=node, customer_tag_uid=new_sale.customer_tag_uid
-        )
+        customer_account = None
+        if tag_payment:
+            assert new_sale.customer_tag_uid is not None
+            customer_account = await self._fetch_customer_by_user_tag(
+                conn=conn, node=node, customer_tag_uid=new_sale.customer_tag_uid
+            )
 
         booked_products = await self._get_products_from_buttons(
             conn=conn, till_profile_id=till.active_profile_id, buttons=new_sale.buttons
         )
         line_items = await self._preprocess_order_positions(
-            customer_restrictions=customer_account.restriction, booked_products=booked_products
+            customer_restrictions=(
+                customer_account.restriction if tag_payment and customer_account is not None else None
+            ),
+            booked_products=booked_products,
         )
 
         order = InternalPendingSale(
             uuid=new_sale.uuid,
             buttons=new_sale.buttons,
-            old_balance=customer_account.balance,
-            new_balance=customer_account.balance,  # will be overwritten later on
-            old_voucher_balance=customer_account.vouchers,
-            new_voucher_balance=customer_account.vouchers,  # will be overwritten later on
+            old_balance=(customer_account.balance if tag_payment and customer_account is not None else 0.0),
+            new_balance=(
+                customer_account.balance if tag_payment and customer_account is not None else 0.0
+            ),  # will be overwritten later on
+            old_voucher_balance=(customer_account.vouchers if tag_payment and customer_account is not None else 0),
+            new_voucher_balance=(
+                customer_account.vouchers if tag_payment and customer_account is not None else 0
+            ),  # will be overwritten later on
             line_items=line_items,
-            customer_account_id=customer_account.id,
+            customer_account_id=(customer_account.id if tag_payment and customer_account is not None else None),
+            payment_method=new_sale.payment_method,
         )
 
-        # if an explicit voucher amount was requested - use that as the maximum.
-        vouchers_to_use = customer_account.vouchers
-        if new_sale.used_vouchers is not None:
-            if new_sale.used_vouchers > customer_account.vouchers:
-                raise NotEnoughVouchersException(
-                    used_vouchers=new_sale.used_vouchers, available_vouchers=customer_account.vouchers
-                )
-            vouchers_to_use = new_sale.used_vouchers
-        discount_product = await fetch_discount_product(conn=conn, node=node)
-        voucher_usage = self.voucher_service.compute_optimal_voucher_usage(
-            max_vouchers=vouchers_to_use, line_items=order.line_items, discount_product=discount_product
-        )
+        if tag_payment:
+            assert customer_account is not None
+            # if an explicit voucher amount was requested - use that as the maximum.
+            vouchers_to_use = customer_account.vouchers
+            if new_sale.used_vouchers is not None:
+                if new_sale.used_vouchers > customer_account.vouchers:
+                    raise NotEnoughVouchersException(
+                        used_vouchers=new_sale.used_vouchers, available_vouchers=customer_account.vouchers
+                    )
+                vouchers_to_use = new_sale.used_vouchers
+            discount_product = await fetch_discount_product(conn=conn, node=node)
+            voucher_usage = self.voucher_service.compute_optimal_voucher_usage(
+                max_vouchers=vouchers_to_use, line_items=order.line_items, discount_product=discount_product
+            )
 
-        order.new_voucher_balance = customer_account.vouchers - voucher_usage.used_vouchers
-        order.line_items.extend(voucher_usage.additional_line_items)
+            order.new_voucher_balance = customer_account.vouchers - voucher_usage.used_vouchers
+            order.line_items.extend(voucher_usage.additional_line_items)
 
         if event_settings.post_payment_allowed:
             # Allow negative balance (post-payment)
@@ -580,6 +628,7 @@ class OrderService(Service[Config]):
         internal_new_sale = InternalNewSale(
             uuid=new_sale.uuid,
             customer_tag_uid=new_sale.customer_tag_uid,
+            payment_method=new_sale.payment_method,
             used_vouchers=new_sale.used_vouchers,
             buttons=[
                 BookedButton(
@@ -601,6 +650,7 @@ class OrderService(Service[Config]):
             old_voucher_balance=pending_sale.old_voucher_balance,
             new_voucher_balance=pending_sale.new_voucher_balance,
             customer_account_id=pending_sale.customer_account_id,
+            payment_method=pending_sale.payment_method,
             line_items=pending_sale.line_items,
             buttons=new_sale.buttons,
         )
@@ -633,6 +683,7 @@ class OrderService(Service[Config]):
                 )
                 for b in new_sale.products
             ],
+            payment_method=new_sale.payment_method,
         )
         pending_sale = await self._check_sale(
             conn=conn, event_settings=event_settings, node=node, till=current_till, new_sale=internal_new_sale
@@ -644,6 +695,7 @@ class OrderService(Service[Config]):
             old_voucher_balance=pending_sale.old_voucher_balance,
             new_voucher_balance=pending_sale.new_voucher_balance,
             customer_account_id=pending_sale.customer_account_id,
+            payment_method=pending_sale.payment_method,
             line_items=pending_sale.line_items,
             products=new_sale.products,
         )
@@ -679,14 +731,42 @@ class OrderService(Service[Config]):
             for line_item in pending_sale.line_items
         ]
 
+        cash_entry_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.cash_entry)
+        cash_topup_acc = await get_system_account_for_node(
+            conn=conn, node=node, account_type=AccountType.cash_topup_source
+        )
+        sumup_entry_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.sumup_entry)
         sale_exit_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.sale_exit)
 
         # combine booking based on (source, target) -> amount
         bookings: Dict[BookingIdentifier, float] = defaultdict(lambda: 0.0)
         for line_item in pending_sale.line_items:
             product = line_item.product
-            source_acc_id = get_source_account(OrderType.sale, pending_sale.customer_account_id)
-            target_acc_id = get_target_account(OrderType.sale, product, sale_exit_acc.id)
+
+            source_acc_id = None
+            target_acc_id = None
+            if pending_sale.payment_method == PaymentMethod.tag:
+                assert pending_sale.customer_account_id is not None
+                source_acc_id = get_source_account(OrderType.sale, pending_sale.customer_account_id)
+                target_acc_id = get_target_account(OrderType.sale, product, sale_exit_acc.id)
+            elif pending_sale.payment_method == PaymentMethod.cash:
+                if till.active_cash_register_id is None:
+                    raise InvalidArgument("Cash payments require a cash register")
+                cash_register_account_id = await get_cash_register_account_id(
+                    conn=conn, node=node, cash_register_id=till.active_cash_register_id
+                )
+                bookings[
+                    BookingIdentifier(source_account_id=cash_entry_acc.id, target_account_id=cash_register_account_id)
+                ] += float(line_item.total_price)
+                source_acc_id = get_source_account(OrderType.sale, cash_topup_acc.id)
+                target_acc_id = get_target_account(OrderType.sale, product, sale_exit_acc.id)
+            elif pending_sale.payment_method == PaymentMethod.sumup:
+                source_acc_id = get_source_account(OrderType.sale, sumup_entry_acc.id)
+                target_acc_id = get_target_account(OrderType.sale, product, sale_exit_acc.id)
+
+            assert source_acc_id is not None
+            assert target_acc_id is not None
+
             bookings[BookingIdentifier(source_account_id=source_acc_id, target_account_id=target_acc_id)] += float(
                 line_item.total_price
             )
@@ -695,15 +775,17 @@ class OrderService(Service[Config]):
             conn=conn,
             order_type=OrderType.sale,
             uuid=pending_sale.uuid,
-            payment_method=PaymentMethod.tag,
+            payment_method=pending_sale.payment_method,
             customer_account_id=pending_sale.customer_account_id,
             cashier_id=current_user.id,
+            cash_register_id=current_user.cash_register_id,
             line_items=line_items,
             bookings=bookings,
             till_id=till.id,
         )
 
         if pending_sale.used_vouchers > 0:
+            assert pending_sale.customer_account_id is not None
             await book_transaction(
                 conn=conn,
                 order_id=order_info.id,
@@ -721,20 +803,23 @@ class OrderService(Service[Config]):
             old_voucher_balance=pending_sale.old_voucher_balance,
             new_voucher_balance=pending_sale.new_voucher_balance,
             customer_account_id=pending_sale.customer_account_id,
+            payment_method=pending_sale.payment_method,
             line_items=pending_sale.line_items,
             booked_at=order_info.booked_at,
             till_id=till.id,
             cashier_id=current_user.id,
         )
 
-        customer_account_after_booking = await get_account_by_id(
-            conn=conn, node=node, account_id=completed_order.customer_account_id
-        )
-        assert customer_account_after_booking is not None
+        if completed_order.payment_method == PaymentMethod.tag:
+            assert completed_order.customer_account_id is not None
+            customer_account_after_booking = await get_account_by_id(
+                conn=conn, node=node, account_id=completed_order.customer_account_id
+            )
+            assert customer_account_after_booking is not None
 
-        # adjust completed order values after real booking in database
-        completed_order.new_balance = customer_account_after_booking.balance
-        completed_order.new_voucher_balance = customer_account_after_booking.vouchers
+            # adjust completed order values after real booking in database
+            completed_order.new_balance = customer_account_after_booking.balance
+            completed_order.new_voucher_balance = customer_account_after_booking.vouchers
 
         return completed_order
 
@@ -757,6 +842,7 @@ class OrderService(Service[Config]):
         internal_new_sale = InternalNewSale(
             uuid=new_sale.uuid,
             customer_tag_uid=new_sale.customer_tag_uid,
+            payment_method=new_sale.payment_method,
             used_vouchers=new_sale.used_vouchers,
             buttons=[
                 BookedButton(
@@ -776,6 +862,7 @@ class OrderService(Service[Config]):
             new_sale=internal_new_sale,
             current_user=current_user,
         )
+        bon_url = event_settings.customer_portal_url + "/bon/" + str(completed_sale.uuid)
         return CompletedSale(
             id=completed_sale.id,
             booked_at=completed_sale.booked_at,
@@ -787,8 +874,10 @@ class OrderService(Service[Config]):
             old_voucher_balance=completed_sale.old_voucher_balance,
             new_voucher_balance=completed_sale.new_voucher_balance,
             customer_account_id=completed_sale.customer_account_id,
+            payment_method=completed_sale.payment_method,
             line_items=completed_sale.line_items,
             buttons=new_sale.buttons,
+            bon_url=bon_url,
         )
 
     @with_db_transaction(read_only=False)
@@ -820,6 +909,7 @@ class OrderService(Service[Config]):
                 )
                 for b in new_sale.products
             ],
+            payment_method=new_sale.payment_method,
         )
         virtual_till = await fetch_virtual_till(conn=conn, node=node)
         completed_sale = await self._book_sale(
@@ -841,6 +931,7 @@ class OrderService(Service[Config]):
             old_voucher_balance=completed_sale.old_voucher_balance,
             new_voucher_balance=completed_sale.new_voucher_balance,
             customer_account_id=completed_sale.customer_account_id,
+            payment_method=completed_sale.payment_method,
             line_items=completed_sale.line_items,
             products=new_sale.products,
         )
@@ -870,6 +961,7 @@ class OrderService(Service[Config]):
             uuid=edit_sale.uuid,
             used_vouchers=edit_sale.used_vouchers,
             customer_tag_uid=order.customer_tag_uid,
+            payment_method=order.payment_method,
         )
 
         return await self.book_sale_products(  # pylint: disable=missing-kwoa,unexpected-keyword-arg
@@ -971,6 +1063,9 @@ class OrderService(Service[Config]):
         if not can_pay_out:
             raise TillPermissionException("This terminal is not allowed to pay out customers")
 
+        if current_till.active_cash_register_id is None:
+            raise InvalidArgument("Cash pay out requires a cash register")
+
         # Fetch customer account
         customer_account = await self._fetch_customer_by_user_tag(
             conn=conn, node=node, customer_tag_uid=new_pay_out.customer_tag_uid
@@ -1060,17 +1155,14 @@ class OrderService(Service[Config]):
         current_user: CurrentUser,
         new_pay_out: NewPayOut,
     ) -> CompletedPayOut:
-        assert current_user.cashier_account_id is not None
-        pending_pay_out: PendingPayOut = (
-            await self.check_pay_out(  # pylint: disable=unexpected-keyword-arg,missing-kwoa
-                conn=conn,
-                node=node,
-                current_terminal=current_terminal,
-                current_user=current_user,
-                new_pay_out=new_pay_out,
-            )
+        pending_pay_out: PendingPayOut = await self.check_pay_out(  # pylint: disable=unexpected-keyword-arg,missing-kwoa
+            conn=conn,
+            node=node,
+            current_terminal=current_terminal,
+            current_user=current_user,
+            new_pay_out=new_pay_out,
         )
-
+        assert current_till.active_cash_register_id is not None
         pay_out_product = await fetch_pay_out_product(conn=conn, node=node)
 
         line_items = [
@@ -1087,12 +1179,15 @@ class OrderService(Service[Config]):
         )
         cash_exit_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.cash_exit)
 
+        cash_register_account_id = await get_cash_register_account_id(
+            conn=conn, node=node, cash_register_id=current_till.active_cash_register_id
+        )
         prepared_bookings: Dict[BookingIdentifier, float] = {
             BookingIdentifier(
                 source_account_id=pending_pay_out.customer_account_id, target_account_id=cash_topup_acc.id
             ): -pending_pay_out.amount,
             BookingIdentifier(
-                source_account_id=current_user.cashier_account_id, target_account_id=cash_exit_acc.id
+                source_account_id=cash_register_account_id, target_account_id=cash_exit_acc.id
             ): -pending_pay_out.amount,
         }
 
@@ -1209,14 +1304,12 @@ class OrderService(Service[Config]):
                 if cash_register_id is None:
                     raise InvalidArgument("This till needs a cash register for cash payments")
 
-        ticket_scan_result: TicketScanResult = (
-            await self.check_ticket_scan(  # pylint: disable=unexpected-keyword-arg,missing-kwoa
-                conn=conn,
-                node=node,
-                current_terminal=current_terminal,
-                current_user=current_user,
-                new_ticket_scan=NewTicketScan(customer_tags=new_ticket_sale.customer_tags),
-            )
+        ticket_scan_result: TicketScanResult = await self.check_ticket_scan(  # pylint: disable=unexpected-keyword-arg,missing-kwoa
+            conn=conn,
+            node=node,
+            current_terminal=current_terminal,
+            current_user=current_user,
+            new_ticket_scan=NewTicketScan(customer_tags=new_ticket_sale.customer_tags),
         )
 
         # mapping of product id to pending line item
@@ -1280,119 +1373,83 @@ class OrderService(Service[Config]):
         node: Node,
         current_user: CurrentUser,
         new_ticket_sale: NewTicketSale,
+        pending: bool = False,
     ) -> CompletedTicketSale:
         if new_ticket_sale.payment_method is None:
             raise InvalidArgument("No payment method provided")
 
-        assert current_user.cashier_account_id is not None
-        pending_ticket_sale: PendingTicketSale = (
-            await self.check_ticket_sale(  # pylint: disable=unexpected-keyword-arg,missing-kwoa
-                conn=conn,
-                current_terminal=current_terminal,
-                node=node,
-                current_user=current_user,
-                new_ticket_sale=new_ticket_sale,
-            )
-        )
-
-        # create a new customer account for the given tag ,
-        # store the initial topup amount as well as restriction for each newly created customer
-        customers: dict[int, tuple[float, Optional[str]]] = {}
-        for scanned_ticket in pending_ticket_sale.scanned_tickets:
-            restriction = await conn.fetchval(
-                "select restriction from user_tag where pin = $1 and node_id = any($2)",
-                scanned_ticket.customer_tag_pin,
-                node.ids_to_root,
-            )
-            user_tag_id = await conn.fetchval(
-                "update user_tag set uid = $1 where pin = $2 and node_id = any($3) returning id",
-                scanned_ticket.customer_tag_uid,
-                scanned_ticket.customer_tag_pin,
-                node.ids_to_root,
-            )
-            customer_account_id = await conn.fetchval(
-                "insert into account (node_id, user_tag_id, type) values ($1, $2, 'private') returning id",
-                node.event_node_id,
-                user_tag_id,
-            )
-            customers[customer_account_id] = (scanned_ticket.ticket.initial_top_up_amount, restriction)
-
-        oldest_customer_account_id = self._find_oldest_customer(customers)
-
-        line_items = []
-        for line_item in pending_ticket_sale.line_items:
-            line_items.append(
-                NewLineItem(
-                    quantity=line_item.quantity,
-                    product_id=line_item.product.id,
-                    product_price=line_item.product_price,
-                    tax_rate_id=line_item.tax_rate_id,
-                )
-            )
-
-        total_ticket_price = 0.0
-        for line_item in pending_ticket_sale.line_items:
-            if line_item.product.type != ProductType.topup:
-                total_ticket_price += line_item.total_price
-
-        cash_entry_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.cash_entry)
-        cash_topup_acc = await get_system_account_for_node(
-            conn=conn, node=node, account_type=AccountType.cash_topup_source
-        )
-        sumup_entry_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.sumup_entry)
-        sale_exit_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.sale_exit)
-
-        prepared_bookings: dict[BookingIdentifier, float] = {}
-        if pending_ticket_sale.payment_method == PaymentMethod.cash:
-            prepared_bookings[
-                BookingIdentifier(
-                    source_account_id=cash_entry_acc.id, target_account_id=current_user.cashier_account_id
-                )
-            ] = pending_ticket_sale.total_price
-            prepared_bookings[
-                BookingIdentifier(source_account_id=cash_topup_acc.id, target_account_id=sale_exit_acc.id)
-            ] = total_ticket_price
-            for customer_account_id in customers.keys():
-                topup_amount = customers[customer_account_id][0]
-                prepared_bookings[
-                    BookingIdentifier(source_account_id=cash_topup_acc.id, target_account_id=customer_account_id)
-                ] = topup_amount
-        elif pending_ticket_sale.payment_method == PaymentMethod.sumup:
-            prepared_bookings[
-                BookingIdentifier(source_account_id=sumup_entry_acc.id, target_account_id=sale_exit_acc.id)
-            ] = total_ticket_price
-            for customer_account_id in customers.keys():
-                topup_amount = customers[customer_account_id][0]
-                prepared_bookings[
-                    BookingIdentifier(source_account_id=sumup_entry_acc.id, target_account_id=customer_account_id)
-                ] = topup_amount
-        else:
-            raise InvalidArgument("Invalid payment method")
-
-        order_info = await book_order(
+        pending_ticket_sale: PendingTicketSale = await self.check_ticket_sale(  # pylint: disable=unexpected-keyword-arg,missing-kwoa
             conn=conn,
-            order_type=OrderType.ticket,
-            customer_account_id=oldest_customer_account_id,
-            cashier_id=current_user.id,
-            till_id=current_till.id,
-            uuid=new_ticket_sale.uuid,
-            cash_register_id=current_user.cash_register_id,
-            payment_method=pending_ticket_sale.payment_method,
-            bookings=prepared_bookings,
-            line_items=line_items,
+            current_terminal=current_terminal,
+            node=node,
+            current_user=current_user,
+            new_ticket_sale=new_ticket_sale,
         )
+        if pending and new_ticket_sale.payment_method != PaymentMethod.sumup:
+            raise InvalidArgument("Only sumup payments can be marked as pending")
 
-        return CompletedTicketSale(
-            id=order_info.id,
+        booked_at = datetime.now(tz=timezone.utc)
+        customer_account_id = None
+        if not pending:
+            customer_account_id = await make_ticket_sale_bookings(
+                conn=conn,
+                ticket_sale=pending_ticket_sale,
+                booked_at=booked_at,
+                current_till=current_till,
+                node=node,
+                current_user_id=current_user.id,
+            )
+
+        completed_ticket_sale = CompletedTicketSale(
             payment_method=pending_ticket_sale.payment_method,
-            customer_account_id=oldest_customer_account_id,
+            customer_account_id=customer_account_id,
             line_items=pending_ticket_sale.line_items,
-            uuid=order_info.uuid,
-            booked_at=order_info.booked_at,
+            uuid=pending_ticket_sale.uuid,
+            booked_at=booked_at,
             cashier_id=current_user.id,
             scanned_tickets=pending_ticket_sale.scanned_tickets,
             till_id=current_till.id,
         )
+        if pending:
+            await save_pending_ticket_sale(
+                conn=conn,
+                node_id=node.id,
+                till_id=current_till.id,
+                cashier_id=current_user.id,
+                ticket_sale=completed_ticket_sale,
+            )
+
+        return completed_ticket_sale
+
+    @with_db_transaction(read_only=False)
+    @requires_terminal(user_privileges=[Privilege.can_book_orders])
+    async def check_pending_ticket_sale(
+        self,
+        *,
+        conn: Connection,
+        current_till: Till,
+        order_uuid: UUID,
+    ) -> CompletedTicketSale | None:
+        pending_order = await fetch_pending_order(conn=conn, uuid=order_uuid)
+        if pending_order.till_id != current_till.id:
+            raise InvalidArgument("Cannot check an order for a different till")
+        if pending_order.order_type != PendingOrderType.ticket:
+            raise InvalidArgument("Invalid order uuid")
+        if pending_order.status == PendingOrderStatus.booked:
+            return load_pending_ticket_sale(pending_order)
+        if pending_order.status == PendingOrderStatus.cancelled:
+            return None
+
+        ticket_sale = await self.sumup.process_pending_order(conn=conn, pending_order=pending_order)
+        if ticket_sale is None:
+            return None
+        if isinstance(ticket_sale, CompletedTicketSale):
+            return ticket_sale
+
+        logger.warning(
+            f"Weird order state for uuid = {order_uuid}. Sumup order was accepted but we have the wrong order type"
+        )
+        return None
 
     @with_db_transaction(read_only=True)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
@@ -1405,37 +1462,52 @@ class OrderService(Service[Config]):
     @with_db_transaction(read_only=True)
     @requires_terminal([Privilege.can_book_orders])
     async def list_orders_terminal(
-        self, *, conn: Connection, current_user: User, current_terminal: CurrentTerminal
+        self, *, conn: Connection, node: Node, current_user: User, current_terminal: CurrentTerminal
     ) -> list[Order]:
         assert current_terminal.till is not None
         return await conn.fetch_many(
             Order,
-            "select * from order_value_prefiltered((select array_agg(o.id) from ordr o where o.cashier_id = $1 and o.till_id = $2))",
+            "select * from order_value_prefiltered((select array_agg(o.id) from ordr o where o.cashier_id = $1 and o.till_id = $2), $3)",
             current_user.id,
             current_terminal.till.id,
+            node.event_node_id,
         )
 
     @with_db_transaction(read_only=True)
     @requires_node()
     @requires_user([Privilege.node_administration])
-    async def list_orders(self, *, conn: Connection, customer_account_id: Optional[int] = None) -> list[Order]:
-        if customer_account_id is not None:
-            return await conn.fetch_many(
-                Order,
-                "select * from order_value_prefiltered((select array_agg(o.id) from ordr o where customer_account_id = $1))",
-                customer_account_id,
-            )
-        else:
-            return await conn.fetch_many(Order, "select * from order_value")
+    async def list_orders(self, *, conn: Connection, node: Node, customer_account_id: int) -> list[Order]:
+        return await conn.fetch_many(
+            Order,
+            "select * from order_value_prefiltered((select array_agg(o.id) from ordr o where customer_account_id = $1), $2)",
+            customer_account_id,
+            node.event_node_id,
+        )
 
     @with_db_transaction(read_only=True)
     @requires_node()
     @requires_user([Privilege.node_administration])
-    async def list_orders_by_till(self, *, conn: Connection, till_id: int) -> list[Order]:
+    async def list_orders_by_till(self, *, conn: Connection, node: Node, till_id: int) -> list[Order]:
         return await conn.fetch_many(
             Order,
-            "select * from order_value_prefiltered((select array_agg(o.id) from ordr o where till_id = $1))",
+            "select * from order_value_prefiltered((select array_agg(o.id) from ordr o where till_id = $1), $2)",
             till_id,
+            node.event_node_id,
+        )
+
+    @with_db_transaction(read_only=True)
+    @requires_node()
+    @requires_user([Privilege.node_administration])
+    async def list_transactions_by_cash_register(
+        self, *, conn: Connection, node: Node, cash_register_id: int
+    ) -> list[Transaction]:
+        cash_register_account_id = await get_cash_register_account_id(
+            conn=conn, node=node, cash_register_id=cash_register_id
+        )
+        return await conn.fetch_many(
+            Transaction,
+            "select * from transaction_with_order t where source_account = $1 or target_account = $1",
+            cash_register_account_id,
         )
 
     @with_db_transaction(read_only=True)
@@ -1443,6 +1515,34 @@ class OrderService(Service[Config]):
     @requires_user([Privilege.node_administration])
     async def get_order(self, *, conn: Connection, order_id: int) -> Optional[Order]:
         return await fetch_order(conn=conn, order_id=order_id)
+
+    @with_db_transaction(read_only=True)
+    @requires_node()
+    @requires_user([Privilege.node_administration])
+    async def get_transaction(self, *, conn: Connection, node: Node, transaction_id: int) -> Transaction:
+        return await fetch_transaction(conn=conn, node=node, transaction_id=transaction_id)
+
+    @with_db_transaction
+    async def get_bon_by_uuid(self, *, conn: Connection, order_uuid: str) -> BonJson:
+        row = await conn.fetchrow(
+            "select b.bon_json from bon b join ordr o on b.id = o.id where o.uuid = $1",
+            order_uuid,
+        )
+        if not row or row["bon_json"] is None:
+            raise NotFound(element_type="bon", element_id=order_uuid)
+
+        return BonJson.model_validate_json(row["bon_json"])
+
+    @with_db_transaction
+    async def get_bon_by_id(self, *, conn: Connection, order_id: int) -> BonJson:
+        row = await conn.fetchrow(
+            "select b.bon_json from bon b where b.id = $1",
+            order_id,
+        )
+        if not row or row["bon_json"] is None:
+            raise NotFound(element_type="bon", element_id=order_id)
+
+        return BonJson.model_validate_json(row["bon_json"])
 
     @staticmethod
     def _find_oldest_customer(customers: dict[int, tuple[float, Optional[str]]]) -> int:

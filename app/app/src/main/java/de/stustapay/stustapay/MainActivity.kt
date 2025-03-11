@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity(), SysUiController {
         setDefaultOrientation();
 
         // things that need the activity
-        nfcHandler.onCreate(this)
+        nfcHandler.onCreate(this, mapOf())
         sumUp.init(activityCallback)
 
         infallible.launch()

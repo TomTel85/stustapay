@@ -46,6 +46,9 @@ export const NewTillProfileSchema = z.object({
   allow_top_up: z.boolean(),
   allow_cash_out: z.boolean(),
   allow_ticket_sale: z.boolean(),
+  enable_ssp_payment: z.boolean(),
+  enable_cash_payment: z.boolean(),
+  enable_card_payment: z.boolean(),
 });
 
 export type NewTillProfile = z.infer<typeof NewTillProfileSchema>;
@@ -72,7 +75,7 @@ export const UpdateTillSchema = NewTillSchema.merge(z.object({ id: z.number() })
 
 export type UpdateTill = z.infer<typeof UpdateTillSchema>;
 
-export const NewTillRegisterStockingSchema = z.object({
+export const NewCashRegisterStockingSchema = z.object({
   name: z.string(),
   euro200: z.number().int().optional(),
   euro100: z.number().int().optional(),
@@ -91,31 +94,31 @@ export const NewTillRegisterStockingSchema = z.object({
   variable_in_euro: z.number().optional(),
 });
 
-export type NewTillRegisterStocking = z.infer<typeof NewTillRegisterStockingSchema>;
+export type NewCashRegisterStocking = z.infer<typeof NewCashRegisterStockingSchema>;
 
-export const UpdateTillRegisterStockingSchema = NewTillRegisterStockingSchema.merge(
+export const UpdateCashRegisterStockingSchema = NewCashRegisterStockingSchema.merge(
   z.object({
     id: z.number().int(),
   })
 );
 
-export type UpdateTillRegisterStocking = z.infer<typeof UpdateTillRegisterStockingSchema>;
+export type UpdateCashRegisterStocking = z.infer<typeof UpdateCashRegisterStockingSchema>;
 
-export const TillRegisterStockingSchema = UpdateTillRegisterStockingSchema.merge(
+export const CashRegisterStockingSchema = UpdateCashRegisterStockingSchema.merge(
   z.object({
     total: z.number(),
   })
 );
 
-export type TillRegisterStocking = z.infer<typeof TillRegisterStockingSchema>;
+export type CashRegisterStocking = z.infer<typeof CashRegisterStockingSchema>;
 
-export const NewTillRegisterSchema = z.object({
+export const NewCashRegisterSchema = z.object({
   name: z.string(),
 });
 
-export type NewTillRegister = z.infer<typeof NewTillRegisterSchema>;
+export type NewCashRegister = z.infer<typeof NewCashRegisterSchema>;
 
-export const TillRegisterSchema = NewTillRegisterSchema.merge(
+export const CashRegisterSchema = NewCashRegisterSchema.merge(
   z.object({
     id: z.number().int(),
     current_cashier_id: z.number().int().nullable(),
@@ -124,4 +127,4 @@ export const TillRegisterSchema = NewTillRegisterSchema.merge(
   })
 );
 
-export type TillRegister = z.infer<typeof TillRegisterSchema>;
+export type CashRegister = z.infer<typeof CashRegisterSchema>;

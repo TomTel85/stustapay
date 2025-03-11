@@ -1,16 +1,17 @@
 import { useGetUserTagDetailQuery, useUpdateUserTagCommentMutation, useUpdateUserTagVipStatusMutation } from "@/api";
 import { CustomerRoutes, UserRoutes, UserTagRoutes } from "@/app/routes";
-import { DetailLayout, EditableListItem, ListItemLink } from "@/components";
+import { DetailField, DetailLayout, DetailView, EditableListItem } from "@/components";
+import { ListItemLink } from "@/components/ListItemLink";
 import { useCurrentNode } from "@/hooks";
-import { List, ListItem, ListItemText, Paper, Switch, FormControlLabel } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
-import { DataGridTitle, Loading } from "@stustapay/components";
+import { DataGrid, GridColDef, DataGridTitle } from "@stustapay/framework";
+import { Loading } from "@stustapay/components";
 import { UserTagDetail as UserTagDetailType, formatUserTagUid } from "@stustapay/models";
 import { ArrayElement } from "@stustapay/utils";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import { List, ListItem, ListItemText, Paper, FormControlLabel, Switch } from "@mui/material";
 
 type History = UserTagDetailType["account_history"];
 type HistoryEntry = ArrayElement<History>;
@@ -41,7 +42,7 @@ export const UserTagDetail: React.FC = () => {
   const columns: GridColDef<HistoryEntry>[] = [
     {
       field: "account_id",
-      headerName: t("account.history.account") as string,
+      headerName: t("account.history.account"),
       renderCell: (params) => (
         <RouterLink to={CustomerRoutes.detail(params.row.account_id)}>{params.row.account_id}</RouterLink>
       ),
@@ -49,7 +50,7 @@ export const UserTagDetail: React.FC = () => {
     },
     {
       field: "mapping_was_valid_until",
-      headerName: t("account.history.validUntil") as string,
+      headerName: t("account.history.validUntil"),
       type: "dateTime",
       valueGetter: (value) => new Date(value),
       width: 200,

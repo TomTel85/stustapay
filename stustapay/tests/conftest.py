@@ -57,7 +57,7 @@ from stustapay.core.service.product import ProductService
 from stustapay.core.service.tax_rate import TaxRateService, fetch_tax_rate_none
 from stustapay.core.service.terminal import TerminalService
 from stustapay.core.service.ticket import TicketService
-from stustapay.core.service.till import TillService
+from stustapay.core.service.till.till import TillService
 from stustapay.core.service.tree.common import (
     fetch_node,
     fetch_restricted_event_settings_for_node,
@@ -203,8 +203,7 @@ async def create_random_user_tag(
             pin = secrets.token_hex(16)
             try:
                 user_tag_id = await db_connection.fetchval(
-                    "insert into user_tag (node_id, secret_id, restriction, pin) values ($1, $2, $3, $4) "
-                    "returning id",
+                    "insert into user_tag (node_id, secret_id, restriction, pin) values ($1, $2, $3, $4) returning id",
                     event_node.id,
                     user_tag_secret,
                     restriction.name if restriction is not None else None,
@@ -414,7 +413,6 @@ async def tax_rate_ust(tax_rate_service: TaxRateService, event_admin_token: str,
 
 
 class Cashier(User):
-    cashier_account_id: int
     user_tag_uid: int
     cashier_role: UserRole
     token: str
@@ -499,6 +497,9 @@ async def till_profile(
             allow_top_up=True,
             allow_cash_out=True,
             allow_ticket_sale=True,
+            enable_ssp_payment=True,
+            enable_cash_payment=False,
+            enable_card_payment=False,
         ),
     )
 

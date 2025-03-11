@@ -1,16 +1,18 @@
 import {
   selectTillById,
+  selectUserById,
   useDeleteTerminalMutation,
+  useForceLogoutUserMutation,
   useGetTerminalQuery,
   useListTillsQuery,
+  useListUsersQuery,
   useLogoutTerminalMutation,
   useRemoveFromTerminalMutation,
 } from "@/api";
 import { config } from "@/api/common";
-import { TerminalRoutes, TillRoutes } from "@/app/routes";
-import { ListItemLink } from "@/components";
+import { CashierRoutes, TerminalRoutes, TillRoutes } from "@/app/routes";
 import { TerminalSwitchTill } from "@/components/features";
-import { DetailLayout } from "@/components/layouts";
+import { DetailBoolField, DetailField, DetailLayout, DetailView } from "@/components/layouts";
 import { encodeTerminalRegistrationQrCode } from "@/core";
 import { useCurrentNode } from "@/hooks";
 import {
@@ -19,9 +21,10 @@ import {
   Logout as LogoutIcon,
   PointOfSale as PointOfSaleIcon,
 } from "@mui/icons-material";
-import { Box, Checkbox, List, ListItem, ListItemText, Paper } from "@mui/material";
+import { Box, Button, ListItem, Paper } from "@mui/material";
 import { Loading } from "@stustapay/components";
 import { useOpenModal } from "@stustapay/modal-provider";
+import { getUserName } from "@stustapay/models";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import QRCode from "react-qr-code";
@@ -34,6 +37,7 @@ export const TerminalDetail: React.FC = () => {
   const { currentNode } = useCurrentNode();
   const navigate = useNavigate();
 
+  const [forceLogoutUser] = useForceLogoutUserMutation();
   const [deleteTerminal] = useDeleteTerminalMutation();
   const [logoutTerminal] = useLogoutTerminalMutation();
   const [removeFromTerminal] = useRemoveFromTerminalMutation();
@@ -41,15 +45,29 @@ export const TerminalDetail: React.FC = () => {
     nodeId: currentNode.id,
     terminalId: Number(terminalId),
   });
+  const { data: users, error: userError } = useListUsersQuery({ nodeId: currentNode.id });
   const { data: tills, error: tillError } = useListTillsQuery({ nodeId: currentNode.id });
   const [switchTillOpen, setSwitchTillOpen] = React.useState(false);
 
   const openModal = useOpenModal();
 
-  if (terminalError || tillError) {
+  if (terminalError || tillError || userError) {
     toast.error("Error loading terminals or orders");
     return <Navigate to={TerminalRoutes.list()} />;
   }
+
+  const renderUser = (id?: number | null) => {
+    if (!id || !users) {
+      return "";
+    }
+
+    const user = selectUserById(users, id);
+    if (!user) {
+      return "";
+    }
+
+    return getUserName(user);
+  };
 
   const openConfirmDeleteDialog = () => {
     openModal({
@@ -96,6 +114,17 @@ export const TerminalDetail: React.FC = () => {
     });
   };
 
+  const openConfirmLogoutDialog = () => {
+    openModal({
+      type: "confirm",
+      title: t("till.forceLogoutUser"),
+      content: t("till.forceLogoutUserDescription"),
+      onConfirm: () => {
+        forceLogoutUser({ nodeId: currentNode.id, terminalId: Number(terminalId) });
+      },
+    });
+  };
+
   return (
     <DetailLayout
       title={terminal.name}
@@ -134,32 +163,32 @@ export const TerminalDetail: React.FC = () => {
         { label: t("delete"), onClick: openConfirmDeleteDialog, color: "error", icon: <DeleteIcon /> },
       ]}
     >
-      <Paper>
-        <List>
-          <ListItem>
-            <ListItemText primary={t("terminal.id")} secondary={terminal.id} />
-          </ListItem>
-          <ListItem>
-            <ListItemText primary={t("common.name")} secondary={terminal.name} />
-          </ListItem>
-          <ListItem>
-            <ListItemText primary={t("common.description")} secondary={terminal.description} />
-          </ListItem>
-          {till != null && (
-            <ListItemLink to={TillRoutes.detail(till.id, till.node_id)}>
-              <ListItemText primary={t("terminal.till")} secondary={till.name} />
-            </ListItemLink>
-          )}
-          {terminal.registration_uuid != null && (
+      <DetailView>
+        <DetailField label={t("terminal.id")} value={terminal.id} />
+        <DetailField label={t("common.name")} value={terminal.name} />
+        <DetailField label={t("common.description")} value={terminal.description} />
+        {till != null && (
+          <DetailField linkTo={TillRoutes.detail(till.id, till.node_id)} label={t("terminal.till")} value={till.name} />
+        )}
+        {terminal.active_user_id != null && (
+          <>
+            <DetailField
+              label={t("till.activeUser")}
+              linkTo={CashierRoutes.detail(terminal.active_user_id)}
+              value={renderUser(terminal.active_user_id)}
+            />
             <ListItem>
-              <ListItemText primary={t("terminal.registrationUUID")} secondary={terminal.registration_uuid} />
+              <Button color="error" variant="contained" onClick={openConfirmLogoutDialog} startIcon={<LogoutIcon />}>
+                {t("till.forceLogoutUser")}
+              </Button>
             </ListItem>
-          )}
-          <ListItem secondaryAction={<Checkbox edge="end" checked={terminal.session_uuid != null} disabled={true} />}>
-            <ListItemText primary={t("terminal.loggedIn")} />
-          </ListItem>
-        </List>
-      </Paper>
+          </>
+        )}
+        {terminal.registration_uuid != null && (
+          <DetailField label={t("terminal.registrationUUID")} value={terminal.registration_uuid} />
+        )}
+        <DetailBoolField label={t("terminal.loggedIn")} value={terminal.session_uuid != null} />
+      </DetailView>
       {terminal.registration_uuid != null && (
         <Paper>
           <Box

@@ -11,6 +11,7 @@ from stustapay.bon.generator import Generator
 from stustapay.core.config import read_config
 from stustapay.customer_portal import server as customerportal_server
 from stustapay.dsfinvk.generator import Generator as DsfinvkGenerator
+from stustapay.payment.payment_processor import run as run_payment_processor
 from stustapay.terminalserver import server as terminal_server
 
 from .admin import admin_cli
@@ -26,8 +27,14 @@ cli = typer.Typer()
 def get_config(
     ctx: typer.Context,
     config_path: Annotated[Path, typer.Option("--config-path", "-c")] = Path("/etc/stustapay/config.yaml"),
-    quiet: Annotated[int, typer.Option("--quiet", "-q", count=True, help="decrease program verbosity")] = 0,
-    verbose: Annotated[int, typer.Option("--verbose", "-v", count=True, help="increase program verbosity")] = 0,
+    quiet: Annotated[
+        int,
+        typer.Option("--quiet", "-q", count=True, help="decrease program verbosity"),
+    ] = 0,
+    verbose: Annotated[
+        int,
+        typer.Option("--verbose", "-v", count=True, help="increase program verbosity"),
+    ] = 0,
     debug: Annotated[bool, typer.Option(help="enable asyncio debugging")] = False,
 ):
     log_setup(verbose - quiet)
@@ -54,9 +61,10 @@ def bon(
 def dsfinvk_export(
     ctx: typer.Context,
     node_id: Annotated[int, typer.Option("--node-id", help="id of node to run the export for")],
-    filename: Annotated[Path, typer.Option("--filename", "-f", help="output file path of resulting zip file")] = Path(
-        "dsfinV_k.zip"
-    ),
+    filename: Annotated[
+        Path,
+        typer.Option("--filename", "-f", help="output file path of resulting zip file"),
+    ] = Path("dsfinV_k.zip"),
     index_xml: Annotated[Path, typer.Option("--xml", help="index.xml file to include")] = Path(
         "./stustapay/dsfinvk/assets/index.xml"
     ),
@@ -107,7 +115,17 @@ def customerportal_api(ctx: typer.Context, show_openapi: bool = False):
     asyncio.run(server.run())
 
 
-cli.add_typer(simulate_cli, name="simulate", help="Run parts or all of stustapay in simulation mode")
+@cli.command()
+def payment_processor(ctx: typer.Context):
+    """Run the payment processor."""
+    asyncio.run(run_payment_processor(config=ctx.obj.config))
+
+
+cli.add_typer(
+    simulate_cli,
+    name="simulate",
+    help="Run parts or all of stustapay in simulation mode",
+)
 cli.add_typer(tse_cli, name="tse", help="Manage and parts of the TSE system")
 cli.add_typer(token_cli, name="token", help="Generate secrets and identifiers for NFC tokens")
 cli.add_typer(database_cli, name="db", help="Manage everything related to the stustapay database")

@@ -13,6 +13,7 @@ export const translations = {
   },
   loginFailed: "Login failed: {{reason}}.",
   errorLoadingCustomer: "Error loading customer",
+  errorLoadingBon: "Error loading bon",
   payoutInfo:
     "To enable us to transfer your remaining credit, please enter your bank details here. If you would like to support our volunteer efforts, you can enter an amount of your choice at the point 'Donation Amount'. The system will automatically calculate the payout amount after pressing the 'Save Bank Data' button. If you do not wish to donate any amount, simply press the 'Save Bank Data' button, and the amount available on the card will then be earmarked for payout. The first payout is expected to take place approximately 3 weeks after the end of the event.",
   about: "About",
@@ -28,6 +29,10 @@ export const translations = {
   languages: {
     en: "English",
     de: "Deutsch",
+  },
+  errorPage: {
+    error: "Error",
+    currentlyUnavailable: "The StuStaPay customer portal is currently unavailable",
   },
   balance: "Balance",
   tagUid: "Voucher card Tag ID",
@@ -54,12 +59,16 @@ export const translations = {
     donationExit: "Donation",
   },
   payout: {
-    infoPayoutInitiated: "Payout initiated", 
-    infoPayoutScheduled: "Payout scheduled",
-    infoPayoutCompleted: "Payout completed",
     iban: "IBAN",
     bankAccountHolder: "Account Holder",
     email: "E-Mail",
+    info: "Please enter your bank account information so we can transfer your leftover balance. You can also donate parts or your whole remaining balance to support our volunteer work. Kulturleben in der Studentenstadt e. V. is a student-run non-profit organization which annually holds the StuStaCulum festival. The payout will happen within approximately one month.",
+    infoPayoutInitiated:
+      "You have already provided your bank information and your remaining balance will be payed out in the next manual triggered payout batch (usually within a month). However, you can still edit your bank information or donation choice. Thank you for your patience.",
+    infoPayoutScheduled:
+      "You are scheduled for our next manual triggered payout, thus you cannot change your bank information anymore. Hold on tide, we will notify you once we have initiated the bank transfer from our side.",
+    infoPayoutCompleted:
+      "Thank you for our patience, we have initiated the bank transfer from our side on {{payout_date}}. You might have already received the funds, otherwise they should arrive within the next few days. You can see the transfer details in the transaction list on the main page.",
     info: "Please enter your bank account information so we can transfer your leftover balance. You can also donate parts or your whole remaining balance to support our volunteer work. The first payout is planned approximately 3 weeks after the end of the event.",
     ibanNotValid: "IBAN is not valid",
     countryCodeNotSupported: "Provided IBAN country code is not supported",
@@ -67,8 +76,7 @@ export const translations = {
     mustAcceptPrivacyPolicy: "You must accept the privacy policy",
     privacyPolicyCheck: "I have read and agree to <1>privacy policy</1>.",
     errorFetchingData: "Error fetching data.",
-    updatedBankData:
-      "Successfully updated bank data. The first payout is expected to happen approximately 3 weeks after the end of the event.",
+    updatedBankData: "Successfully updated bank data. Your payout is expected to happen approximately within a month.",
     errorWhileUpdatingBankData: "Error occurred while updating bank data.",
     donationMustBePositive: "Donation must be positive",
     donationExceedsBalance: "Donation cannot exceed your balance",
@@ -85,6 +93,7 @@ export const translations = {
     confirmDonateAllContent: "Do you want to donate your remaining balance of {{remainingBalance}}?",
     confirmDonateAmountTitle: "Donate?",
     confirmDonateAmountContent: "Do you want to make a donation of {{donation}}?",
+    onlyDuringEvent: "Refunds of remaining balance are only available during the event!",
   },
   topup: {
     amount: "Amount",

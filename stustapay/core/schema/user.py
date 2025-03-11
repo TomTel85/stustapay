@@ -62,6 +62,7 @@ class RoleToNode(BaseModel):
 class NewUserToRoles(BaseModel):
     user_id: int
     role_ids: list[int]
+    terminal_only: bool = False
 
 
 class UserToRoles(NewUserToRoles):
@@ -90,7 +91,6 @@ class UserWithoutId(NewUser):
     node_id: int
     user_tag_id: Optional[int] = None
     transport_account_id: Optional[int] = None
-    cashier_account_id: Optional[int] = None
 
     @computed_field  # type: ignore[misc]
     @property
@@ -123,5 +123,4 @@ class CurrentUser(BaseModel):
     user_tag_uid: Optional[int] = None
 
     transport_account_id: Optional[int] = None
-    cashier_account_id: Optional[int] = None
     cash_register_id: Optional[int] = None

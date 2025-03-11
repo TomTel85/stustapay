@@ -199,7 +199,7 @@ class PayoutService(Service[Config]):
             "select csv from payout_run where id = $1 and node_id = $2", payout_run_id, node.id
         )
         if csv_data is None:
-            raise NotFound(element_typ="payout_run", element_id=payout_run_id)
+            raise NotFound(element_type="payout_run", element_id=payout_run_id)
         return csv_data
 
     @with_db_transaction
@@ -252,7 +252,7 @@ class PayoutService(Service[Config]):
             "select id, sepa_xml from payout_run where id = $1 and node_id = $2", payout_run_id, node.id
         )
         if row is None:
-            raise NotFound(element_id=payout_run_id, element_typ="payout_run")
+            raise NotFound(element_id=payout_run_id, element_type="payout_run")
         if row["sepa_xml"] is None:
             raise InvalidArgument("SEPA xml has not been generated for this payout run yet")
 
@@ -319,11 +319,12 @@ class PayoutService(Service[Config]):
         for payout in payouts:
             if payout.email is None:
                 continue
-            mail_service.send_mail(
+            assert res_config.payout_done_message is not None
+            await mail_service.send_mail(
                 subject=res_config.payout_done_subject,
                 message=res_config.payout_done_message.format(**payout.model_dump()),
-                from_email=res_config.payout_sender,
-                to_email=payout.email,
+                from_addr=res_config.payout_sender,
+                to_addr=payout.email,
                 node_id=node.id,
             )
 

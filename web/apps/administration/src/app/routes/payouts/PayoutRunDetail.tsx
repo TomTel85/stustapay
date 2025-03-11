@@ -11,12 +11,12 @@ import {
   selectUserById,
 } from "@/api";
 import { CustomerRoutes, PayoutRunRoutes, UserRoutes, UserTagRoutes } from "@/app/routes";
-import { DetailLayout, ListItemLink } from "@/components";
-import { useCurrencyFormatter, useCurrentNode } from "@/hooks";
+import { DetailField, DetailLayout, DetailNumberField, DetailView } from "@/components";
+import { useCurrentNode } from "@/hooks";
 import { FileDownload as FileDownloadIcon, Check as CheckIcon, Delete as DeleteIcon } from "@mui/icons-material";
-import { List, ListItem, ListItemText, Paper, Link, Alert } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
-import { DataGridTitle, Loading } from "@stustapay/components";
+import { Link, Alert } from "@mui/material";
+import { DataGrid, GridColDef, DataGridTitle } from "@stustapay/framework";
+import { Loading } from "@stustapay/components";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useParams, Link as RouterLink } from "react-router-dom";
@@ -30,7 +30,6 @@ export const PayoutRunDetail: React.FC = () => {
   const { t } = useTranslation();
   const { payoutRunId } = useParams();
   const { currentNode } = useCurrentNode();
-  const formatCurrency = useCurrencyFormatter();
   const [showSepaModal, setShowSepaModal] = React.useState(false);
 
   const openModal = useOpenModal();
@@ -96,7 +95,7 @@ export const PayoutRunDetail: React.FC = () => {
   const columns: GridColDef<PayoutRead>[] = [
     {
       field: "customer_account_id",
-      headerName: t("common.id") as string,
+      headerName: t("common.id"),
       renderCell: (params) => (
         <Link component={RouterLink} to={CustomerRoutes.detail(params.row.customer_account_id)}>
           {params.row.customer_account_id}
@@ -106,12 +105,12 @@ export const PayoutRunDetail: React.FC = () => {
     },
     {
       field: "account_name",
-      headerName: t("customer.bankAccountHolder") as string,
+      headerName: t("customer.bankAccountHolder"),
       flex: 1,
     },
     {
       field: "email",
-      headerName: t("email") as string,
+      headerName: t("email"),
       flex: 1,
     },
     {
@@ -126,16 +125,14 @@ export const PayoutRunDetail: React.FC = () => {
     },
     {
       field: "amount",
-      headerName: t("common.amount") as string,
-      align: "right",
-      valueFormatter: (value) => formatCurrency(value),
+      headerName: t("common.amount"),
+      type: "currency",
       width: 150,
     },
     {
       field: "donation",
-      headerName: t("common.donation") as string,
-      align: "right",
-      valueFormatter: (value) => formatCurrency(value),
+      headerName: t("common.donation"),
+      type: "currency",
       width: 150,
     },
   ];
@@ -217,51 +214,37 @@ export const PayoutRunDetail: React.FC = () => {
 
   return (
     <DetailLayout title={String(payoutRun.id)} routes={PayoutRunRoutes} actions={actions}>
-      <Paper>
+      <DetailView>
         {payoutRun.done && <Alert severity="success">{t("payoutRun.done")}</Alert>}
         {payoutRun.revoked && <Alert severity="warning">{t("payoutRun.revoked")}</Alert>}
-        <List>
-          <ListItemLink to={UserRoutes.detail(payoutRun.created_by)}>
-            <ListItemText
-              primary={t("payoutRun.createdBy")}
-              secondary={
-                users && payoutRun.created_by != null && getUserName(selectUserById(users, payoutRun.created_by))
-              }
+        <DetailField
+          label={t("payoutRun.createdBy")}
+          value={users && payoutRun.created_by != null && getUserName(selectUserById(users, payoutRun.created_by))}
+          linkTo={UserRoutes.detail(payoutRun.created_by)}
+        />
+        <DetailField label={t("payoutRun.createdAt")} value={payoutRun.created_at} />
+        {payoutRun.set_done_by != null && payoutRun.set_done_at && (
+          <>
+            <DetailField
+              label={t("payoutRun.setDoneBy")}
+              value={users && getUserName(selectUserById(users, payoutRun.set_done_by))}
+              linkTo={UserRoutes.detail(payoutRun.created_by)}
             />
-          </ListItemLink>
-          <ListItem>
-            <ListItemText primary={t("payoutRun.createdAt")} secondary={payoutRun.created_at} />
-          </ListItem>
-          {payoutRun.set_done_by != null && payoutRun.set_done_at && (
-            <>
-              <ListItemLink to={UserRoutes.detail(payoutRun.created_by)}>
-                <ListItemText
-                  primary={t("payoutRun.setDoneBy")}
-                  secondary={users && getUserName(selectUserById(users, payoutRun.set_done_by))}
-                />
-              </ListItemLink>
-              <ListItem>
-                <ListItemText primary={t("payoutRun.setDoneAt")} secondary={payoutRun.set_done_at} />
-              </ListItem>
-            </>
-          )}
-          <ListItem>
-            <ListItemText
-              primary={t("payoutRun.totalDonationAmount")}
-              secondary={formatCurrency(payoutRun.total_donation_amount)}
-            />
-          </ListItem>
-          <ListItem>
-            <ListItemText
-              primary={t("payoutRun.totalPayoutAmount")}
-              secondary={formatCurrency(payoutRun.total_payout_amount)}
-            />
-          </ListItem>
-          <ListItem>
-            <ListItemText primary={t("payoutRun.nPayouts")} secondary={payoutRun.n_payouts} />
-          </ListItem>
-        </List>
-      </Paper>
+            <DetailField label={t("payoutRun.setDoneAt")} value={payoutRun.set_done_at} />
+          </>
+        )}
+        <DetailNumberField
+          label={t("payoutRun.totalDonationAmount")}
+          type="currency"
+          value={payoutRun.total_donation_amount}
+        />
+        <DetailNumberField
+          label={t("payoutRun.totalPayoutAmount")}
+          type="currency"
+          value={payoutRun.total_payout_amount}
+        />
+        <DetailField label={t("payoutRun.nPayouts")} value={payoutRun.n_payouts} />
+      </DetailView>
       <DataGrid
         autoHeight
         rows={payouts ?? []}

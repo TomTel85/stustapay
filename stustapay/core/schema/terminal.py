@@ -19,6 +19,8 @@ class Terminal(NewTerminal):
     till_id: int | None
     session_uuid: UUID | None
     registration_uuid: UUID | None
+    active_user_id: Optional[int] = None
+    active_user_role_id: Optional[int] = None
 
 
 class UserTagSecret(BaseModel):
@@ -26,11 +28,24 @@ class UserTagSecret(BaseModel):
     key1: str
 
 
-class TerminalSecrets(BaseModel):
+class TerminalUserTagSecrets(BaseModel):
+    user_tag_secret: UserTagSecret
+
+
+class TerminalSumupSecrets(BaseModel):
     sumup_affiliate_key: str
     sumup_api_key: str
     sumup_api_key_expires_at: datetime | None
-    user_tag_secret: UserTagSecret
+
+
+# Combined secrets class for Android app compatibility
+class TerminalSecrets(BaseModel):
+    # SumUp secrets fields required by Android
+    sumup_affiliate_key: str = ""
+    sumup_api_key: str = ""
+    sumup_api_key_expires_at: Optional[datetime] = None
+    # User tag secret
+    user_tag_secret: Optional[UserTagSecret] = None
 
 
 class TerminalButton(BaseModel):
@@ -50,27 +65,36 @@ class TerminalTillConfig(BaseModel):
     description: Optional[str]
     event_name: str
     profile_name: str
-    user_privileges: Optional[list[Privilege]]
     cash_register_id: Optional[int]
     cash_register_name: Optional[str]
     allow_top_up: bool
     allow_cash_out: bool
     allow_ticket_sale: bool
+    enable_ssp_payment: bool
+    enable_cash_payment: bool
+    enable_card_payment: bool
     buttons: Optional[list[TerminalButton]]
+    sumup_secrets: Optional[TerminalSumupSecrets]
+    post_payment_allowed: bool
+    sumup_payment_enabled: bool
+    
+    # Add required fields that were missing
+    user_privileges: Optional[list[Privilege]]
     secrets: Optional[TerminalSecrets]
     active_user_id: Optional[int]
-
     available_roles: list[UserRole]
-
-    post_payment_allowed: bool
-    sumup_payment_enabled: bool 
-
 
 
 class TerminalConfig(BaseModel):
     id: int
     name: str
     description: str | None
+
+    event_name: str
+    active_user_id: Optional[int]
+    available_roles: list[UserRole]
+    user_privileges: Optional[list[Privilege]]
+    secrets: Optional[TerminalSecrets]
 
     till: TerminalTillConfig | None
 
@@ -88,4 +112,6 @@ class CurrentTerminal(BaseModel):
     node_id: int
     name: str
     description: str | None
+    active_user_id: int | None
+    active_user_role_id: int | None
     till: Till | None

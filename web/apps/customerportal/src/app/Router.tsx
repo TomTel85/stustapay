@@ -5,15 +5,20 @@ import { AuthenticatedRoot } from "./routes/AuthenticatedRoot";
 import { Login } from "./routes/auth/Login";
 import { QRCodeLogin } from "./routes/auth/QRCodeLogin";
 import { UnauthenticatedRoot } from "./routes/UnauthenticatedRoot";
-import { Logout } from "./routes/auth/Logout";
 import { Index } from "./routes/Index";
 import { PayoutInfo } from "./routes/PayoutInfo";
 import { TopUp } from "./routes/topup";
 import { Faq } from "./routes/Faq";
 import { Agb } from "./routes/Agb";
 import { PrivacyPolicy } from "./routes/PrivacyPolicy";
+import { Bon } from "./routes/Bon";
 
 const router = createBrowserRouter([
+  {
+    path: "/bon/:orderUUID",
+    element: <Bon />,
+    errorElement: <ErrorPage />,
+  },
   {
     path: "/",
     element: <AuthenticatedRoot />,
@@ -30,10 +35,6 @@ const router = createBrowserRouter([
       {
         path: "topup",
         element: <TopUp />,
-      },
-      {
-        path: "logout",
-        element: <Logout />,
       },
     ],
   },

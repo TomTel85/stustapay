@@ -5,7 +5,7 @@ from sftkit.database import Connection
 from sftkit.service import Service, with_db_transaction
 
 from stustapay.core.config import Config
-from stustapay.core.schema.account import Account, AccountType
+from stustapay.core.schema.account import AccountType
 from stustapay.core.schema.terminal import CurrentTerminal
 from stustapay.core.schema.till import (
     CashRegister,
@@ -27,31 +27,16 @@ from stustapay.core.service.common.decorators import (
     requires_terminal,
     requires_user,
 )
-from sftkit.error import InvalidArgument, NotFound
-from stustapay.core.service.order.booking import BookingIdentifier, book_money_transfer
+from stustapay.core.service.common.error import InvalidArgument, NotFound
+from stustapay.core.service.order.booking import (
+    BookingIdentifier,
+    book_cashier_shift_end_order,
+    book_cashier_shift_start_order,
+    book_money_transfer,
+)
+from stustapay.core.service.till.common import create_cash_register, get_cash_register
 from stustapay.core.service.transaction import book_transaction
 from stustapay.core.service.tree.common import fetch_node
-
-
-async def get_cash_register(conn: Connection, node: Node, register_id: int) -> Optional[CashRegister]:
-    return await conn.fetch_maybe_one(
-        CashRegister,
-        "select * from cash_register_with_cashier where id = $1 and node_id = any($2)",
-        register_id,
-        node.ids_to_event_node,
-    )
-
-
-async def create_cash_register(*, conn: Connection, node: Node, new_register: NewCashRegister) -> CashRegister:
-    # TODO: TREE visibility
-    register_id = await conn.fetchval(
-        "insert into cash_register (node_id, name) values ($1, $2) returning id",
-        node.id,
-        new_register.name,
-    )
-    register = await get_cash_register(conn=conn, node=node, register_id=register_id)
-    assert register is not None
-    return register
 
 
 async def _list_cash_register_stockings(*, conn: Connection, node: Node) -> list[CashRegisterStocking]:
@@ -89,6 +74,22 @@ async def _list_cash_registers(*, conn: Connection, node: Node, hide_assigned_re
         )
 
 
+async def _select_till_for_cash_register_insertion(conn: Connection, user_id: int, cash_register_id: int):
+    tills = await conn.fetch(
+        "select t.id, t.name from till t join terminal tm on t.terminal_id = tm.id join till_profile tp on t.active_profile_id = tp.id "
+        "where tm.active_user_id = $1 and tp.enable_cash_payment",
+        user_id,
+    )
+    if len(tills) == 0:  # nothing to do
+        return
+    if len(tills) > 1:
+        till_names = ", ".join([till["name"] for till in tills])
+        raise InvalidArgument(
+            f'Cannot assign cash register to cashier as it is not clear which till should be used for the cash register. User is logged in at the following tills: "{till_names}".'
+        )
+    await conn.execute("update till set active_cash_register_id = $1 where id = $2", tills[0]["id"], cash_register_id)
+
+
 class TillRegisterService(Service[Config]):
     def __init__(self, db_pool: asyncpg.Pool, config: Config, auth_service: AuthService):
         super().__init__(db_pool, config)
@@ -115,7 +116,6 @@ class TillRegisterService(Service[Config]):
     async def create_cash_register_stockings(
         self, *, conn: Connection, node: Node, stocking: NewCashRegisterStocking
     ) -> CashRegisterStocking:
-        # TODO: TREE visibility
         stocking_id = await conn.fetchval(
             "insert into cash_register_stocking "
             "   (node_id, euro200, euro100, euro50, euro20, euro10, euro5, euro2, euro1, "
@@ -150,12 +150,11 @@ class TillRegisterService(Service[Config]):
     async def update_cash_register_stockings(
         self, *, conn: Connection, node: Node, stocking_id: int, stocking: NewCashRegisterStocking
     ) -> CashRegisterStocking:
-        # TODO: TREE visibility
         stocking_id = await conn.fetchval(
             "update cash_register_stocking set "
             "   euro200 = $1, euro100 = $2, euro50 = $3, euro20 = $4, euro10 = $5, euro5 = $6, euro2 = $7, "
             "   euro1 = $8, cent50 = $9, cent20 = $10, cent10 = $11, cent5 = $12, cent2 = $13, cent1 = $14, "
-            "variable_in_euro = $15, name = $16 where id = $17 returning id",
+            "variable_in_euro = $15, name = $16 where id = $17 and node_id = any($18) returning id",
             stocking.euro200,
             stocking.euro100,
             stocking.euro50,
@@ -173,9 +172,10 @@ class TillRegisterService(Service[Config]):
             stocking.variable_in_euro,
             stocking.name,
             stocking_id,
+            node.ids_to_event_node,
         )
         if stocking_id is None:
-            raise NotFound(element_typ="cash_register_stocking", element_id=str(stocking_id))
+            raise NotFound(element_type="cash_register_stocking", element_id=str(stocking_id))
         updated = await _get_cash_register_stocking(conn=conn, node=node, stocking_id=stocking_id)
         assert updated is not None
         return updated
@@ -183,11 +183,9 @@ class TillRegisterService(Service[Config]):
     @with_db_transaction
     @requires_node(object_types=[ObjectType.till])
     @requires_user([Privilege.node_administration])
-    async def delete_cash_register_stockings(self, *, conn: Connection, stocking_id: int):
-        # TODO: TREE visibility
+    async def delete_cash_register_stockings(self, *, conn: Connection, node: Node, stocking_id: int):
         result = await conn.execute(
-            "delete from cash_register_stocking where id = $1",
-            stocking_id,
+            "delete from cash_register_stocking where id = $1 and node_id = $2", stocking_id, node.id
         )
         return result != "DELETE 0"
 
@@ -196,7 +194,6 @@ class TillRegisterService(Service[Config]):
     async def list_cash_registers_terminal(
         self, *, conn: Connection, current_till: Till, hide_assigned_registers=False
     ) -> list[CashRegister]:
-        # TODO: TREE visibility
         node = await fetch_node(conn=conn, node_id=current_till.node_id)
         assert node is not None
         return await _list_cash_registers(conn=conn, node=node, hide_assigned_registers=hide_assigned_registers)
@@ -209,13 +206,18 @@ class TillRegisterService(Service[Config]):
     ) -> list[CashRegister]:
         return await _list_cash_registers(conn=conn, node=node, hide_assigned_registers=hide_assigned_registers)
 
+    @with_db_transaction(read_only=True)
+    @requires_node()
+    @requires_user()
+    async def get_cash_register_admin(self, *, conn: Connection, node: Node, register_id: int) -> CashRegister:
+        return await get_cash_register(conn=conn, node=node, register_id=register_id)
+
     @with_db_transaction
     @requires_node(object_types=[ObjectType.till])
     @requires_user([Privilege.node_administration])
     async def create_cash_register(
         self, *, conn: Connection, node: Node, new_register: NewCashRegister
     ) -> CashRegister:
-        # TODO: TREE visibility
         return await create_cash_register(conn=conn, node=node, new_register=new_register)
 
     @with_db_transaction
@@ -224,25 +226,22 @@ class TillRegisterService(Service[Config]):
     async def update_cash_register(
         self, *, conn: Connection, node: Node, register_id: int, register: NewCashRegister
     ) -> CashRegister:
-        # TODO: TREE visibility
         row = await conn.fetchrow(
-            "update cash_register set name = $2 where id = $1 returning id, name", register_id, register.name
+            "update cash_register set name = $2 where id = $1 and node_id = $3 returning id, name",
+            register_id,
+            register.name,
+            node.id,
         )
         if row is None:
-            raise NotFound(element_typ="cash_register", element_id=str(register_id))
+            raise NotFound(element_type="cash_register", element_id=str(register_id))
         r = await get_cash_register(conn=conn, node=node, register_id=register_id)
-        assert r is not None
         return r
 
     @with_db_transaction
     @requires_node(object_types=[ObjectType.till])
     @requires_user([Privilege.node_administration])
-    async def delete_cash_register(self, *, conn: Connection, register_id: int):
-        # TODO: TREE visibility
-        result = await conn.execute(
-            "delete from cash_register where id = $1",
-            register_id,
-        )
+    async def delete_cash_register(self, *, conn: Connection, node: Node, register_id: int):
+        result = await conn.execute("delete from cash_register where id = $1 and node_id = $2", register_id, node.id)
         return result != "DELETE 0"
 
     @with_db_transaction(read_only=False)
@@ -253,48 +252,63 @@ class TillRegisterService(Service[Config]):
         conn: Connection,
         current_user: CurrentUser,
         current_till: Till,
-        stocking_id: int,
         cashier_tag_uid: int,
         cash_register_id: int,
+        stocking_id: Optional[int],
     ) -> bool:
-        # TODO: TREE visibility
         node = await fetch_node(conn=conn, node_id=current_till.node_id)
         assert node is not None
-        register_stocking = await _get_cash_register_stocking(conn=conn, node=node, stocking_id=stocking_id)
-        if register_stocking is None:
-            raise InvalidArgument("cash register stocking template does not exist")
 
-        row = await conn.fetchrow(
-            "select id, cashier_account_id, cash_register_id from user_with_tag where user_tag_uid = $1",
+        cash_register_account_id: int | None = await conn.fetchval(
+            "select account_id from cash_register where id = $1 and node_id = any($2)",
+            cash_register_id,
+            node.ids_to_event_node,
+        )
+        if cash_register_account_id is None:
+            raise InvalidArgument("Cash register does not exist")
+
+        till_in_use = await conn.fetchrow(
+            "select t.name from till t where t.active_cash_register_id = $1",
+            cash_register_id,
+        )
+        if till_in_use is not None:
+            raise InvalidArgument(f"Cash register is already in use at till {till_in_use['name']}")
+
+        user_row = await conn.fetchrow(
+            "select id, cash_register_id from user_with_tag where user_tag_uid = $1 and node_id = any($2)",
             cashier_tag_uid,
+            node.ids_to_event_node,
         )
-        if row is None:
-            raise InvalidArgument("Cashier does not have a cash register")
-        cashier_account_id = row["cashier_account_id"]
-        if row["cash_register_id"] is not None:
-            raise InvalidArgument("cashier already has a cash register")
+        if user_row is None:
+            raise InvalidArgument("No cashier exists with the given user tag")
+        if user_row["cash_register_id"] is not None:
+            raise InvalidArgument("The cashier already has an assigned cash register")
 
-        user_id = row["id"]
-        is_logged_in = await conn.fetchval(
-            "select true from till join usr u on till.active_user_id = u.id where u.id = $1", user_id
+        await conn.fetchval("update usr set cash_register_id = $1 where id = $2", cash_register_id, user_row["id"])
+
+        await book_cashier_shift_start_order(
+            conn=conn, cashier_id=user_row["id"], cash_register_id=cash_register_id, node=node
         )
-        if is_logged_in:
-            raise InvalidArgument("Cashier is still logged in at a till")
-
-        await conn.fetchval("update usr set cash_register_id = $1 where id = $2", cash_register_id, user_id)
 
         node = await fetch_node(conn=conn, node_id=current_till.node_id)
         assert node is not None
         cash_vault_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.cash_vault)
 
-        await book_transaction(
-            conn=conn,
-            description=f"cash register stock up using template: {register_stocking.name}",
-            source_account_id=cash_vault_acc.id,
-            target_account_id=cashier_account_id,
-            amount=register_stocking.total,
-            conducting_user_id=current_user.id,
-        )
+        if stocking_id is not None:
+            register_stocking = await _get_cash_register_stocking(conn=conn, node=node, stocking_id=stocking_id)
+            if register_stocking is None:
+                raise InvalidArgument("cash register stocking template does not exist")
+
+            await book_transaction(
+                conn=conn,
+                description=f"cash register stock up using template: {register_stocking.name}",
+                source_account_id=cash_vault_acc.id,
+                target_account_id=cash_register_account_id,
+                amount=register_stocking.total,
+                conducting_user_id=current_user.id,
+            )
+
+        await _select_till_for_cash_register_insertion(conn, user_id=user_row["id"], cash_register_id=cash_register_id)
         return True
 
     @with_db_transaction(read_only=False)
@@ -309,25 +323,27 @@ class TillRegisterService(Service[Config]):
         amount: float,
     ):
         row = await conn.fetchrow(
-            "select u.cash_register_id, t.id as till_id, a.* "
+            "select u.cash_register_id, t.id as till_id, cr.account_id as cash_register_account_id, cr.balance as cash_register_balance "
             "from user_with_tag u "
-            "join till t on u.id = t.active_user_id "
-            "join account_with_history a on u.cashier_account_id = a.id "
+            "join terminal tm on tm.active_user_id = u.id "
+            "join till t on tm.id = t.terminal_id "
+            "join cash_register_with_balance cr on u.cash_register_id = cr.id "
             "where u.user_tag_uid = $1 and u.node_id = any($2)",
             cashier_tag_uid,
             node.ids_to_event_node,
         )
         if row is None:
-            raise InvalidArgument("Cashier does not exists or is not logged in at a terminal")
-
-        cashier_account = Account.model_validate(dict(row))
-        cash_register_id = row["cash_register_id"]
-        if cash_register_id is None:
-            raise InvalidArgument("Cashier does not have a cash register")
-
-        if cashier_account.balance + amount < 0:
             raise InvalidArgument(
-                f"Insufficient balance on cashier account. Current balance is {cashier_account.balance}."
+                "Cashier does not exists or is not logged in at a terminal or does not have a cash register assigned"
+            )
+
+        cash_register_balance = row["cash_register_balance"]
+        cash_register_account_id = row["cash_register_account_id"]
+        cash_register_id = row["cash_register_id"]
+
+        if cash_register_balance + amount < 0:
+            raise InvalidArgument(
+                f"Insufficient balance on cashier account. Current balance is {cash_register_balance}."
             )
 
         assert current_user.transport_account_id is not None
@@ -340,7 +356,9 @@ class TillRegisterService(Service[Config]):
             )
 
         bookings: dict[BookingIdentifier, float] = {
-            BookingIdentifier(source_account_id=transport_account.id, target_account_id=cashier_account.id): amount
+            BookingIdentifier(
+                source_account_id=transport_account.id, target_account_id=cash_register_account_id
+            ): amount
         }
 
         # till_id is the till of the cashier, not the finanzorga!
@@ -365,7 +383,6 @@ class TillRegisterService(Service[Config]):
         orga_tag_uid: int,
         amount: float,
     ):
-        # TODO: TREE visibility
         transport_account = await get_transport_account_by_tag_uid(conn=conn, node=node, orga_tag_uid=orga_tag_uid)
         if transport_account is None:
             raise InvalidArgument("Transport account could not be found")
@@ -394,58 +411,53 @@ class TillRegisterService(Service[Config]):
             raise InvalidArgument("Cashiers must differ")
 
         source_cashier = await conn.fetchrow(
-            "select t.id as till_id, usr.id as cashier_id, usr.cash_register_id, usr.cashier_account_id, a.balance "
-            "from usr "
-            "left join till t on t.active_user_id = usr.id "
-            "left join account a on usr.cashier_account_id = a.id "
-            "where usr.id = $1 and usr.node_id = any($2)",
+            "select usr.cash_register_id from usr where usr.id = $1 and usr.node_id = any($2)",
             source_cashier_id,
             node.ids_to_event_node,
         )
         if source_cashier is None:
             raise InvalidArgument("The cashier from whom to transfer the cash register does not exist")
 
-        if source_cashier["till_id"] is not None:
-            raise InvalidArgument(
-                "The cashier from whom to transfer the cash register is still logged in at a terminal"
-            )
-        if source_cashier["cash_register_id"] is None:
+        cash_register_id = source_cashier["cash_register_id"]
+        if cash_register_id is None:
             raise InvalidArgument("The cashier from whom to transfer the cash register does not have a cash register")
-        if source_cashier["cashier_account_id"] is None:
-            raise InvalidArgument("The cashier from whom to transfer the cash register is not cashier")
 
         target_cashier = await conn.fetchrow(
-            "select t.id as till_id, usr.cash_register_id, usr.cashier_account_id "
-            "from usr left join till t on t.active_user_id = usr.id "
+            "select t.id as terminal_id, usr.cash_register_id "
+            "from usr "
+            "left join terminal t on t.active_user_id = usr.id "
             "where usr.id = $1 and usr.node_id = any($2)",
             target_cashier_id,
             node.ids_to_event_node,
         )
         if target_cashier is None:
             raise InvalidArgument("The cashier to whom to transfer the cash register does not exist")
-        if target_cashier["till_id"] is not None:
-            raise InvalidArgument("The cashier to whom to transfer the cash register is still logged in at a terminal")
+
+        if target_cashier["terminal_id"] is not None:
+            await _select_till_for_cash_register_insertion(
+                conn=conn, user_id=target_cashier_id, cash_register_id=cash_register_id
+            )
+
         if target_cashier["cash_register_id"] is not None:
             raise InvalidArgument("The cashier to whom to transfer the cash register already has a cash register")
-        if target_cashier["cashier_account_id"] is None:
-            raise InvalidArgument("The cashier to whom to transfer the cash register is not cashier")
-
-        await book_transaction(
-            conn=conn,
-            source_account_id=source_cashier["cashier_account_id"],
-            target_account_id=target_cashier["cashier_account_id"],
-            amount=source_cashier["balance"],
-            conducting_user_id=source_cashier["cashier_id"],
-        )
 
         await conn.execute("update usr set cash_register_id = null where id = $1", source_cashier_id)
+        await book_cashier_shift_end_order(
+            conn=conn, cashier_id=source_cashier_id, cash_register_id=cash_register_id, node=node
+        )
         await conn.execute(
             "update usr set cash_register_id = $2 where id = $1",
             target_cashier_id,
-            source_cashier["cash_register_id"],
+            cash_register_id,
         )
-        reg = await get_cash_register(conn=conn, node=node, register_id=source_cashier["cash_register_id"])
-        assert reg is not None
+        await book_cashier_shift_start_order(
+            conn=conn, cashier_id=target_cashier_id, cash_register_id=cash_register_id, node=node
+        )
+        await _select_till_for_cash_register_insertion(
+            conn, user_id=target_cashier_id, cash_register_id=cash_register_id
+        )
+
+        reg = await get_cash_register(conn=conn, node=node, register_id=cash_register_id)
         return reg
 
     @with_db_transaction(read_only=False)

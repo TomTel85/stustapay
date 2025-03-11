@@ -1,5 +1,5 @@
 import { useGetCustomerQuery, usePayoutInfoQuery } from "@/api";
-import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
+import { useCurrencyFormatter } from "@/hooks";
 import { usePublicConfig } from "@/hooks/usePublicConfig";
 import { Alert, AlertTitle, Grid, Link, Paper, Stack, Typography } from "@mui/material";
 import { Loading } from "@stustapay/components";
@@ -34,13 +34,14 @@ export const Index: React.FC = () => {
     return null;
   }
 
+  // TODO: depending on the order_type we want to show different stuff
+  // we also might want to show the balance of the account after each order
+
   let payout_info;
   if (payoutInfo.in_payout_run && !payoutInfo.payout_date) {
     payout_info = t("payout.infoPayoutScheduled");
   } else if (payoutInfo.in_payout_run && payoutInfo.payout_date) {
-    payout_info = t("payout.infoPayoutCompleted", {
-      payout_date: new Date(payoutInfo.payout_date).toLocaleString(),
-    });
+    payout_info = t("payout.infoPayoutCompleted", { payout_date: new Date(payoutInfo.payout_date).toLocaleString() });
   } else if (customer.has_entered_info) {
     payout_info = t("payout.infoPayoutInitiated");
   } else {
@@ -111,12 +112,16 @@ export const Index: React.FC = () => {
 
       {config.payout_enabled && (
         <Grid item xs={12} sm={8}>
-          <Alert
-            severity="info"
-            variant="outlined"
-            style={{ marginBottom: "1em", width: "100%" }}
-          >
+          <Alert severity="info" variant="outlined" style={{ marginBottom: "1em", width: "100%" }}>
             {payout_info}
+          </Alert>
+        </Grid>
+      )}
+
+      {!config.payout_enabled && (
+        <Grid item xs={12} sm={8}>
+          <Alert severity="warning" variant="outlined" style={{ marginBottom: "1em", width: "100%" }}>
+            <b>{t("payout.onlyDuringEvent")}</b>
           </Alert>
         </Grid>
       )}

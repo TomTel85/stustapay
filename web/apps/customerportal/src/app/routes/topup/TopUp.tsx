@@ -1,11 +1,10 @@
 import { useCheckCheckoutMutation, useCreateCheckoutMutation, useGetCustomerQuery } from "@/api";
-import { useCurrencySymbol } from "@/hooks/useCurrencySymbol";
-import { usePublicConfig } from "@/hooks/usePublicConfig";
+import { usePublicConfig } from "@/hooks";
 import i18n from "@/i18n";
 import { Cancel as CancelIcon, CheckCircle as CheckCircleIcon } from "@mui/icons-material";
-import { Alert, AlertTitle, Box, Button, Grid, InputAdornment, LinearProgress, Link, Stack } from "@mui/material";
+import { Alert, AlertTitle, Box, Button, Grid, LinearProgress, Link, Stack } from "@mui/material";
 import { Loading } from "@stustapay/components";
-import { FormNumericInput } from "@stustapay/form-components";
+import { FormCurrencyInput } from "@stustapay/form-components";
 import { toFormikValidationSchema } from "@stustapay/utils";
 import { Form, Formik, FormikHelpers } from "formik";
 import * as React from "react";
@@ -29,26 +28,30 @@ declare global {
 
 type TopUpState =
   | { stage: "initial" }
-  | { stage: "sumup"; topupAmount: number; checkoutId: string }
+  | { stage: "sumup"; topupAmount: number; checkoutId: string; orderUUID: string }
   | { stage: "success" }
   | { stage: "error"; message?: string };
 
 const initialState: TopUpState = { stage: "initial" };
 
 type TopUpStateAction =
-  | { type: "created-checkout"; topupAmount: number; checkoutId: string }
+  | { type: "created-checkout"; topupAmount: number; checkoutId: string; orderUUID: string }
   | { type: "sumup-success" }
   | { type: "sumup-error"; message?: string }
   | { type: "reset" };
 
 const reducer = (state: TopUpState, action: TopUpStateAction): TopUpState => {
-  console.log("processing action", action, "prev state", state);
   switch (action.type) {
     case "created-checkout":
       if (state.stage !== "initial") {
         return state;
       }
-      return { stage: "sumup", topupAmount: action.topupAmount, checkoutId: action.checkoutId };
+      return {
+        stage: "sumup",
+        topupAmount: action.topupAmount,
+        checkoutId: action.checkoutId,
+        orderUUID: action.orderUUID,
+      };
     case "sumup-success":
       if (state.stage !== "sumup") {
         return state;
@@ -81,7 +84,6 @@ export const TopUp: React.FC = () => {
   const { t, i18n } = useTranslation();
 
   const config = usePublicConfig();
-  const currencySymbol = useCurrencySymbol();
 
   const { data: customer, error: customerError, isLoading: isCustomerLoading } = useGetCustomerQuery();
   const [createCheckout] = useCreateCheckoutMutation();
@@ -99,22 +101,17 @@ export const TopUp: React.FC = () => {
 
   React.useEffect(() => {
     handleSumupCardResp.current = (type: SumUpResponseType, body: object) => {
-      console.log("handle sumup resp called");
       if (state.stage !== "sumup") {
         return;
       }
-      console.log("Type", type);
-      console.log("Body", body);
       if (type === "invalid" && "message" in body && typeof body.message === "string") {
         toast.error(body.message);
       }
 
       if (type === "error" || type === "success") {
-        console.log("updating checkout");
-        checkCheckout({ checkCheckoutPayload: { checkout_id: state.checkoutId } })
+        checkCheckout({ checkCheckoutPayload: { order_uuid: state.orderUUID } })
           .unwrap()
           .then((resp) => {
-            console.log("update checkout returned with resp", resp);
             if (sumupCard.current) {
               sumupCard.current.unmount();
               sumupCard.current = undefined;
@@ -143,7 +140,6 @@ export const TopUp: React.FC = () => {
     if (state.stage !== "sumup") {
       return;
     }
-    console.log("checkoutId", state.checkoutId);
     const config = {
       id: "sumup-card",
       checkoutId: state.checkoutId,
@@ -152,7 +148,6 @@ export const TopUp: React.FC = () => {
       locale: i18n.language,
     };
     if (sumupCard.current) {
-      console.log("updating sumup card with config", config);
       sumupCard.current.update(config);
     } else {
       try {
@@ -183,8 +178,12 @@ export const TopUp: React.FC = () => {
     createCheckout({ createCheckoutPayload: values })
       .unwrap()
       .then((checkout) => {
-        console.log("created checkout with reference", checkout);
-        dispatch({ type: "created-checkout", checkoutId: checkout.checkout_id, topupAmount: values.amount });
+        dispatch({
+          type: "created-checkout",
+          checkoutId: checkout.checkout_id,
+          topupAmount: values.amount,
+          orderUUID: checkout.order_uuid,
+        });
         setSubmitting(false);
       })
       .catch((error) => {
@@ -208,15 +207,7 @@ export const TopUp: React.FC = () => {
             {(formik) => (
               <Form onSubmit={formik.handleSubmit}>
                 <Stack spacing={2}>
-                  <FormNumericInput
-                    name="amount"
-                    label={t("topup.amount")}
-                    variant="outlined"
-                    formik={formik}
-                    InputProps={{
-                      endAdornment: <InputAdornment position="end">{currencySymbol}</InputAdornment>,
-                    }}
-                  />
+                  <FormCurrencyInput name="amount" label={t("topup.amount")} variant="outlined" formik={formik} />
                   {formik.isSubmitting && <LinearProgress />}
                   <Button type="submit" variant="contained" color="primary" disabled={formik.isSubmitting}>
                     {t("topup.next")}

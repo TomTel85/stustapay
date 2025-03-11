@@ -1,8 +1,8 @@
 import { CustomerRead } from "@/api";
 import { CustomerRoutes, PayoutRunRoutes, UserTagRoutes } from "@/app/routes";
-import { useCurrencyFormatter, useRenderNode } from "@/hooks";
+import { useRenderNode } from "@/hooks";
 import { Link } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { DataGrid, GridColDef } from "@stustapay/framework";
 import { formatUserTagUid } from "@stustapay/models";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -14,22 +14,17 @@ export interface CustomerTableProps {
 
 export const CustomerTable: React.FC<CustomerTableProps> = ({ customers }) => {
   const { t } = useTranslation();
-  const formatCurrency = useCurrencyFormatter();
-  const renderNode = useRenderNode();
+  const { dataGridNodeColumn } = useRenderNode();
 
   const columns: GridColDef<CustomerRead>[] = [
     {
       field: "id",
-      headerName: t("account.id") as string,
+      headerName: t("account.id"),
       renderCell: (params) => (
         <Link component={RouterLink} to={CustomerRoutes.detail(params.row.id)}>
           {params.row.id}
         </Link>
       ),
-    },
-    {
-      field: "name",
-      headerName: t("account.name") as string,
     },
     {
       field: "user_tag_id",
@@ -43,43 +38,40 @@ export const CustomerTable: React.FC<CustomerTableProps> = ({ customers }) => {
       width: 100,
     },
     {
-      field: "comment",
-      headerName: t("account.comment") as string,
-    },
-    {
       field: "balance",
-      headerName: t("account.balance") as string,
-      type: "number",
+      headerName: t("account.balance"),
+      type: "currency",
       minWidth: 80,
-      valueFormatter: (value) => value && formatCurrency(value),
     },
     {
       field: "vouchers",
-      headerName: t("account.vouchers") as string,
+      headerName: t("account.vouchers"),
       type: "number",
       minWidth: 80,
     },
     {
       field: "email",
-      headerName: t("common.email") as string,
+      headerName: t("common.email"),
+      flex: 1,
     },
     {
       field: "account_name",
-      headerName: t("customer.bankAccountHolder") as string,
+      headerName: t("customer.bankAccountHolder"),
+      flex: 1,
     },
     {
       field: "iban",
-      headerName: t("customer.iban") as string,
+      headerName: t("customer.iban"),
+      flex: 1,
     },
     {
       field: "donation",
-      headerName: t("customer.donation") as string,
-      type: "number",
-      valueFormatter: (value) => (value != null ? formatCurrency(value) : "-"),
+      headerName: t("customer.donation"),
+      type: "currency",
     },
     {
       field: "payout",
-      headerName: t("customer.payoutRun") as string,
+      headerName: t("customer.payoutRun"),
       renderCell: (params) =>
         params.row.payout && (
           <Link component={RouterLink} to={PayoutRunRoutes.detail(params.row.payout.payout_run_id)}>
@@ -88,12 +80,7 @@ export const CustomerTable: React.FC<CustomerTableProps> = ({ customers }) => {
         ),
       minWidth: 80,
     },
-    {
-      field: "node_id",
-      headerName: t("common.definedAtNode") as string,
-      valueFormatter: (value) => renderNode(value),
-      flex: 1,
-    },
+    dataGridNodeColumn,
   ];
 
   return (

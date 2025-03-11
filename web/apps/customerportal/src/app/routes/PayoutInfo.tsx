@@ -1,23 +1,15 @@
 import * as React from "react";
-import { useGetCustomerQuery, usePayoutInfoQuery, useUpdateCustomerInfoMutation } from "@/api";
-import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
-import { useCurrencySymbol } from "@/hooks/useCurrencySymbol";
-import { usePublicConfig } from "@/hooks/usePublicConfig";
 import {
-  Alert,
-  Button,
-  Checkbox,
-  FormControl,
-  FormControlLabel,
-  FormHelperText,
-  Grid,
-  InputAdornment,
-  Link,
-  Stack,
-  Typography,
-} from "@mui/material";
+  useGetCustomerQuery,
+  usePayoutInfoQuery,
+ 
+  useUpdateCustomerInfoMutation,
+} from "@/api";
+import { useCurrencyFormatter } from "@/hooks";
+import { usePublicConfig } from "@/hooks/usePublicConfig";
+import { Alert, Button, Grid, Link, Stack, Typography } from "@mui/material";
 import { Loading } from "@stustapay/components";
-import { FormNumericInput, FormTextField } from "@stustapay/form-components";
+import { FormCheckbox, FormCurrencyInput, FormTextField } from "@stustapay/form-components";
 import { toFormikValidationSchema } from "@stustapay/utils";
 import { Formik, FormikHelpers } from "formik";
 import iban from "iban";
@@ -39,7 +31,6 @@ export const PayoutInfo: React.FC = () => {
   const { data: payoutInfo, error: payoutInfoError, isLoading: isPayoutInfoLoading } = usePayoutInfoQuery();
 
   const formatCurrency = useCurrencyFormatter();
-  const currencySymbol = useCurrencySymbol();
 
   if (isCustomerLoading || (!customer && !customerError) || isPayoutInfoLoading || (!payoutInfo && !payoutInfoError)) {
     return <Loading />;
@@ -214,16 +205,19 @@ export const PayoutInfo: React.FC = () => {
                     )}
                   </FormControl>
                   <Typography>{t("payout.donationDescription")}</Typography>
-                  <FormNumericInput
+                  <FormCurrencyInput
                     name="donation"
                     label={t("payout.donationAmount") + `(max ${formatCurrency(customer.balance)})`}
                     variant="outlined"
                     formik={formik}
-                    InputProps={{
-                      endAdornment: <InputAdornment position="end">{currencySymbol}</InputAdornment>,
-                    }}
                     disabled={payoutInfo.in_payout_run}
                   />
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    color="primary"
+                    disabled={formik.isSubmitting || payoutInfo.in_payout_run}
+                  >
                   <Button
                     type="submit"
                     variant="contained"

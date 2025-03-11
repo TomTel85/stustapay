@@ -34,7 +34,7 @@ export const NumericInput: React.FC<NumericInputProps> = ({ value, onChange, ...
     propagateChange();
   };
 
-  const onKeyUp = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Enter") {
       propagateChange();
     }
@@ -45,8 +45,8 @@ export const NumericInput: React.FC<NumericInputProps> = ({ value, onChange, ...
       value={internalValue}
       onChange={onInternalChange}
       onBlur={onInternalBlur}
-      inputProps={{ style: { textAlign: "right" } }}
-      onKeyUp={onKeyUp}
+      slotProps={{ htmlInput: { style: { textAlign: "right" } } }}
+      onKeyDown={onKeyDown}
       variant="standard"
       onFocus={(event) => event.target.select()}
       {...props}

@@ -1,9 +1,9 @@
-import { CashierShiftStats, useGetCashierShiftStatsQuery } from "@/api";
+import { CashierProductStats, useGetCashierShiftStatsQuery } from "@/api";
 import { OrderTable } from "@/components/features";
 import { useCurrentNode } from "@/hooks";
 import { TabContext, TabList, TabPanel } from "@mui/lab";
 import { Box, Tab } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { DataGrid, GridColDef } from "@stustapay/framework";
 import { Loading } from "@stustapay/components";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -12,8 +12,6 @@ export interface CashierShiftStatsOverview {
   cashierId: number;
   shiftId?: number;
 }
-
-type ArrElement<ArrType> = ArrType extends readonly (infer ElementType)[] ? ElementType : never;
 
 export const CashierShiftStatsOverview: React.FC<CashierShiftStatsOverview> = ({ cashierId, shiftId }) => {
   const { currentNode } = useCurrentNode();
@@ -25,15 +23,16 @@ export const CashierShiftStatsOverview: React.FC<CashierShiftStatsOverview> = ({
     return <Loading />;
   }
 
-  const columns: GridColDef<ArrElement<CashierShiftStats["booked_products"]>>[] = [
+  const columns: GridColDef<CashierProductStats>[] = [
     {
-      field: "product.name",
-      headerName: t("product.name") as string,
+      field: "product",
+      headerName: t("product.name"),
+      valueGetter: (val: CashierProductStats["product"]) => val.name,
       flex: 1,
     },
     {
       field: "quantity",
-      headerName: t("shift.soldProductQuantity") as string,
+      headerName: t("shift.soldProductQuantity"),
       type: "number",
       width: 150,
     },
@@ -49,7 +48,6 @@ export const CashierShiftStatsOverview: React.FC<CashierShiftStatsOverview> = ({
       </Box>
       <TabPanel value="products">
         <DataGrid
-          autoHeight
           rows={data.booked_products}
           columns={columns}
           getRowId={(row) => row.product.id}

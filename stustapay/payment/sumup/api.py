@@ -68,6 +68,10 @@ class SumUpTransaction(BaseModel):
     transaction_code: str
 
 
+class SumUpTransactionDetail(SumUpTransaction):
+    foreign_transaction_id: str
+
+
 class SumUpTransactionResp(BaseModel):
     items: list[SumUpTransaction]
 
@@ -172,7 +176,6 @@ async def fetch_new_oauth_token(client_id: str, client_secret: str, refresh_toke
 
 
 class SumUpApi:
-
     def __init__(self, api_key: str, merchant_code: str):
         self.api_key = api_key
         self.merchant_code = merchant_code
@@ -247,6 +250,23 @@ class SumUpApi:
             raise SumUpError("SumUp API returned an invalid response")
 
         return [SumUpCheckout.model_validate(x) for x in resp]
+
+    async def find_checkout(self, order_uuid: uuid.UUID) -> SumUpCheckout | None:
+        resp = await self._get(SUMUP_CHECKOUT_URL, {"checkout_reference": str(order_uuid)})
+
+        if not isinstance(resp, list):
+            raise SumUpError("SumUp API returned an invalid response")
+
+        if len(resp) != 1:
+            raise SumUpError(f"SumUp returned a non-unique checkout for the order uuid {order_uuid}")
+
+        return SumUpCheckout.model_validate(resp[0])
+
+    async def get_transaction(self, foreign_transaction_id: str) -> SumUpTransactionDetail:
+        resp = await self._get(
+            f"{SUMUP_API_URL}/me/transactions", query={"foreign_transaction_id": foreign_transaction_id}
+        )
+        return SumUpTransactionDetail.model_validate(resp)
 
     async def list_transactions(self) -> list[SumUpTransaction]:
         resp = await self._get(f"{SUMUP_API_URL}/me/transactions/history", query={"limit": 10000})

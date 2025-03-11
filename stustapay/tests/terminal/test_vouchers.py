@@ -6,8 +6,8 @@ from stustapay.core.schema.till import NewTillProfile, Till, TillLayout
 from stustapay.core.schema.tree import Node
 from stustapay.core.schema.user import NewUserRole, NewUserToRoles, Privilege
 from stustapay.core.service.account import AccountService
-from sftkit.error import AccessDenied
-from stustapay.core.service.till import TillService
+from stustapay.core.service.common.error import AccessDenied
+from stustapay.core.service.till.till import TillService
 from stustapay.core.service.user import UserService
 from stustapay.tests.conftest import Cashier, CreateRandomUserTag
 
@@ -45,6 +45,9 @@ async def test_free_ticket_grant_with_vouchers(
             allow_top_up=True,
             allow_cash_out=True,
             allow_ticket_sale=True,
+            enable_ssp_payment=True,
+            enable_cash_payment=False,
+            enable_card_payment=False,
         ),
     )
 
@@ -107,6 +110,9 @@ async def test_free_ticket_grant_without_vouchers(
             allow_top_up=True,
             allow_cash_out=True,
             allow_ticket_sale=True,
+            enable_ssp_payment=True,
+            enable_cash_payment=False,
+            enable_card_payment=False,
         ),
     )
 

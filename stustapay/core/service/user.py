@@ -53,7 +53,7 @@ async def fetch_user_to_roles(*, conn: Connection, node: Node, user_id: int) -> 
         UserToRoles, "select * from user_to_roles_aggregated where node_id = $1 and user_id = $2", node.id, user_id
     )
     if curr_user_to_role is None:
-        return UserToRoles(node_id=node.id, user_id=user_id, role_ids=[])
+        return UserToRoles(node_id=node.id, user_id=user_id, role_ids=[], terminal_only=False)
     return curr_user_to_role
 
 
@@ -62,7 +62,7 @@ async def fetch_user(*, conn: Connection, node: Node, user_id: int) -> User:
         User, "select * from user_with_tag where id = $1 and node_id = any($2)", user_id, node.ids_to_root
     )
     if user is None:
-        raise NotFound(element_typ="user", element_id=user_id)
+        raise NotFound(element_type="user", element_id=user_id)
 
     return user
 
@@ -84,7 +84,7 @@ async def update_user(*, conn: Connection, node: Node, user_id: int, user: NewUs
         node.id,
     )
     if row is None:
-        raise NotFound(element_typ="user", element_id=str(user_id))
+        raise NotFound(element_type="user", element_id=str(user_id))
 
     return await fetch_user(conn=conn, node=node, user_id=user_id)
 
@@ -127,26 +127,24 @@ async def _get_user_role(*, conn: Connection, role_id: int) -> Optional[UserRole
 async def associate_user_to_role(
     *, conn: Connection, current_user_id: int | None, node: Node, user_id: int, role_id: int
 ):
-
     user_node_id = await conn.fetchval(
         "select node_id from usr where node_id = any($1) and id = $2",
         node.ids_to_root,
         user_id,
     )
     if user_node_id is None:
-        raise NotFound(element_typ="user", element_id=user_id)
+        raise NotFound(element_type="user", element_id=user_id)
 
     user_node = await fetch_node(conn=conn, node_id=user_node_id)
     assert user_node is not None
 
     role = await conn.fetchrow(
-        "select node_id, is_privileged, privileges from user_role_with_privileges "
-        "where id = $1 and node_id = any($2)",
+        "select node_id, is_privileged, privileges from user_role_with_privileges where id = $1 and node_id = any($2)",
         role_id,
         user_node.ids_to_root,
     )
     if role is None:
-        raise NotFound(element_typ="user_role", element_id=role_id)
+        raise NotFound(element_type="user_role", element_id=role_id)
 
     if current_user_id is not None:  # we actually do permission checks
         privileges = await get_user_privileges_at_node(conn=conn, node_id=node.id, user_id=current_user_id)
@@ -224,7 +222,7 @@ class UserService(Service[Config]):
     ) -> UserRole:
         role = await _get_user_role(conn=conn, role_id=role_id)
         if role is None or role.node_id not in node.ids_to_root:
-            raise NotFound(element_typ="user_role", element_id=role_id)
+            raise NotFound(element_type="user_role", element_id=role_id)
 
         await conn.execute("update user_role set is_privileged = $2 where id = $1", role_id, is_privileged)
 
@@ -579,7 +577,6 @@ class UserService(Service[Config]):
     async def change_password(
         self, *, conn: Connection, current_user: CurrentUser, old_password: str, new_password: str
     ):
-        # TODO: TREE visibility
         old_password_hashed = await conn.fetchval("select password from usr where id = $1", current_user.id)
         assert old_password_hashed is not None
         if not self._check_password(old_password, old_password_hashed):
@@ -592,7 +589,6 @@ class UserService(Service[Config]):
     @with_db_transaction
     @requires_user(node_required=False)
     async def logout_user(self, *, conn: Connection, current_user: User, token: str) -> bool:
-        # TODO: TREE visibility
         token_payload = self.auth_service.decode_user_jwt_payload(token)
         assert token_payload is not None
         assert current_user.id == token_payload.user_id

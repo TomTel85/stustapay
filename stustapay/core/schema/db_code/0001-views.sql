@@ -1,26 +1,30 @@
+create view cash_register_with_balance as
+    select
+        c.*,
+        a.balance as balance
+    from
+        cash_register c
+        join account a on c.account_id = a.id;
+
 create view till_with_cash_register as
     select
         t.*,
         tse.serial,
         cr.name   as current_cash_register_name,
-        a.balance as current_cash_register_balance
+        cr.balance as current_cash_register_balance
     from
         till t
-        left join usr u on t.active_user_id = u.id
-        left join account a on u.cashier_account_id = a.id
-        left join cash_register cr on t.active_cash_register_id = cr.id
+        left join cash_register_with_balance cr on t.active_cash_register_id = cr.id
         left join tse on tse.id = t.tse_id;
 
 create view cash_register_with_cashier as
     select
         c.*,
         t.id                   as current_till_id,
-        u.id                   as current_cashier_id,
-        coalesce(a.balance, 0) as current_balance
+        u.id                   as current_cashier_id
     from
-        cash_register c
+        cash_register_with_balance c
         left join usr u on u.cash_register_id = c.id
-        left join account a on a.id = u.cashier_account_id
         left join till t on t.active_cash_register_id = c.id;
 
 create view user_role_with_privileges as
@@ -46,10 +50,11 @@ create view user_to_roles_aggregated as
     select
         utr.user_id,
         utr.node_id,
+        utr.terminal_only,
         array_agg(utr.role_id) as role_ids
     from
         user_to_role utr
-    group by utr.user_id, utr.node_id;
+    group by utr.user_id, utr.node_id, utr.terminal_only;
 
 CREATE VIEW account_with_history AS
     SELECT
@@ -58,7 +63,7 @@ CREATE VIEW account_with_history AS
         ut.pin                                 AS user_tag_pin,
         ut.comment                             AS user_tag_comment,
         ut.restriction,
-        coalesce(aut.is_vip, false)            AS is_vip,
+        coalesce(ut.is_vip, false)            AS is_vip,
         coalesce(hist.tag_history, '[]'::json) AS tag_history
     FROM
         account a
@@ -171,23 +176,22 @@ create view cashier as
         u.user_tag_id,
         u.user_tag_uid,
         u.transport_account_id,
-        u.cashier_account_id,
         u.cash_register_id,
-        a.balance                                    as cash_drawer_balance,
-        coalesce(tills.till_ids, '{}'::bigint array) as till_ids
+        cr.balance                                           as cash_drawer_balance,
+        coalesce(terminals.terminal_ids, '{}'::bigint array) as terminal_ids
     from
         user_with_tag u
-        join account a on u.cashier_account_id = a.id
+        left join cash_register_with_balance cr on cr.id = u.cash_register_id
         left join (
             select
                 t.active_user_id as user_id,
-                array_agg(t.id)  as till_ids
+                array_agg(t.id)  as terminal_ids
             from
-                till t
+                terminal t
             where
                 t.active_user_id is not null
             group by t.active_user_id
-        ) tills on tills.user_id = u.id;
+        ) terminals on terminals.user_id = u.id;
 
 create view product_with_tax_and_restrictions as
     select
@@ -306,6 +310,15 @@ create view order_value as
         left join account a on ordr.customer_account_id = a.id
         left join user_tag ut on a.user_tag_id = ut.id;
 
+create view transaction_with_order as
+    select
+        t.*,
+        row_to_json(o) as order
+    from
+        transaction t
+        left join order_value o on t.order_id = o.id
+    order by t.id asc;
+
 -- show all line items
 create view order_items as
     select
@@ -329,14 +342,6 @@ create view order_tax_rates as
         join line_item on (ordr.id = order_id)
     group by
         ordr.id, tax_rate, tax_name;
-
-create view order_value_with_bon as
-    select
-        o.*,
-        b.generated   as bon_generated
-    from
-        order_value o
-        left join bon b on (o.id = b.id);
 
 create view event_with_translations as
     select
@@ -439,3 +444,22 @@ create view node_with_allowed_objects as
     from node n
     join _forbidden_at_node_computed fan on n.id = fan.node_id
     left join event_as_json ev on n.event_id = ev.id;
+
+create view mail_with_attachments as
+    select
+        m.*,
+        coalesce(a.mail, json_build_array()) as attachments
+    from
+        mails m left join (
+
+            select
+                m.mail_id,
+                json_agg(m) as mail
+            from
+                mail_attachments m
+            group by
+                m.mail_id
+
+        ) a on m.id = a.mail_id
+    order by
+        scheduled_send_date;

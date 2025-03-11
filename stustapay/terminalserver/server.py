@@ -18,7 +18,7 @@ from stustapay.core.service.account import AccountService
 from stustapay.core.service.auth import AuthService
 from stustapay.core.service.order import OrderService
 from stustapay.core.service.terminal import TerminalService
-from stustapay.core.service.till import TillService
+from stustapay.core.service.till.till import TillService
 from stustapay.core.service.user import UserService
 from stustapay.terminalserver.router import (
     auth,
@@ -74,10 +74,11 @@ class Api:
         await database.check_revision_version(db)
 
         auth_service = AuthService(db_pool=db_pool, config=self.cfg)
+        order_service = OrderService(db_pool=db_pool, config=self.cfg, auth_service=auth_service)
 
         context = Context(
             config=self.cfg,
-            order_service=OrderService(db_pool=db_pool, config=self.cfg, auth_service=auth_service),
+            order_service=order_service,
             user_service=UserService(db_pool=db_pool, config=self.cfg, auth_service=auth_service),
             till_service=TillService(db_pool=db_pool, config=self.cfg, auth_service=auth_service),
             account_service=AccountService(db_pool=db_pool, config=self.cfg, auth_service=auth_service),

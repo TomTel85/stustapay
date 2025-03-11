@@ -1,11 +1,11 @@
-import { selectTillById, useCloseOutCashierMutation, useGetCashierQuery, useListTillsQuery } from "@/api";
+import { selectTerminalById, useCloseOutCashierMutation, useGetCashierQuery, useListTerminalsQuery } from "@/api";
+import { CashierRoutes, TerminalRoutes } from "@/app/routes";
 import { UserSelect } from "@/components/features";
-import { useCurrencyFormatter, useCurrencySymbol, useCurrentNode } from "@/hooks";
+import { useCurrencyFormatter, useCurrentNode, useCurrentUser } from "@/hooks";
 import {
   Alert,
   AlertTitle,
   Button,
-  InputAdornment,
   LinearProgress,
   ListItem,
   ListItemText,
@@ -28,47 +28,53 @@ import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { z } from "zod";
 import { CashierShiftStatsOverview } from "./CashierShiftStatsOverview";
-import { CashierRoutes, TillRoutes } from "@/app/routes";
+import { CurrencyDenomination, useDenomination } from "./denominations";
 
-const CloseOutDataSchema = z.object({
-  comment: z.string(),
-  closingOutUserId: z.number(),
-  coins: z.number(),
-  bill5Euro: z.number(),
-  bill10Euro: z.number(),
-  bill20Euro: z.number(),
-  bill50Euro: z.number(),
-  bill100Euro: z.number(),
-  bill200Euro: z.number(),
-});
-type CloseOutData = z.infer<typeof CloseOutDataSchema>;
-
-const initialValues: CloseOutData = {
-  comment: "",
-  closingOutUserId: null as unknown as number,
-  coins: 0,
-  bill5Euro: 0,
-  bill10Euro: 0,
-  bill20Euro: 0,
-  bill50Euro: 0,
-  bill100Euro: 0,
-  bill200Euro: 0,
+type CloseOutValues = {
+  comment: string;
+  closingOutUserId: number;
+  [key: string]: number | string;
 };
 
-const computeSum = (values: CloseOutData): number => {
-  return (
-    values.coins +
-    values.bill5Euro * 5 +
-    values.bill10Euro * 10 +
-    values.bill20Euro * 20 +
-    values.bill50Euro * 50 +
-    values.bill100Euro * 100 +
-    values.bill200Euro * 200
-  );
+const useCloseOutSchema = (denominiations: CurrencyDenomination[]) => {
+  const currentUser = useCurrentUser();
+  return React.useMemo(() => {
+    const initialValues: CloseOutValues = {
+      comment: "",
+      closingOutUserId: currentUser?.id as unknown as number,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let schema: z.ZodObject<any> = z.object({
+      comment: z.string(),
+      closingOutUserId: z.number(),
+    });
+
+    for (const denominiation of denominiations) {
+      schema = schema.extend({ [denominiation.key]: z.number() });
+      initialValues[denominiation.key] = 0;
+    }
+
+    return { schema, initialValues };
+  }, [denominiations, currentUser]);
 };
 
-const computeDifference = (values: CloseOutData, targetBalance: number): number => {
-  return computeSum(values) - targetBalance;
+const computeSum = (values: Record<string, number | string>, denominiations: CurrencyDenomination[]) => {
+  let sum = 0;
+  for (const denomination of denominiations) {
+    const val = values[denomination.key];
+    if (typeof val === "number") {
+      sum += val * denomination.denomination;
+    }
+  }
+  return sum;
+};
+
+const computeDifference = (
+  values: Record<string, number | string>,
+  denominiations: CurrencyDenomination[],
+  targetBalance: number
+): number => {
+  return computeSum(values, denominiations) - targetBalance;
 };
 
 export const CashierCloseOut: React.FC = () => {
@@ -78,31 +84,33 @@ export const CashierCloseOut: React.FC = () => {
   const navigate = useNavigate();
 
   const formatCurrency = useCurrencyFormatter();
-  const currencySymbol = useCurrencySymbol();
+
+  const denominations = useDenomination();
+  const { schema, initialValues } = useCloseOutSchema(denominations);
 
   const [closeOut] = useCloseOutCashierMutation();
   const { data: cashier, isLoading } = useGetCashierQuery({ nodeId: currentNode.id, cashierId: Number(cashierId) });
-  const { data: tills, isLoading: isTillsLoading } = useListTillsQuery({ nodeId: currentNode.id });
+  const { data: terminals, isLoading: isTerminalsLoading } = useListTerminalsQuery({ nodeId: currentNode.id });
 
-  if (!cashier || isLoading || !tills || isTillsLoading) {
+  if (!cashier || isLoading || !terminals || isTerminalsLoading) {
     return <Loading />;
   }
 
-  const getTill = (id: number) => {
-    if (!tills) {
+  const getTerminal = (id: number) => {
+    if (!terminals) {
       return undefined;
     }
-    return selectTillById(tills, id);
+    return selectTerminalById(terminals, id);
   };
 
-  const handleSubmit = (values: CloseOutData, { setSubmitting }: FormikHelpers<CloseOutData>) => {
+  const handleSubmit = (values: CloseOutValues, { setSubmitting }: FormikHelpers<CloseOutValues>) => {
     setSubmitting(true);
     closeOut({
       nodeId: currentNode.id,
       cashierId: Number(cashierId),
       closeOut: {
         comment: values.comment,
-        actual_cash_drawer_balance: computeSum(values),
+        actual_cash_drawer_balance: computeSum(values, denominations),
         closing_out_user_id: values.closingOutUserId,
       },
     })
@@ -116,6 +124,12 @@ export const CashierCloseOut: React.FC = () => {
       });
   };
 
+  const cashDrawerBalance = cashier.cash_drawer_balance;
+
+  if (cashDrawerBalance == null) {
+    return <Alert severity="error">{t("closeOut.noCashDrawerWarning")}</Alert>;
+  }
+
   return (
     <Stack spacing={2}>
       <Paper>
@@ -124,107 +138,64 @@ export const CashierCloseOut: React.FC = () => {
         </ListItem>
       </Paper>
 
-      {cashier.till_ids.length !== 0 && (
+      {cashier.terminal_ids.length !== 0 && (
         <Alert severity="error">
           <AlertTitle>{t("closeOut.warningStillLoggedInTitle")}</AlertTitle>
           {t("closeOut.warningStillLoggedIn")}
-          {cashier.till_ids.map((till_id) => (
-            <RouterLink key={till_id} to={TillRoutes.detail(till_id, getTill(till_id)?.node_id)}>
-              {getTill(till_id)?.name}
+          {cashier.terminal_ids.map((id) => (
+            <RouterLink key={id} to={TerminalRoutes.detail(id, getTerminal(id)?.node_id)}>
+              {getTerminal(id)?.name}
             </RouterLink>
           ))}
         </Alert>
       )}
 
-      <Formik
-        initialValues={initialValues}
-        onSubmit={handleSubmit}
-        validationSchema={toFormikValidationSchema(CloseOutDataSchema)}
-      >
+      <Formik initialValues={initialValues} onSubmit={handleSubmit} validationSchema={toFormikValidationSchema(schema)}>
         {(formik) => (
           <Form onSubmit={formik.handleSubmit}>
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>{t("closeOut.targetInDrawer")}</TableCell>
-                    <TableCell colSpan={3}>{t("closeOut.countedInDrawer")}</TableCell>
-                    <TableCell>{t("closeOut.difference")}</TableCell>
+                    <TableCell align="right">{t("closeOut.denomination")}</TableCell>
+                    <TableCell align="right">{t("closeOut.countedInDrawer")}</TableCell>
+                    <TableCell align="right">{t("closeOut.sum")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
+                  {denominations.map((denomination) => (
+                    <TableRow key={denomination.key}>
+                      <TableCell align="right">{denomination.label}</TableCell>
+                      <TableCell>
+                        <FormNumericInput fullWidth name={denomination.key} formik={formik} />
+                      </TableCell>
+                      <TableCell align="right">
+                        = {formatCurrency((formik.values[denomination.key] as number) * denomination.denomination)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                   <TableRow>
-                    <TableCell rowSpan={7} />
-                    <TableCell align="right">{t("closeOut.coins")}</TableCell>
-                    <TableCell>
-                      <FormNumericInput
-                        name="coins"
-                        formik={formik}
-                        InputProps={{
-                          endAdornment: <InputAdornment position="end">{currencySymbol}</InputAdornment>,
-                        }}
-                      />
+                    <TableCell rowSpan={3} />
+                    <TableCell align="right" sx={{ fontWeight: (theme) => theme.typography.fontWeightBold }}>
+                      {t("closeOut.targetInDrawer")}
                     </TableCell>
-                    <TableCell align="right">= {formatCurrency(formik.values.coins)}</TableCell>
-                    <TableCell rowSpan={7} />
+                    <TableCell align="right">{formatCurrency(cashDrawerBalance)}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell align="right">{t("closeOut.bill5Euro")}</TableCell>
-                    <TableCell>
-                      <FormNumericInput fullWidth name="bill5Euro" formik={formik} />
+                    <TableCell sx={{ fontWeight: (theme) => theme.typography.fontWeightBold }} align="right">
+                      {t("closeOut.sumInCashDrawer")}
                     </TableCell>
-                    <TableCell align="right">= {formatCurrency(formik.values.bill5Euro * 5)}</TableCell>
+                    <TableCell align="right">{formatCurrency(computeSum(formik.values, denominations))}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell align="right">{t("closeOut.bill10Euro")}</TableCell>
-                    <TableCell>
-                      <FormNumericInput fullWidth name="bill10Euro" formik={formik} />
+                    <TableCell sx={{ fontWeight: (theme) => theme.typography.fontWeightBold }} align="right">
+                      {t("closeOut.difference")}
                     </TableCell>
-                    <TableCell align="right">= {formatCurrency(formik.values.bill10Euro * 10)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell align="right">{t("closeOut.bill20Euro")}</TableCell>
-                    <TableCell>
-                      <FormNumericInput fullWidth name="bill20Euro" formik={formik} />
-                    </TableCell>
-                    <TableCell align="right">= {formatCurrency(formik.values.bill20Euro * 20)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell align="right">{t("closeOut.bill50Euro")}</TableCell>
-                    <TableCell>
-                      <FormNumericInput fullWidth name="bill50Euro" formik={formik} />
-                    </TableCell>
-                    <TableCell align="right">= {formatCurrency(formik.values.bill50Euro * 50)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell align="right">{t("closeOut.bill100Euro")}</TableCell>
-                    <TableCell>
-                      <FormNumericInput fullWidth name="bill100Euro" formik={formik} />
-                    </TableCell>
-                    <TableCell align="right">= {formatCurrency(formik.values.bill100Euro * 100)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell align="right">{t("closeOut.bill200Euro")}</TableCell>
-                    <TableCell>
-                      <FormNumericInput fullWidth name="bill200Euro" formik={formik} />
-                    </TableCell>
-                    <TableCell align="right">= {formatCurrency(formik.values.bill200Euro * 200)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: (theme) => theme.typography.fontWeightBold }}>
-                      {t("closeOut.sum")}
-                    </TableCell>
-                    <TableCell colSpan={4} />
-                  </TableRow>
-                  <TableRow>
-                    <TableCell align="right">{formatCurrency(cashier.cash_drawer_balance)}</TableCell>
-                    <TableCell colSpan={2} />
-                    <TableCell align="right">{formatCurrency(computeSum(formik.values))}</TableCell>
                     <TableCell align="right">
-                      {formatCurrency(computeDifference(formik.values, cashier.cash_drawer_balance))} (
+                      {formatCurrency(computeDifference(formik.values, denominations, cashDrawerBalance))} (
                       {(
                         Math.abs(
-                          computeDifference(formik.values, cashier.cash_drawer_balance) / cashier.cash_drawer_balance
+                          computeDifference(formik.values, denominations, cashDrawerBalance) / cashDrawerBalance
                         ) * 100
                       ).toFixed(2)}
                       %)

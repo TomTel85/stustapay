@@ -1,5 +1,5 @@
-import datetime
 import enum
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -18,6 +18,8 @@ class OrderType(enum.Enum):
     ticket = "ticket"
     money_transfer = "money_transfer"
     money_transfer_imbalance = "money_transfer_imbalance"
+    cashier_shift_start = "cashier_shift_start"
+    cashier_shift_end = "cashier_shift_end"
 
 
 class PaymentMethod(enum.Enum):
@@ -61,9 +63,9 @@ class CompletedTopUp(BaseModel):
     new_balance: float
 
     uuid: UUID
-    booked_at: datetime.datetime
+    booked_at: datetime
 
-    cashier_id: int
+    cashier_id: int | None  # can be none in online topup scenario
     till_id: int
 
 
@@ -84,7 +86,7 @@ class PendingPayOut(NewPayOut):
 
 
 class CompletedPayOut(PendingPayOut):
-    booked_at: datetime.datetime
+    booked_at: datetime
 
     cashier_id: int
     till_id: int
@@ -126,7 +128,10 @@ class BookedProduct(BaseModel):
 
 class NewSaleBase(BaseModel):
     uuid: UUID
-    customer_tag_uid: int
+
+    customer_tag_uid: Optional[int] = None
+    payment_method: PaymentMethod
+
     used_vouchers: Optional[int] = None
 
 
@@ -169,7 +174,8 @@ class PendingSaleBase(BaseModel):
     old_voucher_balance: int
     new_voucher_balance: int
 
-    customer_account_id: int
+    customer_account_id: Optional[int]
+    payment_method: PaymentMethod
 
     line_items: list[PendingLineItem]
 
@@ -203,10 +209,13 @@ class PendingSale(PendingSaleBase):
 class CompletedSaleBase(BaseModel):
     id: int
 
-    booked_at: datetime.datetime
+    booked_at: datetime
 
     cashier_id: int
     till_id: int
+
+    customer_account_id: Optional[int]
+    payment_method: PaymentMethod
 
 
 class CompletedSaleProducts(CompletedSaleBase, PendingSaleProducts):
@@ -214,7 +223,7 @@ class CompletedSaleProducts(CompletedSaleBase, PendingSaleProducts):
 
 
 class CompletedSale(CompletedSaleBase, PendingSale):
-    pass
+    bon_url: str
 
 
 class UserTagScan(BaseModel):
@@ -269,12 +278,11 @@ class PendingTicketSale(BaseModel):
 
 
 class CompletedTicketSale(PendingTicketSale):
-    id: int
-    booked_at: datetime.datetime
+    booked_at: datetime
 
     payment_method: PaymentMethod
 
-    customer_account_id: int
+    customer_account_id: int | None  # can be None in pending payments
 
     cashier_id: int
     till_id: int
@@ -298,13 +306,14 @@ class Order(BaseModel):
     total_no_tax: float
     cancels_order: Optional[int]
 
-    booked_at: datetime.datetime
+    booked_at: datetime
     payment_method: PaymentMethod
     order_type: OrderType
 
     # foreign keys
     cashier_id: Optional[int]
     till_id: Optional[int]
+    cash_register_id: Optional[int]
     customer_account_id: Optional[int]
     customer_tag_uid: Optional[int]
     customer_tag_id: Optional[int]
@@ -317,6 +326,18 @@ class Order(BaseModel):
     line_items: list[LineItem]
 
 
+class Transaction(BaseModel):
+    id: int
+    conducting_user_id: int | None
+    description: str | None
+    source_account: int
+    target_account: int
+    order: Order | None
+    booked_at: datetime
+    amount: float
+    vouchers: int
+
+
 class NewFreeTicketGrant(BaseModel):
     user_tag_pin: str
     user_tag_uid: int
@@ -327,3 +348,28 @@ class NewFreeTicketGrant(BaseModel):
         if v < 0:
             raise ValueError("initial voucher amount must be positive")
         return v
+
+
+class PendingOrderType(enum.Enum):
+    topup = "topup"
+    ticket = "ticket"
+
+
+class PendingOrderStatus(enum.Enum):
+    pending = "pending"
+    booked = "booked"
+    cancelled = "cancelled"
+
+
+class PendingOrder(BaseModel):
+    uuid: UUID
+    node_id: int
+    till_id: int
+    cashier_id: int | None
+    last_checked: datetime | None
+    check_interval: int
+    created_at: datetime
+    order_type: PendingOrderType
+    order_content_version: int
+    order_content: str
+    status: PendingOrderStatus

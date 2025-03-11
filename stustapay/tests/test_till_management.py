@@ -14,7 +14,7 @@ from stustapay.core.schema.till import (
 from stustapay.core.schema.tree import Node
 from sftkit.error import AccessDenied
 from stustapay.core.service.product import ProductService
-from stustapay.core.service.till import TillService
+from stustapay.core.service.till.till import TillService
 
 from .conftest import Cashier
 
@@ -134,6 +134,9 @@ async def test_basic_till_workflow(
             allow_top_up=False,
             allow_cash_out=False,
             allow_ticket_sale=False,
+            enable_ssp_payment=True,
+            enable_cash_payment=False,
+            enable_card_payment=False,
         ),
     )
     till = await till_service.create_till(

@@ -5,7 +5,7 @@ import re
 from typing import Optional
 
 import asyncpg
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from schwifty import IBAN
 from sftkit.database import Connection
 from sftkit.service import Service, with_db_transaction
@@ -23,8 +23,8 @@ from stustapay.core.service.common.decorators import requires_customer
 from sftkit.error import AccessDenied, InvalidArgument
 from stustapay.core.service.config import ConfigService
 from stustapay.core.service.customer.payout import PayoutService
-from stustapay.core.service.customer.sumup import SumupService
 from stustapay.core.service.mail import MailService
+from stustapay.core.service.order.sumup import SumupService
 from stustapay.core.service.tree.common import (
     fetch_event_node_for_node,
     fetch_restricted_event_settings_for_node,
@@ -35,7 +35,7 @@ class CustomerPortalApiConfig(BaseModel):
     test_mode: bool
     test_mode_message: str
     data_privacy_url: str
-    contact_email: str
+    contact_email: EmailStr
     about_page_url: str
     payout_enabled: bool
     currency_identifier: str
@@ -136,10 +136,11 @@ class CustomerService(Service[Config]):
     async def get_orders_with_bon(self, *, conn: Connection, current_customer: Customer) -> list[OrderWithBon]:
         return await conn.fetch_many(
             OrderWithBon,
-            "select o.*, b.generated as bon_generated from order_value_prefiltered("
-            "   (select array_agg(o.id) from ordr o where customer_account_id = $1)"
+            "select o.*, case when b.bon_json is null then false else true end as bon_generated from order_value_prefiltered("
+            "   (select array_agg(o.id) from ordr o where customer_account_id = $1), $2"
             ") o left join bon b ON o.id = b.id order by o.booked_at desc",
             current_customer.id,
+            current_customer.node_id,
         )
 
     @with_db_transaction(read_only=True)
@@ -205,11 +206,12 @@ class CustomerService(Service[Config]):
         )
         if current_customer.email is not None:
             res_config = await fetch_restricted_event_settings_for_node(conn, current_customer.node_id)
-            mail_service.send_mail(
+            assert res_config.payout_registered_message is not None
+            await mail_service.send_mail(
                 subject=res_config.payout_registered_subject,
                 message=res_config.payout_registered_message.format(**current_customer.model_dump()),
-                from_email=res_config.payout_sender,
-                to_email=current_customer.email,
+                from_addr=res_config.payout_sender,
+                to_addr=current_customer.email,
                 node_id=current_customer.node_id,
             )
 
@@ -259,17 +261,3 @@ class CustomerService(Service[Config]):
             currency_identifier=node.event.currency_identifier,
             event_name=node.name,
         )
-
-    @with_db_transaction
-    @requires_customer
-    async def get_bon(self, *, conn: Connection, current_customer: Customer, bon_id: int) -> tuple[str, bytes]:
-        blob = await conn.fetchrow(
-            "select content, mime_type from bon b join ordr o on b.id = o.id "
-            "where b.id = $1 and o.customer_account_id = $2",
-            bon_id,
-            current_customer.id,
-        )
-        if not blob:
-            raise InvalidArgument("Bon not found")
-
-        return blob["mime_type"], blob["content"]
