@@ -117,6 +117,10 @@ export const translations = {
       'Csv with one column "pin" containing the string encoded pins of all tags which are to be created',
     willCreate: "Will create {{nTags}} new user tags",
     firstNTags: "The following are the first {{actualNum}} tags which will be created",
+    vipStatus: "VIP Status",
+    vipStatusEnabled: "VIP status enabled",
+    vipStatusDisabled: "VIP status disabled",
+    vipStatusUpdateFailed: "Failed to update VIP status",
   },
   userTagSecret: {
     create: "Upload a new user tag secret for this event",
@@ -326,6 +330,7 @@ export const translations = {
       forbidden_objects_in_subtree: "Forbidden objects in subtree",
       ust_id: "UST ID",
       max_account_balance: "Max account balance",
+      vip_max_account_balance: "VIP max account balance",
       currency_identifier: "Currency Identifier",
       start_date: "Start Date",
       end_date: "End Date",

@@ -687,6 +687,14 @@ const injectedRtkApi = api
         }),
         invalidatesTags: ["user_tags"],
       }),
+      updateUserTagVipStatus: build.mutation<UpdateUserTagVipStatusApiResponse, UpdateUserTagVipStatusApiArg>({
+        query: (queryArg) => ({
+          url: `/user-tags/${queryArg.userTagId}/update-vip-status`,
+          method: "POST",
+          body: queryArg.updateVipStatusPayload,
+          params: { node_id: queryArg.nodeId },
+        }),
+      }),
       listTses: build.query<ListTsesApiResponse, ListTsesApiArg>({
         query: (queryArg) => ({ url: `/tses/`, params: { node_id: queryArg.nodeId } }),
         providesTags: ["tses"],
@@ -2329,13 +2337,14 @@ export type UserTagDetail = {
 export type UserTagDetailRead = {
   id: number;
   pin: string;
-  uid: number | null;
+  uid: string;
+  uid_hex: string;
   node_id: number;
-  comment?: string | null;
-  account_id?: number | null;
-  user_id?: number | null;
+  comment?: string;
+  account_id?: number;
+  user_id?: number;
   account_history: UserTagAccountAssociation[];
-  uid_hex: string | null;
+  is_vip: boolean;
 };
 export type NormalizedListUserTagDetailInt = {
   ids: number[];
@@ -2348,6 +2357,9 @@ export type FindUserTagPayload = {
 };
 export type UpdateCommentPayload = {
   comment: string;
+};
+export type UpdateVipStatusPayload = {
+  is_vip: boolean;
 };
 export type TseType = "diebold_nixdorf";
 export type TseStatus = "new" | "active" | "disabled" | "failed";
@@ -2779,6 +2791,12 @@ export type NewTerminal = {
 export type SwitchTillPayload = {
   new_till_id: number;
 };
+export type UpdateUserTagVipStatusApiResponse = /** status 200 Successful Response */ UserTagDetailRead;
+export type UpdateUserTagVipStatusApiArg = {
+  userTagId: number;
+  nodeId: number;
+  updateVipStatusPayload: UpdateVipStatusPayload;
+};
 export const {
   useListProductsQuery,
   useLazyListProductsQuery,
@@ -2961,4 +2979,5 @@ export const {
   useDeleteTerminalMutation,
   useLogoutTerminalMutation,
   useSwitchTillMutation,
+  useUpdateUserTagVipStatusMutation,
 } = injectedRtkApi;

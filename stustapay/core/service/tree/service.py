@@ -184,7 +184,7 @@ async def create_event(conn: Connection, parent_id: int, event: NewEvent) -> Nod
     # TODO: tree, create all needed resources, e.g. global accounts which have to and should
     #  only exist at an event node
     event_id = await conn.fetchval(
-        "insert into event (currency_identifier, sumup_topup_enabled, max_account_balance, ust_id, bon_issuer, "
+        "insert into event (currency_identifier, sumup_topup_enabled, max_account_balance, vip_max_account_balance, ust_id, bon_issuer, "
         "bon_address, bon_title, customer_portal_contact_email, sepa_enabled, sepa_sender_name, sepa_sender_iban, "
         "sepa_description, sepa_allowed_country_codes, customer_portal_url, customer_portal_about_page_url, "
         "customer_portal_data_privacy_url, sumup_payment_enabled, sumup_api_key, sumup_affiliate_key, "
@@ -193,11 +193,12 @@ async def create_event(conn: Connection, parent_id: int, event: NewEvent) -> Nod
         "payout_done_message, payout_registered_subject, payout_registered_message, payout_sender, "
         " sumup_oauth_client_id, sumup_oauth_client_secret, post_payment_allowed) "
         "values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, "
-        " $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)"
+        " $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38)"
         "returning id",
         event.currency_identifier,
         event.sumup_topup_enabled,
         event.max_account_balance,
+        event.vip_max_account_balance,
         event.ust_id,
         event.bon_issuer,
         event.bon_address,
@@ -298,21 +299,22 @@ class TreeService(Service[Config]):
 
         await conn.fetchval(
             "update event set currency_identifier = $2, sumup_topup_enabled = $3, max_account_balance = $4, "
-            "   customer_portal_contact_email = $5, ust_id = $6, bon_issuer = $7, bon_address = $8, bon_title = $9, "
-            "   sepa_enabled = $10, sepa_sender_name = $11, sepa_sender_iban = $12, sepa_description = $13, "
-            "   sepa_allowed_country_codes = $14, customer_portal_url = $15, customer_portal_about_page_url = $16,"
-            "   customer_portal_data_privacy_url = $17, sumup_payment_enabled = $18, sumup_api_key = $19, "
-            "   sumup_affiliate_key = $20, sumup_merchant_code = $21, start_date = $22, end_date = $23, "
-            "   daily_end_time = $24, email_enabled = $25, email_default_sender = $26, email_smtp_host = $27, "
-            "   email_smtp_port = $28, email_smtp_username = $29, email_smtp_password = $30, "
-            "   payout_done_subject = $31, payout_done_message = $32, payout_registered_subject = $33, "
-            "   payout_registered_message = $34, payout_sender = $35, sumup_oauth_client_id = $36, "
-            "   sumup_oauth_client_secret = $37, post_payment_allowed = $38 "
+            "   vip_max_account_balance = $5, customer_portal_contact_email = $6, ust_id = $7, bon_issuer = $8, "
+            "   bon_address = $9, bon_title = $10, sepa_enabled = $11, sepa_sender_name = $12, sepa_sender_iban = $13, "
+            "   sepa_description = $14, sepa_allowed_country_codes = $15, customer_portal_url = $16, "
+            "   customer_portal_about_page_url = $17, customer_portal_data_privacy_url = $18, sumup_payment_enabled = $19, "
+            "   sumup_api_key = $20, sumup_affiliate_key = $21, sumup_merchant_code = $22, start_date = $23, "
+            "   end_date = $24, daily_end_time = $25, email_enabled = $26, email_default_sender = $27, "
+            "   email_smtp_host = $28, email_smtp_port = $29, email_smtp_username = $30, email_smtp_password = $31, "
+            "   payout_done_subject = $32, payout_done_message = $33, payout_registered_subject = $34, "
+            "   payout_registered_message = $35, payout_sender = $36, sumup_oauth_client_id = $37, "
+            "   sumup_oauth_client_secret = $38, post_payment_allowed = $39 "
             "where id = $1",
             event_id,
             event.currency_identifier,
             event.sumup_topup_enabled,
             event.max_account_balance,
+            event.vip_max_account_balance,
             event.customer_portal_contact_email,
             event.ust_id,
             event.bon_issuer,

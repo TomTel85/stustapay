@@ -47,6 +47,19 @@ class TerminalLoginState(
     }
     
     /**
+     * Returns the maximum account balance for the current customer
+     * The default is 200.0 if not in terminal config
+     */
+    val maxAccountBalance: Float
+        get() {
+            if (terminal !is TerminalConfigState.Success) {
+                return 200.0f
+            }
+            // In a future update, we'll add VIP status check here
+            return terminal.config.maxAccountBalance ?: 200.0f
+        }
+    
+    /**
      * Check if the user has only the can_topup privilege but not the can_book_orders privilege.
      * Such users should have restricted UI access (no back button, auto-navigate to topup)
      */

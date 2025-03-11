@@ -1,8 +1,8 @@
-import { useGetUserTagDetailQuery, useUpdateUserTagCommentMutation } from "@/api";
+import { useGetUserTagDetailQuery, useUpdateUserTagCommentMutation, useUpdateUserTagVipStatusMutation } from "@/api";
 import { CustomerRoutes, UserRoutes, UserTagRoutes } from "@/app/routes";
 import { DetailLayout, EditableListItem, ListItemLink } from "@/components";
 import { useCurrentNode } from "@/hooks";
-import { List, ListItem, ListItemText, Paper } from "@mui/material";
+import { List, ListItem, ListItemText, Paper, Switch, FormControlLabel } from "@mui/material";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { DataGridTitle, Loading } from "@stustapay/components";
 import { UserTagDetail as UserTagDetailType, formatUserTagUid } from "@stustapay/models";
@@ -22,6 +22,7 @@ export const UserTagDetail: React.FC = () => {
   const navigate = useNavigate();
 
   const [updateComment] = useUpdateUserTagCommentMutation();
+  const [updateVipStatus] = useUpdateUserTagVipStatusMutation();
   const { data, error, isLoading } = useGetUserTagDetailQuery({
     nodeId: currentNode.id,
     userTagId: Number(userTagId),
@@ -63,6 +64,22 @@ export const UserTagDetail: React.FC = () => {
     });
   };
 
+  const handleUpdateVipStatus = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVipStatus = e.target.checked;
+    updateVipStatus({
+      nodeId: currentNode.id,
+      userTagId: Number(userTagId),
+      updateVipStatusPayload: { is_vip: newVipStatus },
+    })
+      .unwrap()
+      .then(() => {
+        toast.success(newVipStatus ? t("userTag.vipStatusEnabled") : t("userTag.vipStatusDisabled"));
+      })
+      .catch(() => {
+        toast.error(t("userTag.vipStatusUpdateFailed"));
+      });
+  };
+
   return (
     <DetailLayout title={t("userTag.userTag")} routes={UserTagRoutes}>
       <Paper>
@@ -74,6 +91,12 @@ export const UserTagDetail: React.FC = () => {
             <ListItemText primary={t("userTag.uid")} secondary={formatUserTagUid(data.uid_hex)} />
           </ListItem>
           <EditableListItem label={t("userTag.comment")} value={data.comment ?? ""} onChange={handleUpdateComment} />
+          <ListItem>
+            <FormControlLabel
+              control={<Switch checked={Boolean(data.is_vip)} onChange={handleUpdateVipStatus} />}
+              label={t("userTag.vipStatus") || "VIP Status"}
+            />
+          </ListItem>
           {data.account_id != null ? (
             <ListItemLink to={CustomerRoutes.detail(data.account_id)}>
               <ListItemText primary={t("userTag.account")} secondary={data.account_id} />

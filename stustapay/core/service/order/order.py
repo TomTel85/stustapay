@@ -319,7 +319,7 @@ class OrderService(Service[Config]):
     async def _fetch_customer_by_user_tag(*, conn: Connection, node: Node, customer_tag_uid: int) -> Account:
         customer = await conn.fetch_maybe_one(
             Account,
-            "select a.*, t.restriction "
+            "select a.*, t.restriction, t.is_vip "
             "from user_tag t join account_with_history a on t.id = a.user_tag_id "
             "where t.uid = $1 and a.type = 'private' and a.node_id = any($2)",
             customer_tag_uid,
@@ -359,14 +359,14 @@ class OrderService(Service[Config]):
 
         uuid_exists = await conn.fetchval("select exists(select from ordr where uuid = $1)", new_topup.uuid)
         if uuid_exists:
-            # raise AlreadyProcessedException("This order has already been booked (duplicate order uuid)")
             raise AlreadyProcessedException("Successfully booked order")
 
         customer_account = await self._fetch_customer_by_user_tag(
             conn=conn, node=node, customer_tag_uid=new_topup.customer_tag_uid
         )
 
-        max_limit = event_settings.max_account_balance
+        # Get the appropriate balance limit based on VIP status
+        max_limit = event_settings.vip_max_account_balance if customer_account.is_vip else event_settings.max_account_balance
         new_balance = customer_account.balance + new_topup.amount
         if new_balance > max_limit:
             too_much = new_balance - max_limit
@@ -549,11 +549,14 @@ class OrderService(Service[Config]):
 
             order.new_balance = customer_account.balance - order.total_price
 
+            # Get the appropriate balance limit based on VIP status
+            max_limit = event_settings.vip_max_account_balance if customer_account.is_vip else event_settings.max_account_balance
+
             # Ensure the balance does not exceed maximum allowed balance
-            if order.new_balance > event_settings.max_account_balance:
-                too_much = order.new_balance - event_settings.max_account_balance
+            if order.new_balance > max_limit:
+                too_much = order.new_balance - max_limit
                 raise InvalidArgument(
-                    f"More than {event_settings.max_account_balance:.02f}€ on accounts is disallowed! "
+                    f"More than {max_limit:.02f}€ on accounts is disallowed! "
                     f"New balance would be {order.new_balance:.02f}€, which is {too_much:.02f}€ too much."
                 )
 
@@ -982,39 +985,57 @@ class OrderService(Service[Config]):
 
             new_balance = customer_account.balance + new_pay_out.amount
 
-            # Check if new balance exceeds maximum allowed debt (negative balance)
-            max_negative_balance = -1 * node.event.max_account_balance  # Should be negative
+            # Get the appropriate balance limit based on VIP status
+            max_negative_balance = -1 * (node.event.vip_max_account_balance if customer_account.is_vip else node.event.max_account_balance)  # Should be negative
             if new_balance < max_negative_balance:
                 too_much = max_negative_balance - new_balance
                 raise InvalidArgument(
                     f"More than {abs(max_negative_balance):.02f}€ of debt is disallowed! "
                     f"New balance would be {new_balance:.02f}€, which exceeds the limit by {too_much:.02f}€."
                 )
-        else:
-            # Post-payment is not allowed; customers can receive payouts to reduce their positive balance
-            if new_pay_out.amount is not None and new_pay_out.amount > 0.0:
-                raise InvalidArgument("Only payouts with a negative amount are allowed")
 
-            if new_pay_out.amount is None:
-                # Set amount to pay out the entire balance
-                new_pay_out.amount = -customer_account.balance
-
-            new_balance = customer_account.balance + new_pay_out.amount
-
-            # Customers cannot have a negative balance
-            if new_balance < 0.0:
-                raise NotEnoughFundsException(
-                    needed_fund=abs(new_pay_out.amount),
-                    available_fund=customer_account.balance
+            if new_balance > 0:
+                # No need to payout a positive amount
+                raise InvalidArgument(
+                    f"Cannot payout positive amount when the customer already has debt. "
+                    f"Current balance: {customer_account.balance:.02f}€"
                 )
 
-            # Check if new balance exceeds maximum allowed positive balance
-            max_positive_balance = node.event.max_account_balance
+            payout_amount = new_pay_out.amount
+        else:
+            if new_pay_out.amount is None:
+                # Pay out all the money
+                payout_amount = customer_account.balance
+            else:
+                # Pay out a specific amount
+                payout_amount = new_pay_out.amount
+
+            # Regular payouts can only happen if the customer has a positive balance
+            if customer_account.balance <= 0:
+                raise InvalidArgument(
+                    f"Cannot payout from a zero or negative balance. "
+                    f"Current balance: {customer_account.balance:.02f}€"
+                )
+
+            # Customer cannot payout more than they have
+            if payout_amount > customer_account.balance:
+                raise InvalidArgument(
+                    f"Cannot payout more than the customer has. "
+                    f"Payout amount ({payout_amount:.02f}€) is more than balance ({customer_account.balance:.02f}€)"
+                )
+
+            # Calculate the new balance after payout
+            new_balance = customer_account.balance - payout_amount
+
+            # Get the appropriate balance limit based on VIP status
+            max_positive_balance = node.event.vip_max_account_balance if customer_account.is_vip else node.event.max_account_balance
+
+            # Ensure the payout does not violate any constraints
             if new_balance > max_positive_balance:
                 too_much = new_balance - max_positive_balance
                 raise InvalidArgument(
-                    f"More than {max_positive_balance:.02f}€ on accounts is disallowed! "
-                    f"New balance would be {new_balance:.02f}€, which is {too_much:.02f}€ too much."
+                    f"Cannot payout this amount. Remaining balance ({new_balance:.02f}€) "
+                    f"would still exceed the maximum allowed balance ({max_positive_balance:.02f}€) by {too_much:.02f}€"
                 )
 
         return PendingPayOut(
@@ -1248,28 +1269,6 @@ class OrderService(Service[Config]):
             scanned_tickets=ticket_scan_result.scanned_tickets,
         )
 
-    @staticmethod
-    def _find_oldest_customer(customers: dict[int, tuple[float, Optional[str]]]) -> int:
-        oldest_customer = None
-        for account_id, restriction in customers.items():
-            if oldest_customer is None:
-                oldest_customer = (account_id, restriction)
-                if restriction is None:
-                    return oldest_customer[0]
-                continue
-            if restriction is None:
-                return account_id
-
-            if (
-                oldest_customer[1] == ProductRestriction.under_16.name
-                and restriction == ProductRestriction.under_18.name
-            ):
-                oldest_customer = (account_id, restriction)
-
-        assert oldest_customer is not None
-
-        return oldest_customer[0]
-
     @with_db_transaction(read_only=False)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
     async def book_ticket_sale(
@@ -1444,3 +1443,25 @@ class OrderService(Service[Config]):
     @requires_user([Privilege.node_administration])
     async def get_order(self, *, conn: Connection, order_id: int) -> Optional[Order]:
         return await fetch_order(conn=conn, order_id=order_id)
+
+    @staticmethod
+    def _find_oldest_customer(customers: dict[int, tuple[float, Optional[str]]]) -> int:
+        oldest_customer = None
+        for account_id, restriction in customers.items():
+            if oldest_customer is None:
+                oldest_customer = (account_id, restriction)
+                if restriction is None:
+                    return oldest_customer[0]
+                continue
+            if restriction is None:
+                return account_id
+
+            if (
+                oldest_customer[1] == ProductRestriction.under_16.name
+                and restriction == ProductRestriction.under_18.name
+            ):
+                oldest_customer = (account_id, restriction)
+
+        assert oldest_customer is not None
+
+        return oldest_customer[0]

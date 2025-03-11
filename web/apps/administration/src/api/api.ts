@@ -23,6 +23,8 @@ import {
   GenerateTestReportApiArg,
   Terminal,
   GenerateRevenueReportApiArg,
+  UpdateUserTagCommentApiArg,
+  UpdateUserTagVipStatusApiArg,
 } from "./generated/api";
 import { convertEntityAdaptorSelectors, generateCacheKeys } from "./utils";
 
@@ -103,6 +105,7 @@ const terminalAdapter = createEntityAdapter<Terminal>({
 });
 
 export const api = generatedApi.enhanceEndpoints({
+  addTagTypes: ["config", "tag"],
   endpoints: {
     listUsers: {
       providesTags: (result) => generateCacheKeys("users", result),
@@ -205,6 +208,33 @@ export const api = generatedApi.enhanceEndpoints({
         },
       }),
       invalidatesTags: [],
+    },
+    updateUserTagComment: {
+      query: ({ userTagId, nodeId, updateCommentPayload }: UpdateUserTagCommentApiArg) => ({
+        url: `/user-tags/${userTagId}/update-comment`,
+        method: "POST",
+        body: { comment: updateCommentPayload.comment },
+        params: { node_id: nodeId },
+      }),
+      invalidatesTags: [{ type: "user_tags", id: "LIST" }],
+    },
+    updateUserTagVipStatus: {
+      query: ({ userTagId, nodeId, updateVipStatusPayload }: UpdateUserTagVipStatusApiArg) => ({
+        url: `/user-tags/${userTagId}/update-vip-status`,
+        method: "POST",
+        body: { is_vip: updateVipStatusPayload.is_vip },
+        params: { node_id: nodeId },
+      }),
+      invalidatesTags: (result, error, { userTagId }) => [
+        { type: "user_tags", id: "LIST" },
+        { type: "user_tags", id: userTagId }
+      ],
+    },
+    getUserTagDetail: {
+      providesTags: (result, error, arg) => [
+        { type: "user_tags", id: "LIST" },
+        { type: "user_tags", id: arg.userTagId }
+      ],
     },
   },
 });

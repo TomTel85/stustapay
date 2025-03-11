@@ -74,7 +74,7 @@ async def get_or_assign_user_tag(conn: Connection, node: Node, pin: Optional[str
         "select id from user_tag where pin = $1 and node_id = any($2)", pin, node.ids_to_root
     )
     if user_tag_id is None:
-        raise NotFound(element_typ="user_tag", element_id=pin)
+        raise NotFound(element_type="user_tag", element_id=pin)
 
     await conn.fetchval("update user_tag set uid = $1 where id = $2", uid, user_tag_id)
 
@@ -130,6 +130,23 @@ class UserTagService(Service[Config]):
     ) -> UserTagDetail:
         # TODO: TREE visibility
         ret = await conn.fetchval("update user_tag set comment = $1 where id = $2 returning id", comment, user_tag_id)
+        if ret is None:
+            raise InvalidArgument(f"User tag {user_tag_id} does not exist")
+
+        detail = await self.get_user_tag_detail(  # pylint: disable=unexpected-keyword-arg, missing-kwoa
+            conn=conn, node_id=node.id, current_user=current_user, user_tag_id=user_tag_id
+        )
+        assert detail is not None
+        return detail
+
+    @with_db_transaction
+    @requires_node(event_only=True)
+    @requires_user([Privilege.node_administration])
+    async def update_user_tag_vip_status(
+        self, *, conn: Connection, node: Node, current_user: CurrentUser, user_tag_id: int, is_vip: bool  # pylint: disable=unused-argument
+    ) -> UserTagDetail:
+        # TODO: TREE visibility
+        ret = await conn.fetchval("update user_tag set is_vip = $1 where id = $2 returning id", is_vip, user_tag_id)
         if ret is None:
             raise InvalidArgument(f"User tag {user_tag_id} does not exist")
 

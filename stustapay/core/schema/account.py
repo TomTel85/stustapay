@@ -60,6 +60,7 @@ class UserTagDetail(BaseModel):
     comment: Optional[str] = None
     account_id: Optional[int] = None
     user_id: Optional[int] = None
+    is_vip: bool = False
 
     account_history: list[UserTagAccountAssociation]
 
@@ -98,6 +99,8 @@ class Account(BaseModel):
     user_tag_uid: Optional[int]
     user_tag_comment: Optional[str] = None
     restriction: Optional[ProductRestriction]
+    is_vip: bool = False
+    vip_max_balance: Optional[float] = None
 
     tag_history: list[UserTagHistoryEntry]
 

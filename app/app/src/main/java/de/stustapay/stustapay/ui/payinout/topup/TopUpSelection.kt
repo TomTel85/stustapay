@@ -81,7 +81,7 @@ fun TopUpSelection(
                 onAmountUpdate = { viewModel.setAmount(it) },
                 onClear = { viewModel.clearDraft() },
                 config = AmountConfig.Money(
-                    limit = 150u,
+                    limit = (topUpConfig.maxAccountBalance * 100).toUInt(),
                     cents = false,
                 )
             )

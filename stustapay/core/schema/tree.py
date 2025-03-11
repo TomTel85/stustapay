@@ -20,6 +20,7 @@ class Language(enum.Enum):
 class _BaseEvent(BaseModel):
     currency_identifier: str
     max_account_balance: float
+    vip_max_account_balance: float = 300.0  # Default VIP balance limit
 
     start_date: datetime | None = None
     end_date: datetime | None = None

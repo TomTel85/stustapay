@@ -88,3 +88,20 @@ async def update_user_tag_comment(
     return await user_tag_service.update_user_tag_comment(
         token=token, user_tag_id=user_tag_id, comment=payload.comment, node_id=node_id
     )
+
+
+class UpdateVipStatusPayload(BaseModel):
+    is_vip: bool
+
+
+@router.post("/user-tags/{user_tag_id}/update-vip-status", response_model=UserTagDetail)
+async def update_user_tag_vip_status(
+    token: CurrentAuthToken,
+    user_tag_service: ContextUserTagService,
+    user_tag_id: int,
+    payload: UpdateVipStatusPayload,
+    node_id: int,
+):
+    return await user_tag_service.update_user_tag_vip_status(
+        token=token, user_tag_id=user_tag_id, is_vip=payload.is_vip, node_id=node_id
+    )

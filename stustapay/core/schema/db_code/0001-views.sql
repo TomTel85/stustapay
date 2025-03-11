@@ -51,19 +51,20 @@ create view user_to_roles_aggregated as
         user_to_role utr
     group by utr.user_id, utr.node_id;
 
-create view account_with_history as
-    select
+CREATE VIEW account_with_history AS
+    SELECT
         a.*,
-        ut.uid                                 as user_tag_uid,
-        ut.pin                                 as user_tag_pin,
-        ut.comment                             as user_tag_comment,
+        ut.uid                                 AS user_tag_uid,
+        ut.pin                                 AS user_tag_pin,
+        ut.comment                             AS user_tag_comment,
         ut.restriction,
-        coalesce(hist.tag_history, '[]'::json) as tag_history
-    from
+        coalesce(aut.is_vip, false)            AS is_vip,
+        coalesce(hist.tag_history, '[]'::json) AS tag_history
+    FROM
         account a
-        left join user_tag ut on a.user_tag_id = ut.id
-        left join (
-            select
+        LEFT JOIN user_tag ut ON a.user_tag_id = ut.id
+        LEFT JOIN (
+            SELECT
                 atah.account_id,
                 json_agg(json_build_object(
                     'account_id', atah.account_id,
@@ -72,12 +73,12 @@ create view account_with_history as
                     'user_tag_pin', ut.pin,
                     'mapping_was_valid_until', atah.mapping_was_valid_until,
                     'comment', ut.comment
-                )) as tag_history
-            from
+                )) AS tag_history
+            FROM
                 account_tag_association_history atah
-                join user_tag ut on atah.user_tag_id = ut.id
-            group by atah.account_id
-                  ) hist on a.id = hist.account_id;
+                JOIN user_tag ut ON atah.user_tag_id = ut.id
+            GROUP BY atah.account_id
+                  ) hist ON a.id = hist.account_id; 
 
 create view payout_view as
     select
@@ -143,7 +144,8 @@ create view user_tag_with_history as
         ut.comment,
         a.id                                       as account_id,
         u.id                                       as user_id,
-        coalesce(hist.account_history, '[]'::json) as account_history
+        coalesce(hist.account_history, '[]'::json) as account_history,
+        coalesce(ut.is_vip, false)                 as is_vip
     from
         user_tag ut
         left join account a on a.user_tag_id = ut.id

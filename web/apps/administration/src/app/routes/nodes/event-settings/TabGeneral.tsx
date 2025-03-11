@@ -30,6 +30,7 @@ const GeneralSettingsSchema = z
   .object({
     currency_identifier: CurrencyIdentifierSchema,
     max_account_balance: z.number(),
+    vip_max_account_balance: z.number(),
     ust_id: z.string(),
     start_date: z.string().optional().nullable(),
     end_date: z.string().optional().nullable(),
@@ -81,9 +82,16 @@ export const TabGeneral: React.FC<{
       });
   };
 
+  // Initialize vip_max_account_balance if it doesn't exist in eventSettings
+  const initialValues = {
+    ...eventSettings,
+    // Use type assertion since the field exists in the backend but is missing from the TypeScript definition
+    vip_max_account_balance: (eventSettings as any).vip_max_account_balance ?? 300,
+  } as GeneralSettings;
+
   return (
     <Formik
-      initialValues={eventSettings as GeneralSettings}
+      initialValues={initialValues}
       onSubmit={handleSubmit}
       validationSchema={toFormikValidationSchema(GeneralSettingsSchema)}
       enableReinitialize={false} // Set to false to prevent re-initialization
@@ -109,6 +117,20 @@ export const TabGeneral: React.FC<{
             <FormNumericInput
               label={t("settings.general.max_account_balance")}
               name="max_account_balance"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    {getCurrencySymbolForIdentifier(
+                      formik.values.currency_identifier
+                    )}
+                  </InputAdornment>
+                ),
+              }}
+              formik={formik}
+            />
+            <FormNumericInput
+              label={t("settings.general.vip_max_account_balance")}
+              name="vip_max_account_balance"
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
