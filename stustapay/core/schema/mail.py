@@ -20,4 +20,8 @@ class Mail(BaseModel):
     from_addr: str
     send_date: datetime | None
     scheduled_send_date: datetime
+    retry_count: int = 0
+    retry_max: int = 5
+    retry_next_attempt: datetime | None = None
+    failure_reason: str | None = None
     attachments: list[MailAttachment]
