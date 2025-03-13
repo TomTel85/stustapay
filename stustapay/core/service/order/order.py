@@ -1135,7 +1135,7 @@ class OrderService(Service[Config]):
 
         return PendingPayOut(
             uuid=new_pay_out.uuid,
-            amount=new_pay_out.amount,
+            amount=-payout_amount,
             customer_tag_uid=new_pay_out.customer_tag_uid,
             customer_account_id=customer_account.id,
             old_balance=customer_account.balance,
