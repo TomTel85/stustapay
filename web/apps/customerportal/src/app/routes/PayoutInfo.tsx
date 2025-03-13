@@ -7,7 +7,7 @@ import {
 } from "@/api";
 import { useCurrencyFormatter } from "@/hooks";
 import { usePublicConfig } from "@/hooks/usePublicConfig";
-import { Alert, Button, Grid, Link, Stack, Typography } from "@mui/material";
+import { Alert, Button, Checkbox, FormControl, FormControlLabel, FormHelperText, Grid, Link, Stack, Typography } from "@mui/material";
 import { Loading } from "@stustapay/components";
 import { FormCheckbox, FormCurrencyInput, FormTextField } from "@stustapay/form-components";
 import { toFormikValidationSchema } from "@stustapay/utils";
@@ -212,12 +212,6 @@ export const PayoutInfo: React.FC = () => {
                     formik={formik}
                     disabled={payoutInfo.in_payout_run}
                   />
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    color="primary"
-                    disabled={formik.isSubmitting || payoutInfo.in_payout_run}
-                  >
                   <Button
                     type="submit"
                     variant="contained"
