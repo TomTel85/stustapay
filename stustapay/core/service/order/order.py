@@ -575,44 +575,44 @@ class OrderService(Service[Config]):
             order.new_voucher_balance = customer_account.vouchers - voucher_usage.used_vouchers
             order.line_items.extend(voucher_usage.additional_line_items)
 
-        if event_settings.post_payment_allowed:
-            # Allow negative balance (post-payment)
-            order.new_balance = customer_account.balance - order.total_price
-            max_negative_balance = -1 * event_settings.max_account_balance
+            if event_settings.post_payment_allowed:
+                # Allow negative balance (post-payment)
+                order.new_balance = customer_account.balance - order.total_price
+                max_negative_balance = -1 * event_settings.max_account_balance
 
-            # Check if the new balance exceeds the allowed debt
-            if order.new_balance < max_negative_balance:
-                too_much = order.new_balance - max_negative_balance
-                raise InvalidArgument(
-                    f"More than {event_settings.max_account_balance:.02f}€ of debt is disallowed! "
-                    f"New balance would be {order.new_balance:.02f}€, which exceeds the limit by {too_much:.02f}€."
-                )
-        else:
-            # Disallow post-payment; ensure sufficient funds
-            if customer_account.balance < order.total_price:
-                raise NotEnoughFundsException(
-                    needed_fund=order.total_price, 
-                    available_fund=customer_account.balance
-                )
+                # Check if the new balance exceeds the allowed debt
+                if order.new_balance < max_negative_balance:
+                    too_much = order.new_balance - max_negative_balance
+                    raise InvalidArgument(
+                        f"More than {event_settings.max_account_balance:.02f}€ of debt is disallowed! "
+                        f"New balance would be {order.new_balance:.02f}€, which exceeds the limit by {too_much:.02f}€."
+                    )
+            else:
+                # Disallow post-payment; ensure sufficient funds
+                if customer_account.balance < order.total_price:
+                    raise NotEnoughFundsException(
+                        needed_fund=order.total_price, 
+                        available_fund=customer_account.balance
+                    )
 
-            order.new_balance = customer_account.balance - order.total_price
+                order.new_balance = customer_account.balance - order.total_price
 
-            # Get the appropriate balance limit based on VIP status
-            max_limit = event_settings.vip_max_account_balance if customer_account.is_vip else event_settings.max_account_balance
+                # Get the appropriate balance limit based on VIP status
+                max_limit = event_settings.vip_max_account_balance if customer_account.is_vip else event_settings.max_account_balance
 
-            # Ensure the balance does not exceed maximum allowed balance
-            if order.new_balance > max_limit:
-                too_much = order.new_balance - max_limit
-                raise InvalidArgument(
-                    f"More than {max_limit:.02f}€ on accounts is disallowed! "
-                    f"New balance would be {order.new_balance:.02f}€, which is {too_much:.02f}€ too much."
-                )
+                # Ensure the balance does not exceed maximum allowed balance
+                if order.new_balance > max_limit:
+                    too_much = order.new_balance - max_limit
+                    raise InvalidArgument(
+                        f"More than {max_limit:.02f}€ on accounts is disallowed! "
+                        f"New balance would be {order.new_balance:.02f}€, which is {too_much:.02f}€ too much."
+                    )
 
-            # Ensure balance does not go below zero
-            if order.new_balance < 0:
-                raise InvalidArgument(
-                    f"Account balance cannot be negative. New balance would be {order.new_balance:.02f}€"
-                )
+                # Ensure balance does not go below zero
+                if order.new_balance < 0:
+                    raise InvalidArgument(
+                        f"Account balance cannot be negative. New balance would be {order.new_balance:.02f}€"
+                    )
 
         return order
 
