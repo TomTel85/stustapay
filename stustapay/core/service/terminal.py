@@ -511,6 +511,7 @@ class TerminalService(Service[Config]):
         if current_terminal.till is not None:
             await conn.execute("update till set active_cash_register_id = null where id = $1", current_terminal.till.id)
 
+        # Update the terminal to set the active user and role
         await conn.fetchval(
             "update terminal set active_user_id = $1, active_user_role_id = $2 where id = $3 returning id",
             user_id,
@@ -523,17 +524,73 @@ class TerminalService(Service[Config]):
                 conn=conn, till_id=current_terminal.till.id, cash_register_id=cash_register_id
             )
 
-        # instead of manually redoing the necessary queries we simply reuse the normal auth decorator
-        current_user = await self.get_current_user(  # pylint: disable=missing-kwoa,unexpected-keyword-arg
-            conn=conn, token=token
+        # Directly query for the user information instead of using get_current_user
+        user = await conn.fetch_maybe_one(
+            CurrentUser,
+            """
+            SELECT u.*,
+                   $2 as active_role_id,
+                   ur.name as active_role_name,
+                   COALESCE(
+                       (SELECT array_agg(DISTINCT p) 
+                        FROM (
+                            SELECT unnest(privileges) as p
+                            FROM user_role_with_privileges
+                            WHERE id = $2
+                        ) as role_privileges
+                       ),
+                       ARRAY[]::text[]
+                   ) as privileges
+            FROM user_with_tag u
+            LEFT JOIN user_role ur ON ur.id = $2
+            WHERE u.id = $1
+            """,
+            user_id,
+            user_role_id
         )
-        assert current_user is not None
-        return current_user
+        
+        assert user is not None
+        return user
 
     @with_db_transaction(read_only=True)
     @requires_terminal()
-    async def get_current_user(self, *, current_user: Optional[CurrentUser]) -> Optional[CurrentUser]:
-        return current_user
+    async def get_current_user(
+        self, *, conn: Connection, current_terminal: CurrentTerminal
+    ) -> Optional[CurrentUser]:
+        """
+        Get the user that is currently logged into the terminal
+        This is called from the terminal API to get the current user
+        """
+        if current_terminal.active_user_id is None:
+            return None
+            
+        # Fetch user details and role
+        user = await conn.fetch_maybe_one(
+            CurrentUser,
+            """
+            SELECT u.*,
+                   t.active_user_role_id as active_role_id,
+                   CASE WHEN ur.id IS NOT NULL THEN ur.name ELSE NULL END as active_role_name,
+                   COALESCE(
+                       (SELECT array_agg(DISTINCT p) 
+                        FROM (
+                            SELECT unnest(privileges) as p
+                            FROM user_role_with_privileges
+                            WHERE id = t.active_user_role_id
+                        ) as role_privileges
+                       ),
+                       ARRAY[]::text[]
+                   ) as privileges
+            FROM user_with_tag u
+            JOIN terminal t ON u.id = t.active_user_id
+            LEFT JOIN user_role ur ON t.active_user_role_id = ur.id
+            WHERE u.id = $1 AND t.id = $2
+            """,
+            current_terminal.active_user_id,
+            current_terminal.id
+        )
+        
+        return user
 
     @with_db_transaction
     @requires_terminal()
@@ -604,3 +661,67 @@ class TerminalService(Service[Config]):
 
         info.assigned_roles = assigned_roles
         return info
+
+    @with_db_transaction
+    @requires_node(object_types=[ObjectType.terminal])
+    @requires_user([Privilege.node_administration])
+    async def login_user_to_terminal(
+        self,
+        *,
+        conn: Connection,
+        current_user: CurrentUser,
+        node: Node,
+        terminal_id: int,
+        user_id: int,
+        role_id: int,
+    ) -> Terminal:
+        """
+        Login a User to a terminal by user_id and role_id from the administration API
+        """
+        # Check if terminal exists
+        terminal = await conn.fetchrow(
+            "select * from terminal where id = $1 and node_id = $2", terminal_id, node.id
+        )
+        
+        if terminal is None:
+            raise NotFound(f"Terminal with id {terminal_id} not found")
+            
+        # Check if the user has the requested role
+        has_role = await conn.fetchval(
+            "select exists(select 1 from user_to_role where user_id = $1 and role_id = $2 and node_id = any($3))", 
+            user_id, role_id, node.ids_to_root
+        )
+        
+        if not has_role:
+            raise AccessDenied("The user does not have the requested role")
+            
+        # Check if the user exists
+        user_exists = await conn.fetchval("select exists(select 1 from usr where id = $1)", user_id)
+        
+        if not user_exists:
+            raise NotFound(f"User with id {user_id} not found")
+            
+        # Get the cash register id of the user if any
+        cash_register_id = await conn.fetchval("select cash_register_id from usr where id = $1", user_id)
+        
+        # Check if there's a till associated with this terminal
+        till = await conn.fetchrow("select * from till where terminal_id = $1", terminal_id)
+        
+        # If there's a till associated with the terminal and the user has a cash register, update the till
+        if till is not None and cash_register_id is not None:
+            await conn.execute("update till set active_cash_register_id = null where id = $1", till["id"])
+            
+        # Update the terminal to set the active user and role
+        await conn.execute(
+            "update terminal set active_user_id = $1, active_user_role_id = $2 where id = $3",
+            user_id,
+            role_id,
+            terminal_id,
+        )
+        
+        # If there's a till and cash register, assign it
+        if till is not None and cash_register_id is not None:
+            await assign_cash_register_to_till_if_available(
+                conn=conn, till_id=till["id"], cash_register_id=cash_register_id
+            )
+        

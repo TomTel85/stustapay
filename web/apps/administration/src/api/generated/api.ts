@@ -1318,6 +1318,17 @@ const injectedRtkApi = api
         }),
         invalidatesTags: ["terminals"],
       }),
+      loginUser: build.mutation<LoginUserApiResponse, LoginUserApiArg>({
+        query: (queryArg) => ({
+          url: `/terminal/${queryArg.terminalId}/login-user`,
+          method: "POST",
+          body: queryArg.loginPayload,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        invalidatesTags: ["terminals"],
+      }),
       getTransaction: build.query<GetTransactionApiResponse, GetTransactionApiArg>({
         query: (queryArg) => ({
           url: `/transactions/${queryArg.transactionId}`,
@@ -2004,6 +2015,15 @@ export type GetTransactionApiResponse = /** status 200 Successful Response */ Tr
 export type GetTransactionApiArg = {
   transactionId: number;
   nodeId: number;
+};
+export type LoginUserApiResponse = /** status 200 Successful Response */ any;
+export type LoginUserApiArg = {
+  terminalId: number;
+  nodeId: number;
+  loginPayload: {
+    user_id: number;
+    role_id: number;
+  };
 };
 export type ProductRestriction = "under_16" | "under_18";
 export type ProductType = "discount" | "topup" | "payout" | "money_transfer" | "imbalance" | "user_defined" | "ticket";
@@ -3538,4 +3558,5 @@ export const {
   useGetTransactionQuery,
   useLazyGetTransactionQuery,
   useUpdateUserTagVipStatusMutation,
+  useLoginUserMutation,
 } = injectedRtkApi;

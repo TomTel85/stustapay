@@ -92,3 +92,27 @@ async def force_logout_user(
     terminal_id: int, token: CurrentAuthToken, terminal_service: ContextTerminalService, node_id: int
 ):
     await terminal_service.force_logout_user(token=token, terminal_id=terminal_id, node_id=node_id)
+
+
+class TerminalUserLoginPayload(BaseModel):
+    user_id: int
+    role_id: int
+
+
+@router.post("/{terminal_id}/login-user")
+async def login_user(
+    terminal_id: int,
+    login_payload: TerminalUserLoginPayload,
+    token: CurrentAuthToken,
+    terminal_service: ContextTerminalService,
+    node_id: int,
+):
+    """Login a user to a terminal"""
+    await terminal_service.login_user_to_terminal(
+        token=token, 
+        terminal_id=terminal_id,
+        node_id=node_id,
+        user_id=login_payload.user_id, 
+        role_id=login_payload.role_id
+    )
+    return {"success": True}

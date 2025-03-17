@@ -665,26 +665,22 @@ export const translations = {
   },
   terminal: {
     terminals: "Terminals",
+    create: "Create Terminal",
+    delete: "Delete Terminal",
+    deleteDescription: "Are you sure you want to delete this terminal?",
+    id: "Terminal ID",
     till: "Till",
-    id: "ID",
-    registrationUUID: "Registration ID",
-    loggedIn: "Terminal registered",
-    logout: "Unregister Terminal",
-    create: "Add a new terminal",
-    update: "Update terminal",
-    delete: "Delete terminal",
-    deleteDescription: "Confirm Terminal deletion",
-    forceLogoutUserDescription:
-      "Force logout user at terminal. This should NEVER be done while a cashier is still using the terminal",
-    unregisterTerminal: "Force logout a terminal",
-    unregisterTerminalDescription:
-      "Force logout a terminal. This should NEVER be done while a cashier is still using the terminal",
-    removeTill: "Remove till",
-    removeTillDescription:
-      'Deassociate till "{{tillName}}" from this terminal. This should NEVER be done while a cashier is still using the terminal.',
-    switchTill: "Switch till",
-    switchTillDescription:
-      "Switch the till associated with this terminal. This should NEVER be done while a cashier is still using the terminal.",
+    switchTill: "Switch Till",
+    removeTill: "Remove Till",
+    removeTillDescription: "Are you sure you want to remove the till {{tillName}} from this terminal?",
+    logout: "Logout Terminal",
+    loggedIn: "Terminal is logged in",
+    registrationUUID: "Registration UUID",
+    unregisterTerminal: "Unregister Terminal",
+    unregisterTerminalDescription: "Are you sure you want to unregister this terminal?",
+    loginUser: "Login User",
+    userLoginSuccess: "User logged in successfully",
+    userLoginFailed: "Failed to login user: {{reason}}",
   },
 };
 

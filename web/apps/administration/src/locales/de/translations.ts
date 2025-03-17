@@ -643,22 +643,23 @@ export const translations: NestedPartialAsStrings<Translations> = {
   },
   terminal: {
     terminals: "Terminals",
-    till: "Kasse",
-    id: "ID",
-    registrationUUID: "Registrierungs-ID",
-    loggedIn: "Terminal registriert",
-    logout: "Terminal abmelden",
     create: "Ein neues Terminal hinzufügen",
-    switchTill: "Kasse wechseln",
-    switchTillDescription: "Terminal einer anderne Kasse zurorden",
-    update: "Terminal aktualisieren",
     delete: "Terminal löschen",
     deleteDescription: "Löschung des Terminals bestätigen",
-    forceLogoutUserDescription:
-      "Benutzer am Terminal zwangsabmelden. Dies sollte NIEMALS erfolgen, während ein Kassierer das Terminal noch benutzt",
+    id: "Terminal ID",
+    till: "Kasse",
+    switchTill: "Kasse wechseln",
+    removeTill: "Kasse entfernen",
+    removeTillDescription: "Sind Sie sicher, dass Sie die Kasse {{tillName}} von diesem Terminal entfernen möchten?",
+    logout: "Terminal abmelden",
+    loggedIn: "Terminal registriert",
+    registrationUUID: "Registrierungs-ID",
     unregisterTerminal: "Ein Terminal zwangsabmelden",
     unregisterTerminalDescription:
       "Ein Terminal zwangsabmelden. Dies sollte NIEMALS erfolgen, während ein Kassierer das Terminal noch benutzt",
+    loginUser: "Benutzer anmelden",
+    userLoginSuccess: "Benutzer erfolgreich angemeldet",
+    userLoginFailed: "Benutzeranmeldung fehlgeschlagen: {{reason}}",
   },
 } as const;
 

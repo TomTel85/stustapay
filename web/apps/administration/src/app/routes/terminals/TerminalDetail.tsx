@@ -18,6 +18,7 @@ import { useCurrentNode } from "@/hooks";
 import {
   Delete as DeleteIcon,
   Edit as EditIcon,
+  Login as LoginIcon,
   Logout as LogoutIcon,
   PointOfSale as PointOfSaleIcon,
 } from "@mui/icons-material";
@@ -30,6 +31,7 @@ import { useTranslation } from "react-i18next";
 import QRCode from "react-qr-code";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import { TerminalUserLogin } from "./TerminalUserLogin";
 
 export const TerminalDetail: React.FC = () => {
   const { t } = useTranslation();
@@ -48,6 +50,7 @@ export const TerminalDetail: React.FC = () => {
   const { data: users, error: userError } = useListUsersQuery({ nodeId: currentNode.id });
   const { data: tills, error: tillError } = useListTillsQuery({ nodeId: currentNode.id });
   const [switchTillOpen, setSwitchTillOpen] = React.useState(false);
+  const [loginUserOpen, setLoginUserOpen] = React.useState(false);
 
   const openModal = useOpenModal();
 
@@ -154,6 +157,13 @@ export const TerminalDetail: React.FC = () => {
             ] as const)
           : []),
         {
+          label: t("terminal.loginUser"),
+          onClick: () => setLoginUserOpen(true),
+          color: "primary",
+          icon: <LoginIcon />,
+          hidden: terminal.active_user_id != null,
+        },
+        {
           label: t("terminal.logout"),
           onClick: openUnregisterTerminalDialog,
           color: "warning",
@@ -212,6 +222,14 @@ export const TerminalDetail: React.FC = () => {
         </Paper>
       )}
       <TerminalSwitchTill open={switchTillOpen} terminalId={terminal.id} onClose={() => setSwitchTillOpen(false)} />
+      {users && (
+        <TerminalUserLogin
+          open={loginUserOpen}
+          terminalId={terminal.id}
+          users={users}
+          onClose={() => setLoginUserOpen(false)}
+        />
+      )}
     </DetailLayout>
   );
 };
