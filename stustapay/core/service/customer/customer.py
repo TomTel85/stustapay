@@ -70,17 +70,19 @@ class CustomerService(Service[Config]):
         )
 
     @with_db_transaction
-    async def login_customer(self, *, conn: Connection, uid: int , pin: str) -> CustomerLoginSuccess:
-        # Customer has hardware tag and pin
-        print(uid)
-        print(pin)
+    async def login_customer(self, *, conn: Connection, uid: int, pin: str, node_id: int) -> CustomerLoginSuccess:
+        node = await fetch_event_node_for_node(conn=conn, node_id=node_id)
+        if node is None:
+            raise InvalidArgument("Invalid node")
+
         customer = await conn.fetch_maybe_one(
             Customer,
-            "select c.* from user_tag ut join customer c on ut.id = c.user_tag_id where (ut.pin = $1 or ut.pin = $2) AND ut.uid = $3",
+            "select c.* from user_tag ut join customer c on ut.id = c.user_tag_id where (ut.pin = $1 or ut.pin = $2) AND ut.uid = $3 AND c.node_id = any($4)",
             # TODO: restore case sensitivity
             pin.lower(),  # for simulator
             pin.upper(),  # for humans
             uid,
+            node.ids_to_event_node,
         )
         if customer is None:
             raise AccessDenied("Invalid user tag or pin")
