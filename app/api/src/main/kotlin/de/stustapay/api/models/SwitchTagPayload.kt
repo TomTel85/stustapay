@@ -40,5 +40,8 @@ data class SwitchTagPayload (
     @SerialName(value = "comment")
     val comment: kotlin.String
 
-)
+) {
+
+
+}
 
