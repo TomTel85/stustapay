@@ -49,6 +49,8 @@ async def login(
         raise AccessDenied("Invalid user tag") from e
     
     base_url = str(request.base_url).rstrip('/')
+    print(f"base_url: {base_url}")
+    print(request)
     response = await customer_service.login_customer(uid=user_tag_uid, pin=payload.pin, base_url=base_url)
     return {"customer": response.customer, "access_token": response.token, "grant_type": "bearer"}
 
