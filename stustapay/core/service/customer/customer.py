@@ -70,7 +70,14 @@ class CustomerService(Service[Config]):
         )
 
     @with_db_transaction
-    async def login_customer(self, *, conn: Connection, uid: int, pin: str, node_id: int) -> CustomerLoginSuccess:
+    async def login_customer(self, *, conn: Connection, uid: int, pin: str, base_url: str) -> CustomerLoginSuccess:
+        # Get the node_id from the base_url similar to get_api_config
+        node_id = await conn.fetchval(
+            "select n.id from node n join event e on n.event_id = e.id where e.customer_portal_url = $1", base_url
+        )
+        if node_id is None:
+            raise InvalidArgument("Invalid customer portal configuration")
+            
         node = await fetch_event_node_for_node(conn=conn, node_id=node_id)
         if node is None:
             raise InvalidArgument("Invalid node")
