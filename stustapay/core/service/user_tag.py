@@ -51,12 +51,16 @@ async def create_user_tags(conn: Connection, node_id: int, tags: list[NewUserTag
         raise InvalidArgument("List of tags to create is empty")
 
     for tag in tags:
+        print(tag)
         await conn.execute(
-            "insert into user_tag (node_id, pin, restriction, secret_id) values ($1, $2, $3, $4)",
+            "insert into user_tag (node_id, pin, restriction, secret_id, uid, is_vip, comment) values ($1, $2, $3, $4, $5, $6, $7)",
             node_id,
             tag.pin,
             tag.restriction.value if tag.restriction is not None else None,
             tag.secret_id,
+            tag.uid,
+            tag.is_vip,
+            tag.comment,
         )
 
 

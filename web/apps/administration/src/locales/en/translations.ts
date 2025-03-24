@@ -115,7 +115,7 @@ export const translations = {
     createButton: "Create new tags",
     uploadPinCsv: "Upload CSV with tag pins",
     uploadPinCsvDescription:
-      'Csv with one column "pin" containing the string encoded pins of all tags which are to be created',
+      'CSV with columns "pin" (required), "uid" (optional), "is_vip" (optional), and "comment" (optional) for all tags to be created. Note: Some fields may not be supported by your backend version.',
     willCreate: "Will create {{nTags}} new user tags",
     firstNTags: "The following are the first {{actualNum}} tags which will be created",
     vipStatus: "VIP Status",

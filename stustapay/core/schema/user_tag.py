@@ -20,6 +20,9 @@ class NewUserTag(BaseModel):
     pin: str
     restriction: ProductRestriction | None = None
     secret_id: int
+    uid: Optional[int] = None
+    is_vip: bool = False
+    comment: Optional[str] = None
 
 
 class UserTagDetail(BaseModel):

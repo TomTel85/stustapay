@@ -41,6 +41,9 @@ const VisuallyHiddenInput = styled("input")({
 const CsvTagsSchema = z.array(
   z.object({
     pin: z.string(),
+    uid: z.number().optional(),
+    is_vip: z.boolean().optional(),
+    comment: z.string().optional(),
   })
 );
 
@@ -59,18 +62,28 @@ const initialValues: NewUserTags = {
   tags: [],
 };
 
-const parseCsv = (csvContent: string): Array<{ pin: string }> | null => {
-  const parsed = Papa.parse(csvContent, {
+const parseCsv = (csvContent: string): Array<{ pin: string; uid?: number; is_vip?: boolean; comment?: string }> | null => {
+  const parsed = Papa.parse<{ pin: string; uid?: string; is_vip?: string; comment?: string }>(csvContent, {
     delimiter: ",",
     header: true,
     skipEmptyLines: true,
   });
+  
   if (parsed.errors.length > 0) {
     toast.error(`There was an error in the csv file: ${parsed.errors.join(", ")}`);
     return null;
   }
-  console.log(parsed.data);
-  const validated = CsvTagsSchema.safeParse(parsed.data);
+  
+  // Process the data to convert string values to appropriate types
+  const processedData = parsed.data.map(item => ({
+    pin: item.pin,
+    uid: item.uid ? Number(item.uid) : undefined,
+    is_vip: item.is_vip ? (item.is_vip.toLowerCase() === 'true' || item.is_vip === '1') : undefined,
+    comment: item.comment || undefined
+  }));
+  
+  console.log(processedData);
+  const validated = CsvTagsSchema.safeParse(processedData);
   if (!validated.success) {
     toast.error(`There was an error in the csv file: ${validated.error.issues}`);
     return null;
@@ -157,12 +170,18 @@ const TagsForm: React.FC<FormikProps<NewUserTags>> = (props) => {
               <TableHead>
                 <TableRow>
                   <TableCell>{t("userTag.pin")}</TableCell>
+                  <TableCell>{t("userTag.uid")}</TableCell>
+                  <TableCell>{t("userTag.vipStatus")}</TableCell>
+                  <TableCell>{t("userTag.comment")}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {values.tags.slice(0, 10).map((t) => (
-                  <TableRow key={t.pin}>
-                    <TableCell>{t.pin}</TableCell>
+                {values.tags.slice(0, 10).map((tag) => (
+                  <TableRow key={tag.pin}>
+                    <TableCell>{tag.pin}</TableCell>
+                    <TableCell>{tag.uid}</TableCell>
+                    <TableCell>{tag.is_vip ? t("common.yes") : t("common.no")}</TableCell>
+                    <TableCell>{tag.comment}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -193,6 +212,9 @@ export const UserTagsCreate: React.FC = () => {
             pin: t.pin,
             secret_id: userTags.secret_id,
             restriction: userTags.restriction,
+            uid: t.uid,
+            is_vip: t.is_vip,
+            comment: t.comment,
           })),
         })
       }

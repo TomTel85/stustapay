@@ -119,7 +119,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
     create: "Benutzer-Tag erstellen",
     createButton: "Benutzer-Tag erstellen",
     uploadPinCsv: "CSV mit Tag-PINs hochladen",
-    uploadPinCsvDescription: 'CSV mit einer Spalte "pin", die die string-codierten PINs aller zu erstellenden Tags enthält',
+    uploadPinCsvDescription: 'CSV mit Spalten "pin" (erforderlich), "uid" (optional), "is_vip" (optional) und "comment" (optional) für alle zu erstellenden Tags. Hinweis: Einige Felder werden möglicherweise nicht von Ihrer Backend-Version unterstützt.',
     willCreate: "Es werden {{nTags}} neue Benutzer-Tags erstellt",
     firstNTags: "Die folgenden sind die ersten {{actualNum}} Tags, die erstellt werden",
     vipStatus: "VIP-Status",
