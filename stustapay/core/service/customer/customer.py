@@ -63,29 +63,34 @@ class CustomerService(Service[Config]):
         self.auth_service = auth_service
         self.config_service = config_service
         self.logger = logging.getLogger("customer")
-        self.current_base_url = None  # Add this to store the current base URL context
 
         self.sumup = SumupService(db_pool=db_pool, config=config, auth_service=auth_service)
         self.payout = PayoutService(
             db_pool=db_pool, config=config, auth_service=auth_service, config_service=config_service
         )
 
-    # Add this method to set the base URL context
-    def set_base_url_context(self, base_url: str):
-        self.current_base_url = base_url
-
     @with_db_transaction
     async def login_customer(self, *, conn: Connection, uid: int, pin: str) -> CustomerLoginSuccess:
-        if not self.current_base_url:
-            raise InvalidArgument("Base URL context not set, please call set_base_url_context first")
+        # Try to get the event name from config
+        event_name = None
+        print(self.config.core)
+        if hasattr(self.config.core, "event_name"):
+            event_name = self.config.core.event_name
+        
+        # If we have an event name, use it to find the node_id
+        if event_name:
+            node_id = await conn.fetchval(
+                "select n.id from node n join event e on n.event_id = e.id where e.name = $1", 
+                event_name
+            )
+        else:
+            # Fallback to getting the first active event's node_id
+            node_id = await conn.fetchval(
+                "select n.id from node n join event e on n.event_id = e.id where e.active = true limit 1"
+            )
             
-        # Get the node_id from the base_url
-        node_id = await conn.fetchval(
-            "select n.id from node n join event e on n.event_id = e.id where e.customer_portal_url = $1", 
-            self.current_base_url
-        )
         if node_id is None:
-            raise InvalidArgument("Invalid customer portal configuration")
+            raise InvalidArgument("No suitable event found")
             
         node = await fetch_event_node_for_node(conn=conn, node_id=node_id)
         if node is None:
@@ -98,7 +103,7 @@ class CustomerService(Service[Config]):
             pin.lower(),  # for simulator
             pin.upper(),  # for humans
             uid,
-            node.id,  # Fixed: was using node.id
+            node.id,  
         )
         if customer is None:
             raise AccessDenied("Invalid user tag or pin")
@@ -258,9 +263,6 @@ class CustomerService(Service[Config]):
 
     @with_db_transaction(read_only=True)
     async def get_api_config(self, *, conn: Connection, base_url: str) -> CustomerPortalApiConfig:
-        # Store the base_url for potential future use
-        self.current_base_url = base_url
-        
         node_id = await conn.fetchval(
             "select n.id from node n join event e on n.event_id = e.id where e.customer_portal_url = $1", base_url
         )
