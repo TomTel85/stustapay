@@ -65,6 +65,7 @@ def requires_sumup_online_topup_enabled(func):
         conn = kwargs["conn"]
         event = await fetch_restricted_event_settings_for_node(conn, node_id=kwargs["current_customer"].node_id)
         is_sumup_enabled = event.is_sumup_topup_enabled(self.config.core)
+        print(event)
         if not is_sumup_enabled:
             raise InvalidArgument("Online Top Up is currently disabled")
 
