@@ -82,7 +82,7 @@ class CustomerService(Service[Config]):
             pin.lower(),  # for simulator
             pin.upper(),  # for humans
             uid,
-            node.ids_to_event_node,
+            node.id,
         )
         if customer is None:
             raise AccessDenied("Invalid user tag or pin")
@@ -114,17 +114,8 @@ class CustomerService(Service[Config]):
 
     @with_db_transaction(read_only=True)
     @requires_customer
-    async def get_customer(self, *, conn: Connection, current_customer: Customer) -> Optional[Customer]:
-        # Fetch customer with node validation to ensure they belong to the correct node
-        customer = await conn.fetch_maybe_one(
-            Customer,
-            "select c.* from customer c where c.id = $1 and c.node_id = $2",
-            current_customer.id,
-            current_customer.node_id,
-        )
-        if customer is None:
-            raise AccessDenied("Customer not found or access denied")
-        return customer
+    async def get_customer(self, *, current_customer: Customer) -> Optional[Customer]:
+        return current_customer
 
     @with_db_transaction(read_only=True)
     @requires_customer
