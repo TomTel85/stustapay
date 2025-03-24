@@ -55,6 +55,7 @@ fun SwapView(
         NfcScanDialog(state = rememberDialogDisplayState(true),
             onDismiss = { viewModel.returnToRoot() },
             onScan = { tag ->
+                viewModel.setOldTagUid(tag.uid)
                 viewModel.setOldTagPin(tag.pin.orEmpty())
                 viewModel.returnToRoot()
             }) {

@@ -2,6 +2,7 @@ package de.stustapay.stustapay.ui.swap
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ionspin.kotlin.bignum.integer.BigInteger
 import com.ionspin.kotlin.bignum.integer.toBigInteger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.stustapay.libssp.model.NfcTag
@@ -61,7 +62,11 @@ class SwapViewModel @Inject constructor(
     }
 
     fun setOldTagPin(pin: String) {
-        _oldTag.update { NfcTag(0uL.toBigInteger(), pin) }
+        _oldTag.update { currentTag -> NfcTag(currentTag.uid, pin) }
+    }
+
+    fun setOldTagUid(uid: BigInteger) {
+        _oldTag.update { currentTag -> NfcTag(uid, currentTag.pin) }
     }
 
     fun setComment(comment: String) {

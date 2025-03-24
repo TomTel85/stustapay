@@ -14,25 +14,24 @@ router = APIRouter(
 
 
 class SwitchTagPayload(BaseModel):
-    old_user_tag_pin: str
+    old_user_tag_uid: int
     new_user_tag_uid: int
-    new_user_tag_pin: str
     comment: str
 
 
-@router.post("/switch_tag", summary="")
+@router.post("/switch_tag", summary="Switch a customer's tag to a new one", response_model=None)
 async def switch_tag(
     token: CurrentAuthToken,
     payload: SwitchTagPayload,
     account_service: ContextAccountService,
 ):
-    await account_service.switch_account_tag_uid_terminal(
+    await account_service.switch_account_tag_uid_by_uid(
         token=token,
-        old_user_tag_pin=payload.old_user_tag_pin,
+        old_user_tag_uid=payload.old_user_tag_uid,
         new_user_tag_uid=payload.new_user_tag_uid,
-        new_user_tag_pin=payload.new_user_tag_pin,
         comment=payload.comment,
     )
+    return {}
 
 
 @router.get("/{customer_tag_uid}", summary="Obtain a customer by tag uid", response_model=Account)

@@ -51,9 +51,8 @@ class CustomerRemoteDataSource @Inject constructor(
         return terminalApiAccessor.execute {
             it.customer()?.switchTag(
                 SwitchTagPayload(
-                    oldUserTagPin = oldTag.pin ?: return@execute null,
+                    oldUserTagUid = oldTag.uid,
                     newUserTagUid = newTag.uid,
-                    newUserTagPin = newTag.pin ?: return@execute null,
                     comment = comment
                 )
             )

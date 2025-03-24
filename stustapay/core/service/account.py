@@ -359,3 +359,66 @@ class AccountService(Service[Config]):
             new_user_tag_uid=new_user_tag_uid,
             comment=comment,
         )
+
+    @staticmethod
+    async def _switch_account_tag_uid_by_uid(
+        *,
+        conn: Connection,
+        node: Node,
+        old_user_tag_uid: int,
+        new_user_tag_uid: int,
+        comment: Optional[str],
+    ):
+        row = await conn.fetchrow(
+            "select a.id as account_id, u.id as user_tag_id "
+            "from account a join user_tag u on a.user_tag_id = u.id "
+            "where u.uid = $1 and a.node_id = any($2)",
+            old_user_tag_uid,
+            node.ids_to_event_node,
+        )
+        if not row:
+            raise NotFound(element_type="user_tag", element_id=str(old_user_tag_uid))
+        account_id, old_user_tag_id = row
+
+        new_user_tag_id = await conn.fetchval(
+            "select id from user_tag where uid = $1 and node_id = any($2)", new_user_tag_uid, node.ids_to_root
+        )
+        if new_user_tag_id is None:
+            raise NotFound(element_type="user_tag", element_id=str(new_user_tag_uid))
+
+        new_tag_is_registered = await conn.fetchval(
+            "select exists(select from account where user_tag_id = $1)", new_user_tag_id
+        )
+        if new_tag_is_registered:
+            raise InvalidArgument("New tag is already activated in the system")
+
+        new_tag_was_used = await conn.fetchval(
+            "select exists(select from account_tag_association_history where user_tag_id = $1)", new_user_tag_id
+        )
+        if new_tag_was_used:
+            raise InvalidArgument("New tag has been previously associated with an account")
+
+        await conn.fetchval(
+            "update account set user_tag_id = $2 where id = $1 returning id", account_id, new_user_tag_id
+        )
+        await conn.execute("update user_tag set uid = $2 where id = $1", new_user_tag_id, new_user_tag_uid)
+        await conn.execute("update user_tag set comment = $2 where id = $1", old_user_tag_id, comment)
+
+    @with_db_transaction
+    @requires_terminal([Privilege.customer_management])
+    async def switch_account_tag_uid_by_uid(
+        self,
+        *,
+        conn: Connection,
+        node: Node,
+        old_user_tag_uid: int,
+        new_user_tag_uid: int,
+        comment: Optional[str],
+    ):
+        await self._switch_account_tag_uid_by_uid(
+            conn=conn,
+            node=node,
+            old_user_tag_uid=old_user_tag_uid,
+            new_user_tag_uid=new_user_tag_uid,
+            comment=comment,
+        )
