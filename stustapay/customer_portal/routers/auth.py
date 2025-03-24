@@ -25,22 +25,20 @@ class LoginResponse(BaseModel):
 
 
 @router.get("/login/qr", summary="customer login via QR code")
-async def login_with_qr(username: str, pin: str, request: Request, customer_service: ContextCustomerService):
+async def login_with_qr(username: str, pin: str, customer_service: ContextCustomerService):
     try:
         user_tag_uid = int(username, 16)
     except Exception as e:  # pylint: disable=broad-except
         raise AccessDenied("Invalid user tag") from e
     
-    base_url = str(request.base_url).rstrip('/')
     # Process the QR code login
-    response = await customer_service.login_customer(uid=user_tag_uid, pin=pin, base_url=base_url)
+    response = await customer_service.login_customer(uid=user_tag_uid, pin=pin)
     return {"customer": response.customer, "access_token": response.token, "grant_type": "bearer"}
 
 
 @router.post("/login", summary="customer login with wristband hardware tag and pin", response_model=LoginResponse)
 async def login(
     payload: LoginPayload,
-    request: Request,
     customer_service: ContextCustomerService,
 ):
     try:
@@ -48,10 +46,7 @@ async def login(
     except Exception as e:  # pylint: disable=broad-except
         raise AccessDenied("Invalid user tag") from e
     
-    base_url = str(request.base_url).rstrip('/')
-    print(f"base_url: {base_url}")
-    print(request)
-    response = await customer_service.login_customer(uid=user_tag_uid, pin=payload.pin, base_url=base_url)
+    response = await customer_service.login_customer(uid=user_tag_uid, pin=payload.pin)
     return {"customer": response.customer, "access_token": response.token, "grant_type": "bearer"}
 
 

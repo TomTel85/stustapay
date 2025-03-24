@@ -69,27 +69,16 @@ class CustomerService(Service[Config]):
             db_pool=db_pool, config=config, auth_service=auth_service, config_service=config_service
         )
 
-    @with_db_transaction(read_only=True)
-    async def get_node_id_for_base_url(self, *, conn: Connection, base_url: str) -> int:
-        node_id = await conn.fetchval(
-            "select n.id from node n join event e on n.event_id = e.id where e.customer_portal_url = $1", base_url
-        )
-        if node_id is None:
-            raise InvalidArgument("Invalid customer portal configuration")
-        return node_id
-
     @with_db_transaction
-    async def login_customer(self, *, conn: Connection, uid: int, pin: str, base_url: str) -> CustomerLoginSuccess:
-        node_id = await self.get_node_id_for_base_url(conn=conn, base_url=base_url)
+    async def login_customer(self, *, conn: Connection, uid: int, pin: str) -> CustomerLoginSuccess:
 
         customer = await conn.fetch_maybe_one(
             Customer,
-            "select c.* from user_tag ut join customer c on ut.id = c.user_tag_id where (ut.pin = $1 or ut.pin = $2) AND ut.uid = $3 AND c.node_id = $4",
+            "select c.* from user_tag ut join customer c on ut.id = c.user_tag_id where (ut.pin = $1 or ut.pin = $2) AND ut.uid = $3",
             # TODO: restore case sensitivity
             pin.lower(),  # for simulator
             pin.upper(),  # for humans
             uid,
-            node_id,
         )
         if customer is None:
             raise AccessDenied("Invalid user tag or pin")
