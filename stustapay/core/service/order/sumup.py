@@ -26,6 +26,7 @@ from stustapay.core.service.auth import AuthService
 from stustapay.core.service.common.decorators import requires_customer
 from stustapay.core.service.order.pending_order import (
     fetch_pending_order,
+    fetch_order_by_uuid,
     fetch_pending_orders,
     load_pending_ticket_sale,
     load_pending_topup,
@@ -65,7 +66,6 @@ def requires_sumup_online_topup_enabled(func):
         conn = kwargs["conn"]
         event = await fetch_restricted_event_settings_for_node(conn, node_id=kwargs["current_customer"].node_id)
         is_sumup_enabled = event.is_sumup_topup_enabled(self.config.core)
-        print(event)
         if not is_sumup_enabled:
             raise InvalidArgument("Online Top Up is currently disabled")
 
@@ -175,27 +175,38 @@ class SumupService(Service[Config]):
     async def check_online_topup_checkout(
         self, *, conn: Connection, current_customer: Customer, order_uuid: uuid.UUID
     ) -> SumUpCheckoutStatus:
-        pending_order = await fetch_pending_order(conn=conn, uuid=order_uuid)
-        if pending_order.order_type != PendingOrderType.topup:
-            raise InvalidArgument("Invalid order uuid")
-        topup = load_pending_topup(pending_order)
-        if topup.customer_account_id != current_customer.id:
-            raise InvalidArgument("Invalid order uuid")
-        if pending_order.status == PendingOrderStatus.booked:
-            return SumUpCheckoutStatus.PAID
-        if pending_order.status == PendingOrderStatus.cancelled:
-            return SumUpCheckoutStatus.FAILED
+        try:
+            # Use fetch_order_by_uuid to get the order regardless of status
+            pending_order = await fetch_order_by_uuid(conn=conn, uuid=order_uuid)
+            if pending_order.order_type != PendingOrderType.topup:
+                raise InvalidArgument("Invalid order uuid")
+            topup = load_pending_topup(pending_order)
+            if topup.customer_account_id != current_customer.id:
+                raise InvalidArgument("Invalid order uuid")
+            if pending_order.status == PendingOrderStatus.booked:
+                return SumUpCheckoutStatus.PAID
+            if pending_order.status == PendingOrderStatus.cancelled:
+                return SumUpCheckoutStatus.FAILED
 
-        processed_topup = await self.process_pending_order(conn=conn, pending_order=pending_order)
-        if processed_topup is None:
-            return SumUpCheckoutStatus.FAILED
-        if isinstance(processed_topup, CompletedTopUp):
-            return SumUpCheckoutStatus.PAID
+            # Only process if the order is still pending
+            if pending_order.status == PendingOrderStatus.pending:
+                processed_topup = await self.process_pending_order(conn=conn, pending_order=pending_order)
+                if processed_topup is None:
+                    return SumUpCheckoutStatus.FAILED
+                if isinstance(processed_topup, CompletedTopUp):
+                    return SumUpCheckoutStatus.PAID
 
-        self.logger.warning(
-            f"Weird order state for uuid = {order_uuid}. Sumup order was accepted but we have the wrong order type"
-        )
-        return SumUpCheckoutStatus.FAILED
+                self.logger.warning(
+                    f"Weird order state for uuid = {order_uuid}. Sumup order was accepted but we have the wrong order type"
+                )
+            
+            return SumUpCheckoutStatus.FAILED
+        except asyncpg.exceptions.PostgresError:
+            self.logger.exception(f"Error checking sumup checkout for order_uuid={order_uuid}")
+            return SumUpCheckoutStatus.FAILED
+        except Exception as e:
+            self.logger.exception(f"Unexpected error checking sumup checkout: {e}")
+            return SumUpCheckoutStatus.FAILED
 
     @with_db_transaction
     @requires_customer

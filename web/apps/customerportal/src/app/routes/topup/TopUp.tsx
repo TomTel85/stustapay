@@ -124,9 +124,17 @@ export const TopUp: React.FC = () => {
             }
             // TODO: retry somehow as the status is still pending
           })
-          .catch(() => {
-            // TODO: handle this
-            toast.error("unexpected ");
+          .catch((error) => {
+            // If we get a 404, the payment might have succeeded but the order was already processed
+            // This can happen when the order is marked as booked before we check its status
+            if (error?.status === 404) {
+              console.log("Order not found, checking bookings...");
+              dispatch({ type: "sumup-success" });
+            } else {
+              console.error("Error checking payment status:", error);
+              toast.error(t("topup.unexpectedError"));
+              dispatch({ type: "sumup-error" });
+            }
           });
       }
     };

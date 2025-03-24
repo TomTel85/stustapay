@@ -36,6 +36,12 @@ async def fetch_pending_order(conn: Connection, uuid: UUID) -> PendingOrder:
     )
 
 
+async def fetch_order_by_uuid(conn: Connection, uuid: UUID) -> PendingOrder:
+    return await conn.fetch_one(
+        PendingOrder, "select * from pending_sumup_order where uuid = $1", uuid
+    )
+
+
 async def fetch_pending_orders(conn: Connection) -> list[PendingOrder]:
     return await conn.fetch_many(PendingOrder, "select * from pending_sumup_order where status = 'pending'")
 
