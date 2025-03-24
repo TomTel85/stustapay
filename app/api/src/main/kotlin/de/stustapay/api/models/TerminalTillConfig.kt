@@ -89,18 +89,15 @@ data class TerminalTillConfig (
     val buttons: kotlin.collections.List<TerminalButton>?,
 
     @SerialName(value = "sumup_secrets")
-    val sumupSecrets: TerminalSumupSecrets?
-
-) {
+    val sumupSecrets: TerminalSumupSecrets?,
 
     @SerialName(value = "available_roles")
     val availableRoles: kotlin.collections.List<UserRole>,
 
-    @SerialName(value = "post_payment_allowed") 
+    @SerialName(value = "post_payment_allowed")
     val postPaymentAllowed: kotlin.Boolean? = null,
-  
-    @SerialName(value = "sumup_payment_enabled") 
+
+    @SerialName(value = "sumup_payment_enabled")
     val sumupPaymentEnabled: kotlin.Boolean? = null
 
-}
-
+)

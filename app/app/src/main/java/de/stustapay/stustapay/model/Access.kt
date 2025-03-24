@@ -69,15 +69,15 @@ object Access {
 
     fun canTopUp(terminal: TerminalConfig, user: CurrentUser): Boolean {
         return terminal.till?.postPaymentAllowed == false && terminal.till?.allowTopUp == true && 
-               (user.privileges.contains(Privilege.canBookOrders) || user.privileges.contains(Privilege.canTopup))
+               (user.privileges.contains(Privilege.can_book_orders) || user.privileges.contains(Privilege.canTopup))
     }
 
     fun canPayOut(terminal: TerminalConfig, user: CurrentUser): Boolean {
-        return terminal.till?.allowCashOut == true && user.privileges.contains(Privilege.canBookOrders)
+        return terminal.till?.allowCashOut == true && user.privileges.contains(Privilege.can_book_orders)
     }
     
     fun postPaymentAllowed(terminal: TerminalConfig, user: CurrentUser): Boolean {
-        return terminal.till?.postPaymentAllowed == true && terminal.till?.allowTopUp == true && user.privileges.contains(Privilege.canBookOrders)
+        return terminal.till?.postPaymentAllowed == true && terminal.till?.allowTopUp == true && user.privileges.contains(Privilege.can_book_orders)
     }
 
     /**
@@ -86,6 +86,6 @@ object Access {
      */
     fun hasOnlyTopUpPrivilege(user: CurrentUser): Boolean {
         return user.privileges.contains(Privilege.canTopup) && 
-               !user.privileges.contains(Privilege.canBookOrders)
+               !user.privileges.contains(Privilege.can_book_orders)
     }
 }
