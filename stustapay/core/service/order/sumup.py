@@ -139,12 +139,21 @@ class SumupService(Service[Config]):
                 self.logger.info(f"Found transaction for order {pending_order.uuid} with status {transaction.status}")
                 if transaction.status == "SUCCESSFUL":
                     # Process the successful transaction
+                    node = await fetch_node(conn=conn, node_id=pending_order.node_id)
+                    if node is None:
+                        self.logger.error(f"Found a pending order without a matching node: {pending_order.uuid}")
+                        raise InvalidArgument("Found a pending order without a matching node")
+                    till = await fetch_till(conn=conn, node=node, till_id=pending_order.till_id)
+                    if till is None:
+                        self.logger.error(f"Found a pending order without a matching till: {pending_order.uuid}")
+                        raise InvalidArgument("Found a pending order without a matching till")
+                        
                     if pending_order.order_type == PendingOrderType.topup:
                         topup = load_pending_topup(pending_order)
-                        return await self._process_topup(conn=conn, node=event, till=event.till, pending_order=pending_order, topup=topup)
+                        return await self._process_topup(conn=conn, node=node, till=till, pending_order=pending_order, topup=topup)
                     elif pending_order.order_type == PendingOrderType.ticket:
                         ticket_sale = load_pending_ticket_sale(pending_order)
-                        return await self._process_ticket_sale(conn=conn, node=event, till=event.till, pending_order=pending_order, ticket_sale=ticket_sale)
+                        return await self._process_ticket_sale(conn=conn, node=node, till=till, pending_order=pending_order, ticket_sale=ticket_sale)
             except SumUpError as e:
                 self.logger.debug(f"No transaction found for order {pending_order.uuid}: {e}")
                 # Continue to check for online checkout
@@ -162,12 +171,21 @@ class SumupService(Service[Config]):
                 self.logger.info(f"Found checkout for order {pending_order.uuid} with status {sumup_checkout.status}")
                 if sumup_checkout.status == SumUpCheckoutStatus.PAID:
                     # Process the successful checkout
+                    node = await fetch_node(conn=conn, node_id=pending_order.node_id)
+                    if node is None:
+                        self.logger.error(f"Found a pending order without a matching node: {pending_order.uuid}")
+                        raise InvalidArgument("Found a pending order without a matching node")
+                    till = await fetch_till(conn=conn, node=node, till_id=pending_order.till_id)
+                    if till is None:
+                        self.logger.error(f"Found a pending order without a matching till: {pending_order.uuid}")
+                        raise InvalidArgument("Found a pending order without a matching till")
+                        
                     if pending_order.order_type == PendingOrderType.topup:
                         topup = load_pending_topup(pending_order)
-                        return await self._process_topup(conn=conn, node=event, till=event.till, pending_order=pending_order, topup=topup)
+                        return await self._process_topup(conn=conn, node=node, till=till, pending_order=pending_order, topup=topup)
                     elif pending_order.order_type == PendingOrderType.ticket:
                         ticket_sale = load_pending_ticket_sale(pending_order)
-                        return await self._process_ticket_sale(conn=conn, node=event, till=event.till, pending_order=pending_order, ticket_sale=ticket_sale)
+                        return await self._process_ticket_sale(conn=conn, node=node, till=till, pending_order=pending_order, ticket_sale=ticket_sale)
             except SumUpError as e:
                 self.logger.error(f"SumUp API error while finding checkout for order {pending_order.uuid}: {e}")
                 return None
