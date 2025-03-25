@@ -92,7 +92,7 @@ export const translations = {
     confirmDonateAllContent: "Do you want to donate your remaining balance of {{remainingBalance}}?",
     confirmDonateAmountTitle: "Donate?",
     confirmDonateAmountContent: "Do you want to make a donation of {{donation}}?",
-    onlyDuringEvent: "Refunds of remaining balance are only available during the event!",
+    onlyDuringEvent: "Refunds of remaining balance are only available after the event!",
   },
   topup: {
     amount: "Amount",

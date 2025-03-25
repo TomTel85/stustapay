@@ -56,7 +56,9 @@ async def update_customer_info(
     mail_service: ContextMailService,
     customer_bank: CustomerBank,
 ):
-    await customer_service.update_customer_info(customer_bank=customer_bank, token=token, mail_service=mail_service)
+    email_info = await customer_service.update_customer_info(customer_bank=customer_bank, token=token, mail_service=mail_service)
+    if email_info:
+        await customer_service.send_payout_registered_email(mail_service=mail_service, email_info=email_info)
 
 
 @router.post(

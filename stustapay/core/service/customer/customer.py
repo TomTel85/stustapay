@@ -62,7 +62,7 @@ class CustomerService(Service[Config]):
         super().__init__(db_pool, config)
         self.auth_service = auth_service
         self.config_service = config_service
-        self.logger = logging.getLogger("customer")
+        self.logger = logging.getLogger("customer_service")
 
         self.sumup = SumupService(db_pool=db_pool, config=config, auth_service=auth_service)
         self.payout = PayoutService(
@@ -158,60 +158,125 @@ class CustomerService(Service[Config]):
         self, *, conn: Connection, current_customer: Customer, customer_bank: CustomerBank, mail_service: MailService
     ) -> None:
         event_node = await fetch_event_node_for_node(conn=conn, node_id=current_customer.node_id)
-        assert event_node is not None
-        assert event_node.event is not None
+
+        # check customer has no pending payouts
         await self.check_payout_run(conn, current_customer)
 
-        # check iban
-        try:
-            iban = IBAN(customer_bank.iban, validate_bban=True)
-        except ValueError as exc:
-            raise InvalidArgument("Provided IBAN is not valid") from exc
+        account_name = customer_bank.account_name
+        iban = customer_bank.iban
 
-        # check country code
-        if not event_node.event.sepa_enabled:
-            raise InvalidArgument("SEPA payout is disabled")
+        if iban is not None:
+            validation_result = validate_iban(iban)
+            if not validation_result.valid:
+                raise InvalidArgument("Provided IBAN is not valid")
+            # check country code of the IBAN
+            country_code = iban[0:2]
+            if country_code not in sepa_countries:
+                raise InvalidArgument("Provided IBAN country code is not supported")
 
-        allowed_country_codes = event_node.event.sepa_allowed_country_codes
-        if iban.country_code not in allowed_country_codes:
-            raise InvalidArgument("Provided IBAN contains country code which is not supported")
+            iban = iban.replace(" ", "")
 
-        # check donation
-        if customer_bank.donation < 0:
-            raise InvalidArgument("Donation cannot be negative")
-        if customer_bank.donation > current_customer.balance:
-            raise InvalidArgument("Donation cannot be higher then your balance")
+        if account_name is not None:
+            if not validate_name(account_name):
+                raise InvalidArgument("Provided account name contains invalid special characters")
 
-        # check email
-        if not re.match(r"[^@]+@[^@]+\.[^@]+", customer_bank.email):
-            raise InvalidArgument("Provided email is not valid")
-
-        # if customer_info does not exist create it, otherwise update it
-        await conn.execute(
-            "update customer_info set iban=$2, account_name=$3, email=$4, donation=$5, donate_all=false, has_entered_info=true "
-            "where customer_account_id = $1",
-            current_customer.id,
-            iban.compact,
-            customer_bank.account_name,
-            customer_bank.email,
-            round(customer_bank.donation, 2),
+        # check if customer info record exists
+        customer_info_exists = await conn.fetchval(
+            "select exists(select from customer_info where customer_account_id = $1)", current_customer.id
         )
-        # get updated customer
-        current_customer = await conn.fetch_one(
+
+        if customer_info_exists:
+            if customer_bank.donation is not None:
+                await conn.execute(
+                    "update customer_info set "
+                    "   iban = $2, "
+                    "   account_name = $3, "
+                    "   email = $4, "
+                    "   has_entered_info = true,"
+                    "   donate_all = false, "
+                    "   donation = $5,"
+                    "   updated_at = now() "
+                    "where customer_account_id = $1",
+                    current_customer.id,
+                    iban,
+                    account_name,
+                    customer_bank.email,
+                    customer_bank.donation,
+                )
+            else:
+                await conn.execute(
+                    "update customer_info set "
+                    "   iban = $2, "
+                    "   account_name = $3, "
+                    "   email = $4, "
+                    "   has_entered_info = true,"
+                    "   donate_all = false,"
+                    "   updated_at = now() "
+                    "where customer_account_id = $1",
+                    current_customer.id,
+                    iban,
+                    account_name,
+                    customer_bank.email,
+                )
+        else:
+            if customer_bank.donation is not None:
+                await conn.execute(
+                    "insert into customer_info "
+                    "(customer_account_id, iban, account_name, email, has_entered_info, donate_all, donation, payout_export) "
+                    "values ($1, $2, $3, $4, true, false, $5, true)",
+                    current_customer.id,
+                    iban,
+                    account_name,
+                    customer_bank.email,
+                    customer_bank.donation,
+                )
+            else:
+                await conn.execute(
+                    "insert into customer_info "
+                    "(customer_account_id, iban, account_name, email, has_entered_info, donate_all, payout_export) "
+                    "values ($1, $2, $3, $4, true, false, true)",
+                    current_customer.id,
+                    iban,
+                    account_name,
+                    customer_bank.email,
+                )
+
+        # get updated customer information
+        updated_customer = await conn.fetch_one(
             Customer,
             "select * from customer where id = $1",
             current_customer.id,
         )
-        if current_customer.email is not None:
-            res_config = await fetch_restricted_event_settings_for_node(conn, current_customer.node_id)
-            assert res_config.payout_registered_message is not None
-            await mail_service.send_mail(
-                subject=res_config.payout_registered_subject,
-                message=res_config.payout_registered_message.format(**current_customer.model_dump()),
-                from_addr=res_config.payout_sender,
-                to_addr=current_customer.email,
-                node_id=current_customer.node_id,
-            )
+        
+        # Store email-related information to be used outside the transaction
+        email_to_send = None
+        if updated_customer.email is not None:
+            res_config = await fetch_restricted_event_settings_for_node(conn, updated_customer.node_id)
+            if res_config.email_enabled and res_config.payout_registered_message is not None:
+                email_to_send = {
+                    "subject": res_config.payout_registered_subject,
+                    "message": res_config.payout_registered_message.format(**updated_customer.model_dump()),
+                    "from_addr": res_config.payout_sender,
+                    "to_addr": updated_customer.email,
+                    "node_id": updated_customer.node_id
+                }
+                
+        return email_to_send
+
+    # New method to send email outside transaction
+    async def send_payout_registered_email(self, mail_service: MailService, email_info: dict) -> None:
+        if email_info:
+            try:
+                await mail_service.send_mail(
+                    subject=email_info["subject"],
+                    message=email_info["message"],
+                    from_addr=email_info["from_addr"],
+                    to_addr=email_info["to_addr"],
+                    node_id=email_info["node_id"],
+                )
+            except Exception as e:
+                self.logger.exception(f"Failed to send payout registration email: {e}")
+                # Email sending failure should not affect the overall operation
 
     async def check_payout_run(self, conn: Connection, current_customer: Customer) -> None:
         # if a payout is assigned, disallow updates.
