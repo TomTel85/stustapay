@@ -190,18 +190,27 @@ class SumUpApi:
     async def _get(self, url: str, query: dict | None = None) -> dict:
         async with aiohttp.ClientSession(trust_env=True, headers=self._get_sumup_auth_headers()) as session:
             try:
+                logger.debug(f"Making GET request to SumUp API: {url} with params {query}")
                 async with session.get(url, params=query, timeout=10) as response:
                     if not response.ok:
-                        resp = await response.json()
-                        err = _SumUpErrorFormat.model_validate(resp)
-                        raise SumUpError(f"SumUp API returned an error: {err.code} - {err.message}")
+                        resp_text = await response.text()
+                        logger.error(f"SumUp API error response: {resp_text}, status: {response.status}")
+                        try:
+                            resp = await response.json()
+                            err = _SumUpErrorFormat.model_validate(resp)
+                            raise SumUpError(f"SumUp API returned an error: {err.code} - {err.message}")
+                        except Exception as parse_err:
+                            logger.error(f"Failed to parse SumUp error response: {parse_err}")
+                            raise SumUpError(f"SumUp API returned an error with status {response.status}: {resp_text}")
                     return await response.json()
             except asyncio.TimeoutError as e:
+                logger.error(f"SumUp API timeout on GET {url}: {e}")
                 raise SumUpError("SumUp API timeout") from e
             except Exception as e:  # pylint: disable=bare-except
+                logger.error(f"Unexpected error in SumUp API GET {url}: {e}")
                 if isinstance(e, SumUpError):
                     raise e
-                raise SumUpError("SumUp API returned an unknown error") from e
+                raise SumUpError(f"SumUp API returned an unknown error: {str(e)}") from e
 
     async def _post(self, url: str, data: BaseModel, query: dict | None = None) -> dict:
         async with aiohttp.ClientSession(
@@ -209,22 +218,27 @@ class SumUpApi:
             headers=self._get_sumup_auth_headers(),
         ) as session:
             try:
+                logger.debug(f"Making POST request to SumUp API: {url} with data {data.model_dump()}")
                 async with session.post(url, data=data.model_dump_json(), params=query, timeout=10) as response:
                     if not response.ok:
+                        resp_text = await response.text()
+                        logger.error(f"SumUp API error response: {resp_text}, status: {response.status}")
                         try:
                             resp = await response.json()
                             err = _SumUpErrorFormat.model_validate(resp)
                             raise SumUpError(f'SumUp API returned an error: "{err.error}"')
-                        except Exception as e:
-                            logging.error(f"SumUp API error {response.content}, {e}")
-                            raise SumUpError("SumUp API returned an unknown error") from e
+                        except Exception as parse_err:
+                            logger.error(f"Failed to parse SumUp error response: {parse_err}")
+                            raise SumUpError(f"SumUp API returned an error with status {response.status}: {resp_text}")
                     return await response.json()
             except asyncio.TimeoutError as e:
+                logger.error(f"SumUp API timeout on POST {url}: {e}")
                 raise SumUpError("SumUp API timeout") from e
             except Exception as e:  # pylint: disable=bare-except
+                logger.error(f"Unexpected error in SumUp API POST {url}: {e}")
                 if isinstance(e, SumUpError):
                     raise e
-                raise SumUpError(f"SumUp API returned an unknown error {e}") from e
+                raise SumUpError(f"SumUp API returned an unknown error: {str(e)}") from e
 
     async def check_sumup_auth(self) -> bool:
         url = f"{SUMUP_API_URL}/merchants/{self.merchant_code}/payment-methods"
@@ -252,15 +266,29 @@ class SumUpApi:
         return [SumUpCheckout.model_validate(x) for x in resp]
 
     async def find_checkout(self, order_uuid: uuid.UUID) -> SumUpCheckout | None:
-        resp = await self._get(SUMUP_CHECKOUT_URL, {"checkout_reference": str(order_uuid)})
+        try:
+            logger.debug(f"Finding checkout for order {order_uuid}")
+            resp = await self._get(SUMUP_CHECKOUT_URL, {"checkout_reference": str(order_uuid)})
 
-        if not isinstance(resp, list):
-            raise SumUpError("SumUp API returned an invalid response")
+            if not isinstance(resp, list):
+                logger.error(f"SumUp API returned non-list response for find_checkout: {resp}")
+                raise SumUpError("SumUp API returned an invalid response")
 
-        if len(resp) != 1:
-            raise SumUpError(f"SumUp returned a non-unique checkout for the order uuid {order_uuid}")
+            if len(resp) == 0:
+                logger.warning(f"No SumUp checkout found for order_uuid {order_uuid}")
+                return None
+                
+            if len(resp) > 1:
+                logger.error(f"SumUp returned multiple checkouts for order_uuid {order_uuid}: {resp}")
+                raise SumUpError(f"SumUp returned a non-unique checkout for the order uuid {order_uuid}")
 
-        return SumUpCheckout.model_validate(resp[0])
+            checkout = SumUpCheckout.model_validate(resp[0])
+            logger.info(f"Found checkout for order {order_uuid} with status {checkout.status}")
+            return checkout
+        except Exception as e:
+            if not isinstance(e, SumUpError):
+                logger.error(f"Unexpected error in find_checkout for order {order_uuid}: {e}")
+            raise
 
     async def get_transaction(self, foreign_transaction_id: str) -> SumUpTransactionDetail:
         resp = await self._get(

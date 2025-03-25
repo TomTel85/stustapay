@@ -45,6 +45,7 @@ from stustapay.payment.sumup.api import (
     SumUpCheckout,
     SumUpCheckoutStatus,
     SumUpCreateCheckout,
+    SumUpError,
 )
 
 SUMUP_CHECKOUT_POLL_INTERVAL = timedelta(seconds=5)
@@ -122,52 +123,79 @@ class SumupService(Service[Config]):
     async def process_pending_order(
         self, conn: Connection, pending_order: PendingOrder
     ) -> CompletedTicketSale | CompletedTopUp | None:
-        event = await fetch_restricted_event_settings_for_node(conn=conn, node_id=pending_order.node_id)
-        sumup_api = self._create_sumup_api(merchant_code=event.sumup_merchant_code, api_key=event.sumup_api_key)
-        sumup_checkout = await sumup_api.find_checkout(pending_order.uuid)
-        if not sumup_checkout:
-            self.logger.debug(f"Order {pending_order.uuid} not found in sumup")
-            return None
-
-        if sumup_checkout.status == SumUpCheckoutStatus.FAILED:
-            self.logger.debug(f"Found a FAILED sumup order with uuid = {pending_order.uuid}")
-            await conn.execute(
-                "update pending_sumup_order set status = 'cancelled' where uuid = $1", pending_order.uuid
-            )
-            return None
-        elif sumup_checkout.status == SumUpCheckoutStatus.PAID:
-            self.logger.debug(f"Found a PAID sumup order with uuid = {pending_order.uuid}, starting order booking")
-            node = await fetch_node(conn=conn, node_id=pending_order.node_id)
-            if node is None:
-                raise InvalidArgument("Found a pending order without a matching node")
-            till = await fetch_till(conn=conn, node=node, till_id=pending_order.till_id)
-            if till is None:
-                raise InvalidArgument("Found a pending order without a matching till")
-            match pending_order.order_type:
-                case PendingOrderType.topup:
-                    topup = load_pending_topup(pending_order)
-                    await self._process_topup(conn=conn, pending_order=pending_order, topup=topup, node=node, till=till)
-                    return topup
-                case PendingOrderType.ticket:
-                    ticket_sale = load_pending_ticket_sale(pending_order)
-                    await self._process_ticket_sale(
-                        conn=conn, pending_order=pending_order, ticket_sale=ticket_sale, node=node, till=till
-                    )
-                    return ticket_sale
-                case _:
+        try:
+            self.logger.debug(f"Processing pending order {pending_order.uuid}")
+            event = await fetch_restricted_event_settings_for_node(conn=conn, node_id=pending_order.node_id)
+            
+            if not event.sumup_api_key or not event.sumup_merchant_code:
+                self.logger.error(f"Missing SumUp API key or merchant code for order {pending_order.uuid}")
+                return None
+                
+            sumup_api = self._create_sumup_api(merchant_code=event.sumup_merchant_code, api_key=event.sumup_api_key)
+            
+            try:
+                sumup_checkout = await sumup_api.find_checkout(pending_order.uuid)
+                if not sumup_checkout:
+                    self.logger.debug(f"Order {pending_order.uuid} not found in sumup")
                     return None
+            except SumUpError as e:
+                self.logger.error(f"SumUp API error while finding checkout for order {pending_order.uuid}: {e}")
+                return None
+            except Exception as e:
+                self.logger.exception(f"Unexpected error finding checkout for order {pending_order.uuid}: {e}")
+                return None
 
-        check_interval = min(
-            self.config.core.sumup_max_check_interval,
-            int(round(2.5 * pending_order.check_interval)),
-        )
-        await conn.execute(
-            "update pending_sumup_order set check_interval = $1, last_checked = now() where uuid = $2",
-            check_interval,
-            pending_order.uuid,
-        )
+            self.logger.info(f"Order {pending_order.uuid} status: {sumup_checkout.status}")
 
-        return None
+            if sumup_checkout.status == SumUpCheckoutStatus.FAILED:
+                self.logger.debug(f"Found a FAILED sumup order with uuid = {pending_order.uuid}")
+                await conn.execute(
+                    "update pending_sumup_order set status = 'cancelled' where uuid = $1", pending_order.uuid
+                )
+                return None
+            elif sumup_checkout.status == SumUpCheckoutStatus.PAID:
+                self.logger.debug(f"Found a PAID sumup order with uuid = {pending_order.uuid}, starting order booking")
+                node = await fetch_node(conn=conn, node_id=pending_order.node_id)
+                if node is None:
+                    self.logger.error(f"Found a pending order without a matching node: {pending_order.uuid}")
+                    raise InvalidArgument("Found a pending order without a matching node")
+                till = await fetch_till(conn=conn, node=node, till_id=pending_order.till_id)
+                if till is None:
+                    self.logger.error(f"Found a pending order without a matching till: {pending_order.uuid}")
+                    raise InvalidArgument("Found a pending order without a matching till")
+                match pending_order.order_type:
+                    case PendingOrderType.topup:
+                        topup = load_pending_topup(pending_order)
+                        await self._process_topup(conn=conn, pending_order=pending_order, topup=topup, node=node, till=till)
+                        self.logger.info(f"Successfully processed topup for order {pending_order.uuid}")
+                        return topup
+                    case PendingOrderType.ticket:
+                        ticket_sale = load_pending_ticket_sale(pending_order)
+                        await self._process_ticket_sale(
+                            conn=conn, pending_order=pending_order, ticket_sale=ticket_sale, node=node, till=till
+                        )
+                        self.logger.info(f"Successfully processed ticket sale for order {pending_order.uuid}")
+                        return ticket_sale
+                    case _:
+                        self.logger.warning(f"Unknown order type for {pending_order.uuid}: {pending_order.order_type}")
+                        return None
+
+            # Order still pending, update the check interval
+            check_interval = min(
+                self.config.core.sumup_max_check_interval,
+                int(round(2.5 * pending_order.check_interval)),
+            )
+            self.logger.debug(f"Order {pending_order.uuid} still pending, next check in {check_interval} seconds")
+            await conn.execute(
+                "update pending_sumup_order set check_interval = $1, last_checked = now() where uuid = $2",
+                check_interval,
+                pending_order.uuid,
+            )
+
+            return None
+        except Exception as e:
+            self.logger.exception(f"Unexpected error processing pending order {pending_order.uuid}: {e}")
+            return None
 
     @with_db_transaction
     @requires_customer
@@ -267,20 +295,29 @@ class SumupService(Service[Config]):
             self.logger.info("Sumup payments are disabled for this SSP instance, disabling pending order processing")
             return
 
-        self.logger.info("Staring periodic job to check pending sumup transactions")
+        self.logger.info("Starting periodic job to check pending sumup transactions")
         while True:
             await asyncio.sleep(SUMUP_CHECKOUT_POLL_INTERVAL.seconds)
             try:
                 async with self.db_pool.acquire() as conn:
                     pending_orders = await fetch_pending_orders(conn=conn)
+                    self.logger.debug(f"Found {len(pending_orders)} pending SumUp orders to process")
 
                     for pending_order in pending_orders:
-                        if not _should_check_order(pending_order):
-                            self.logger.debug(f"skipping pending checkout {pending_order.uuid} due to backoff")
-                            continue
+                        try:
+                            if not _should_check_order(pending_order):
+                                self.logger.debug(f"Skipping pending checkout {pending_order.uuid} due to backoff")
+                                continue
 
-                        self.logger.debug(f"checking pending order uuid = {pending_order.uuid}")
-                        async with conn.transaction(isolation="serializable"):
-                            await self.process_pending_order(conn=conn, pending_order=pending_order)
+                            self.logger.debug(f"Checking pending order uuid = {pending_order.uuid}")
+                            async with conn.transaction(isolation="serializable"):
+                                await self.process_pending_order(conn=conn, pending_order=pending_order)
+                        except Exception as order_err:
+                            self.logger.exception(f"Error processing individual order {pending_order.uuid}: {order_err}")
+                            # Continue with other orders
+            except asyncpg.exceptions.PostgresError as db_err:
+                self.logger.exception(f"Database error in payment processor: {db_err}")
             except Exception as e:
-                self.logger.error(f"process pending orders threw an error: {e}")
+                self.logger.exception(f"Process pending orders threw an error: {e}")
+                # Sleep a bit longer after an error to avoid hammering the system
+                await asyncio.sleep(10)
