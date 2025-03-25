@@ -60,6 +60,8 @@ class _BaseEvent(BaseModel):
     payout_registered_message: str | None = None
     payout_sender: str | None = None
 
+    donation_enabled: bool = True
+
     # map of lang_code -> [text type -> text content]
     translation_texts: dict[Language, dict[str, str]] = {}
 

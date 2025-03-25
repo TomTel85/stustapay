@@ -111,7 +111,7 @@ export const PayoutInfo: React.FC = () => {
         });
     };
 
-    if (values.donation > 0) {
+    if (config.donation_enabled && values.donation > 0) {
       openModal({
         type: "confirm",
         title: t("payout.confirmDonateAmountTitle"),
@@ -204,14 +204,20 @@ export const PayoutInfo: React.FC = () => {
                       <FormHelperText sx={{ ml: 0 }}>{formik.errors.privacy_policy}</FormHelperText>
                     )}
                   </FormControl>
-                  <Typography>{t("payout.donationDescription")}</Typography>
-                  <FormCurrencyInput
-                    name="donation"
-                    label={t("payout.donationAmount") + `(max ${formatCurrency(customer.balance)})`}
-                    variant="outlined"
-                    formik={formik}
-                    disabled={payoutInfo.in_payout_run}
-                  />
+                  
+                  {config.donation_enabled && (
+                    <>
+                      <Typography>{t("payout.donationDescription")}</Typography>
+                      <FormCurrencyInput
+                        name="donation"
+                        label={t("payout.donationAmount") + `(max ${formatCurrency(customer.balance)})`}
+                        variant="outlined"
+                        formik={formik}
+                        disabled={payoutInfo.in_payout_run}
+                      />
+                    </>
+                  )}
+                  
                   <Button
                     type="submit"
                     variant="contained"

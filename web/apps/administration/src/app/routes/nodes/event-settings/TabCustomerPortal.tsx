@@ -1,5 +1,5 @@
 import { RestrictedEventSettings, useUpdateEventMutation } from "@/api";
-import { Button, LinearProgress, Stack } from "@mui/material";
+import { Button, FormControlLabel, LinearProgress, Stack, Switch } from "@mui/material";
 import { FormTextField } from "@stustapay/form-components";
 import { toFormikValidationSchema } from "@stustapay/utils";
 import { Form, Formik, FormikHelpers, FormikProps } from "formik";
@@ -13,6 +13,7 @@ export const CustomerPortalSettingsSchema = z.object({
   customer_portal_contact_email: z.string().email(),
   customer_portal_about_page_url: z.string().url(),
   customer_portal_data_privacy_url: z.string().url(),
+  donation_enabled: z.boolean(),
 });
 
 export type CustomerPortalSettings = z.infer<typeof CustomerPortalSettingsSchema>;
@@ -36,6 +37,17 @@ export const CustomerPortalSettingsForm: React.FC<FormikProps<CustomerPortalSett
         label={t("settings.customerPortal.data_privacy_url")}
         name="customer_portal_data_privacy_url"
         formik={formik}
+      />
+      <FormControlLabel
+        control={
+          <Switch
+            checked={formik.values.donation_enabled}
+            onChange={(event) => formik.setFieldValue("donation_enabled", event.target.checked)}
+            name="donation_enabled"
+            color="primary"
+          />
+        }
+        label={t("settings.customerPortal.donation_enabled")}
       />
     </>
   );

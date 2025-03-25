@@ -73,6 +73,7 @@ export const Index: React.FC = () => {
               paddingY: 3,
               justifyContent: "center",
               textAlign: "center",
+              width: "100%",
             }}
           >
             <Stack spacing={1}>
