@@ -133,6 +133,11 @@ class SumupService(Service[Config]):
             )
             if existing_order is not None:
                 self.logger.info(f"Order {pending_order.uuid} has already been processed")
+                # Update the pending order status to booked to remove it from processing queue
+                await conn.execute(
+                    "UPDATE pending_sumup_order SET status = 'booked' WHERE uuid = $1",
+                    pending_order.uuid
+                )
                 return None
                 
             event = await fetch_restricted_event_settings_for_node(conn=conn, node_id=pending_order.node_id)
@@ -160,10 +165,22 @@ class SumupService(Service[Config]):
                         
                     if pending_order.order_type == PendingOrderType.topup:
                         topup = load_pending_topup(pending_order)
-                        return await self._process_topup(conn=conn, node=node, till=till, pending_order=pending_order, topup=topup)
+                        result = await self._process_topup(conn=conn, node=node, till=till, pending_order=pending_order, topup=topup)
+                        self.logger.info(f"Successfully processed transaction topup for order {pending_order.uuid}")
+                        return result
                     elif pending_order.order_type == PendingOrderType.ticket:
                         ticket_sale = load_pending_ticket_sale(pending_order)
-                        return await self._process_ticket_sale(conn=conn, node=node, till=till, pending_order=pending_order, ticket_sale=ticket_sale)
+                        result = await self._process_ticket_sale(conn=conn, node=node, till=till, pending_order=pending_order, ticket_sale=ticket_sale)
+                        self.logger.info(f"Successfully processed transaction ticket sale for order {pending_order.uuid}")
+                        return result
+                else:
+                    self.logger.info(f"Transaction for order {pending_order.uuid} has status {transaction.status}, not processing")
+                    # For non-successful transactions, don't keep checking
+                    if transaction.status == "FAILED" or transaction.status == "CANCELLED":
+                        await conn.execute(
+                            "UPDATE pending_sumup_order SET status = 'cancelled' WHERE uuid = $1", 
+                            pending_order.uuid
+                        )
             except SumUpError as e:
                 self.logger.debug(f"No transaction found for order {pending_order.uuid}: {e}")
                 # Continue to check for online checkout
@@ -192,10 +209,20 @@ class SumupService(Service[Config]):
                         
                     if pending_order.order_type == PendingOrderType.topup:
                         topup = load_pending_topup(pending_order)
-                        return await self._process_topup(conn=conn, node=node, till=till, pending_order=pending_order, topup=topup)
+                        result = await self._process_topup(conn=conn, node=node, till=till, pending_order=pending_order, topup=topup)
+                        self.logger.info(f"Successfully processed checkout topup for order {pending_order.uuid}")
+                        return result
                     elif pending_order.order_type == PendingOrderType.ticket:
                         ticket_sale = load_pending_ticket_sale(pending_order)
-                        return await self._process_ticket_sale(conn=conn, node=node, till=till, pending_order=pending_order, ticket_sale=ticket_sale)
+                        result = await self._process_ticket_sale(conn=conn, node=node, till=till, pending_order=pending_order, ticket_sale=ticket_sale)
+                        self.logger.info(f"Successfully processed checkout ticket sale for order {pending_order.uuid}")
+                        return result
+                elif sumup_checkout.status == SumUpCheckoutStatus.FAILED:
+                    # For failed checkouts, mark as cancelled
+                    await conn.execute(
+                        "UPDATE pending_sumup_order SET status = 'cancelled' WHERE uuid = $1", 
+                        pending_order.uuid
+                    )
             except SumUpError as e:
                 self.logger.error(f"SumUp API error while finding checkout for order {pending_order.uuid}: {e}")
                 return None
