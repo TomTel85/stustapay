@@ -338,6 +338,7 @@ export type CustomerPortalApiConfig = {
   contact_email: string;
   about_page_url: string;
   payout_enabled: boolean;
+  donation_enabled: boolean;
   currency_identifier: string;
   sumup_topup_enabled: boolean;
   allowed_country_codes: string[] | null;

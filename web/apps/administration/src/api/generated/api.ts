@@ -813,7 +813,7 @@ const injectedRtkApi = api
           params: {
             node_id: queryArg.nodeId,
             to_timestamp: queryArg.toTimestamp,
-            from_timestamp: queryArg.fromTimestamp,
+            fromTimestamp: queryArg.fromTimestamp,
           },
         }),
         providesTags: ["stats"],
@@ -824,7 +824,7 @@ const injectedRtkApi = api
           params: {
             node_id: queryArg.nodeId,
             to_timestamp: queryArg.toTimestamp,
-            from_timestamp: queryArg.fromTimestamp,
+            fromTimestamp: queryArg.fromTimestamp,
           },
         }),
         providesTags: ["stats"],
@@ -835,7 +835,7 @@ const injectedRtkApi = api
           params: {
             node_id: queryArg.nodeId,
             to_timestamp: queryArg.toTimestamp,
-            from_timestamp: queryArg.fromTimestamp,
+            fromTimestamp: queryArg.fromTimestamp,
           },
         }),
         providesTags: ["stats"],
@@ -846,7 +846,7 @@ const injectedRtkApi = api
           params: {
             node_id: queryArg.nodeId,
             to_timestamp: queryArg.toTimestamp,
-            from_timestamp: queryArg.fromTimestamp,
+            fromTimestamp: queryArg.fromTimestamp,
           },
         }),
         providesTags: ["stats"],
@@ -857,7 +857,7 @@ const injectedRtkApi = api
           params: {
             node_id: queryArg.nodeId,
             to_timestamp: queryArg.toTimestamp,
-            from_timestamp: queryArg.fromTimestamp,
+            fromTimestamp: queryArg.fromTimestamp,
           },
         }),
         providesTags: ["stats"],
@@ -3054,6 +3054,7 @@ export type PublicEventSettings = {
   payout_registered_subject?: string | null;
   payout_registered_message?: string | null;
   payout_sender?: string | null;
+  donation_enabled: boolean;
   translation_texts?: {
     [key: string]: {
       [key: string]: string;
@@ -3152,6 +3153,7 @@ export type NewEvent = {
   payout_registered_subject?: string | null;
   payout_registered_message?: string | null;
   payout_sender?: string | null;
+  donation_enabled: boolean;
   translation_texts?: {
     [key: string]: {
       [key: string]: string;
@@ -3200,6 +3202,7 @@ export type UpdateEvent = {
   payout_registered_subject?: string | null;
   payout_registered_message?: string | null;
   payout_sender?: string | null;
+  donation_enabled: boolean;
   translation_texts?: {
     [key: string]: {
       [key: string]: string;
@@ -3245,6 +3248,7 @@ export type RestrictedEventSettings = {
   payout_registered_subject?: string | null;
   payout_registered_message?: string | null;
   payout_sender?: string | null;
+  donation_enabled: boolean;
   translation_texts?: {
     [key: string]: {
       [key: string]: string;

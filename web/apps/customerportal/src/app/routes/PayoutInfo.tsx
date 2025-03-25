@@ -111,7 +111,7 @@ export const PayoutInfo: React.FC = () => {
         });
     };
 
-    if (values.donation > 0) {
+    if (config.donation_enabled && values.donation > 0) {
       openModal({
         type: "confirm",
         title: t("payout.confirmDonateAmountTitle"),
@@ -204,14 +204,42 @@ export const PayoutInfo: React.FC = () => {
                       <FormHelperText sx={{ ml: 0 }}>{formik.errors.privacy_policy}</FormHelperText>
                     )}
                   </FormControl>
-                  <Typography>{t("payout.donationDescription")}</Typography>
-                  <FormCurrencyInput
-                    name="donation"
-                    label={t("payout.donationAmount") + `(max ${formatCurrency(customer.balance)})`}
-                    variant="outlined"
-                    formik={formik}
-                    disabled={payoutInfo.in_payout_run}
-                  />
+                  
+                  {config.donation_enabled && (
+                    <>
+                      <Typography>{t("payout.donationDescription")}</Typography>
+                      <FormCurrencyInput
+                        name="donation"
+                        label={t("payout.donationAmount") + `(max ${formatCurrency(customer.balance)})`}
+                        variant="outlined"
+                        formik={formik}
+                        disabled={payoutInfo.in_payout_run}
+                      />
+                    </>
+                  )}
+                  
+                  {/* Display payout amount - the balance minus donation */}
+                  <Stack 
+                    direction="row" 
+                    justifyContent="space-between" 
+                    alignItems="center" 
+                    sx={{ 
+                      backgroundColor: "background.paper", 
+                      padding: 2, 
+                      borderRadius: 1,
+                      marginTop: 1,
+                      border: 1,
+                      borderColor: "divider"
+                    }}
+                  >
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      {t("payout.payoutAmount")}
+                    </Typography>
+                    <Typography variant="h6" fontWeight="bold" color="primary">
+                      {formatCurrency(customer.balance - (formik.values.donation || 0))}
+                    </Typography>
+                  </Stack>
+                  
                   <Button
                     type="submit"
                     variant="contained"

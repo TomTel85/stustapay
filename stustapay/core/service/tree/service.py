@@ -218,9 +218,9 @@ async def create_event(conn: Connection, parent_id: int, event: NewEvent) -> Nod
         "customer_portal_data_privacy_url, sumup_payment_enabled, sumup_api_key, sumup_affiliate_key, "
         "sumup_merchant_code, start_date, end_date, daily_end_time, email_enabled, email_default_sender, "
         "email_smtp_host, email_smtp_port, email_smtp_username, email_smtp_password, payout_sender, "
-        "sumup_oauth_client_id, sumup_oauth_client_secret, post_payment_allowed) "
+        "sumup_oauth_client_id, sumup_oauth_client_secret, post_payment_allowed, donation_enabled) "
         "values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, "
-        "$25, $26, $27, $28, $29, $30, $31, $32, $33, $34)"
+        "$25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)"
         "returning id",
         event.currency_identifier,
         event.sumup_topup_enabled,
@@ -256,6 +256,7 @@ async def create_event(conn: Connection, parent_id: int, event: NewEvent) -> Nod
         event.sumup_oauth_client_id,
         event.sumup_oauth_client_secret,
         event.post_payment_allowed,
+        event.donation_enabled,
     )
     await _sync_optional_event_metadata(conn, event_id, event)
 
@@ -323,7 +324,7 @@ class TreeService(Service[Config]):
             "   email_smtp_host = $28, email_smtp_port = $29, email_smtp_username = $30, email_smtp_password = $31, "
             "   payout_done_subject = $32, payout_done_message = $33, payout_registered_subject = $34, "
             "   payout_registered_message = $35, payout_sender = $36, sumup_oauth_client_id = $37, "
-            "   sumup_oauth_client_secret = $38, post_payment_allowed = $39 "
+            "   sumup_oauth_client_secret = $38, post_payment_allowed = $39, donation_enabled = $40 "
             "where id = $1",
             event_id,
             event.currency_identifier,
@@ -364,6 +365,7 @@ class TreeService(Service[Config]):
             event.sumup_oauth_client_id,
             event.sumup_oauth_client_secret,
             event.post_payment_allowed,
+            event.donation_enabled,
         )
         await conn.execute("delete from translation_text where event_id = $1", event_id)
         await _sync_optional_event_metadata(conn, event_id, event)

@@ -31,6 +31,11 @@ from stustapay.core.service.tree.common import (
 )
 
 
+def validate_name(name: str) -> bool:
+    """Validate that a name only contains allowed characters."""
+    return bool(re.match(r"^[a-zA-Z':,\-()\/\s.]+$", name))
+
+
 class CustomerPortalApiConfig(BaseModel):
     test_mode: bool
     test_mode_message: str
@@ -38,6 +43,7 @@ class CustomerPortalApiConfig(BaseModel):
     contact_email: EmailStr
     about_page_url: str
     payout_enabled: bool
+    donation_enabled: bool
     currency_identifier: str
     sumup_topup_enabled: bool
     allowed_country_codes: Optional[list[str]]
@@ -158,24 +164,26 @@ class CustomerService(Service[Config]):
         self, *, conn: Connection, current_customer: Customer, customer_bank: CustomerBank, mail_service: MailService
     ) -> None:
         event_node = await fetch_event_node_for_node(conn=conn, node_id=current_customer.node_id)
+        if event_node.event is None:
+            raise InvalidArgument("Invalid event node")
 
-        # check customer has no pending payouts
         await self.check_payout_run(conn, current_customer)
 
+        # If donations are disabled, override any incoming donation value to 0
+        if not event_node.event.donation_enabled and customer_bank.donation is not None and customer_bank.donation > 0:
+            customer_bank.donation = 0.0
+
+        # Validate IBAN
+        iban = customer_bank.iban.strip()
+        if not iban:
+            raise InvalidArgument("IBAN is empty")
+        try:
+            iban_obj = IBAN(iban)
+            iban = str(iban_obj)
+        except ValueError:
+            raise InvalidArgument("IBAN is not valid")
+
         account_name = customer_bank.account_name
-        iban = customer_bank.iban
-
-        if iban is not None:
-            validation_result = validate_iban(iban)
-            if not validation_result.valid:
-                raise InvalidArgument("Provided IBAN is not valid")
-            # check country code of the IBAN
-            country_code = iban[0:2]
-            if country_code not in sepa_countries:
-                raise InvalidArgument("Provided IBAN country code is not supported")
-
-            iban = iban.replace(" ", "")
-
         if account_name is not None:
             if not validate_name(account_name):
                 raise InvalidArgument("Provided account name contains invalid special characters")
@@ -194,8 +202,7 @@ class CustomerService(Service[Config]):
                     "   email = $4, "
                     "   has_entered_info = true,"
                     "   donate_all = false, "
-                    "   donation = $5,"
-                    "   updated_at = now() "
+                    "   donation = $5 "
                     "where customer_account_id = $1",
                     current_customer.id,
                     iban,
@@ -210,8 +217,7 @@ class CustomerService(Service[Config]):
                     "   account_name = $3, "
                     "   email = $4, "
                     "   has_entered_info = true,"
-                    "   donate_all = false,"
-                    "   updated_at = now() "
+                    "   donate_all = false "
                     "where customer_account_id = $1",
                     current_customer.id,
                     iban,
@@ -294,6 +300,14 @@ class CustomerService(Service[Config]):
     async def update_customer_info_donate_all(
         self, *, conn: Connection, current_customer: Customer, mail_service: MailService
     ) -> None:
+        event_node = await fetch_event_node_for_node(conn=conn, node_id=current_customer.node_id)
+        if event_node.event is None:
+            raise InvalidArgument("Invalid event node")
+        
+        # Check if donations are enabled
+        if not event_node.event.donation_enabled:
+            raise InvalidArgument("Donations are currently disabled")
+        
         await self.check_payout_run(conn, current_customer)
         await conn.execute(
             "update customer_info set donation=null, donate_all=true, has_entered_info=true "
@@ -319,6 +333,7 @@ class CustomerService(Service[Config]):
             contact_email=node.event.customer_portal_contact_email,
             data_privacy_url=node.event.customer_portal_data_privacy_url,
             payout_enabled=node.event.sepa_enabled,
+            donation_enabled=node.event.donation_enabled,
             sumup_topup_enabled=self.config.core.sumup_enabled and node.event.sumup_topup_enabled,
             translation_texts=node.event.translation_texts,
             currency_identifier=node.event.currency_identifier,

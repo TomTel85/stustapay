@@ -73,12 +73,24 @@ export const Index: React.FC = () => {
               paddingY: 3,
               justifyContent: "center",
               textAlign: "center",
+              width: "100%",
             }}
           >
             <Stack spacing={1}>
               <Typography component="div" variant="h4">
                 {formatCurrency(customer.balance)}
               </Typography>
+
+              {customer.has_entered_info && (
+                <div>
+                  <Typography component="div" variant="body1" sx={{ opacity: 0.7 }}>
+                    {t("payout.payoutAmount")}
+                  </Typography>
+                  <Typography component="div" variant="h6" color="primary.main" fontWeight="bold">
+                    {formatCurrency(customer.balance - (customer.donation || 0))}
+                  </Typography>
+                </div>
+              )}
 
               {customer.vouchers > 0 && (
                 <div>
