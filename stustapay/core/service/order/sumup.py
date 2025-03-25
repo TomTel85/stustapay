@@ -128,11 +128,11 @@ class SumupService(Service[Config]):
             
             # Check if order has already been processed
             existing_order = await conn.fetchrow(
-                "SELECT status FROM ordr WHERE uuid = $1",
+                "SELECT id FROM ordr WHERE uuid = $1",
                 pending_order.uuid
             )
             if existing_order is not None:
-                self.logger.info(f"Order {pending_order.uuid} has already been processed with status {existing_order['status']}")
+                self.logger.info(f"Order {pending_order.uuid} has already been processed")
                 return None
                 
             event = await fetch_restricted_event_settings_for_node(conn=conn, node_id=pending_order.node_id)
