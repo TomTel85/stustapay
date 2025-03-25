@@ -218,6 +218,28 @@ export const PayoutInfo: React.FC = () => {
                     </>
                   )}
                   
+                  {/* Display payout amount - the balance minus donation */}
+                  <Stack 
+                    direction="row" 
+                    justifyContent="space-between" 
+                    alignItems="center" 
+                    sx={{ 
+                      backgroundColor: "background.paper", 
+                      padding: 2, 
+                      borderRadius: 1,
+                      marginTop: 1,
+                      border: 1,
+                      borderColor: "divider"
+                    }}
+                  >
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      {t("payout.payoutAmount")}
+                    </Typography>
+                    <Typography variant="h6" fontWeight="bold" color="primary">
+                      {formatCurrency(customer.balance - (formik.values.donation || 0))}
+                    </Typography>
+                  </Stack>
+                  
                   <Button
                     type="submit"
                     variant="contained"

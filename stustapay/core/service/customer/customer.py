@@ -202,8 +202,7 @@ class CustomerService(Service[Config]):
                     "   email = $4, "
                     "   has_entered_info = true,"
                     "   donate_all = false, "
-                    "   donation = $5,"
-                    "   updated_at = now() "
+                    "   donation = $5 "
                     "where customer_account_id = $1",
                     current_customer.id,
                     iban,
@@ -218,8 +217,7 @@ class CustomerService(Service[Config]):
                     "   account_name = $3, "
                     "   email = $4, "
                     "   has_entered_info = true,"
-                    "   donate_all = false,"
-                    "   updated_at = now() "
+                    "   donate_all = false "
                     "where customer_account_id = $1",
                     current_customer.id,
                     iban,

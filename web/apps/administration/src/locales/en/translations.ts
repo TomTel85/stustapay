@@ -349,6 +349,7 @@ export const translations = {
       start_date: "Start Date",
       end_date: "End Date",
       daily_end_time: "Daily End Time",
+      start_end_date_must_be_set_same: "Start and end date must both be set or both be unset",
       post_payment_allowed: "Post-Payment Allowed",
     },
     customerPortal: {

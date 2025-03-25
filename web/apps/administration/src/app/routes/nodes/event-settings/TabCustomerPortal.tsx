@@ -42,7 +42,10 @@ export const CustomerPortalSettingsForm: React.FC<FormikProps<CustomerPortalSett
         control={
           <Switch
             checked={formik.values.donation_enabled}
-            onChange={(event) => formik.setFieldValue("donation_enabled", event.target.checked)}
+            onChange={(event) => {
+              formik.setFieldValue("donation_enabled", event.target.checked);
+              formik.setFieldTouched("donation_enabled", true);
+            }}
             name="donation_enabled"
             color="primary"
           />
@@ -62,6 +65,9 @@ export const TabCustomerPortal: React.FC<{ nodeId: number; eventSettings: Restri
 
   const handleSubmit = (values: CustomerPortalSettings, { setSubmitting }: FormikHelpers<CustomerPortalSettings>) => {
     setSubmitting(true);
+    console.log("Submitting values:", values);
+    console.log("donation_enabled value:", values.donation_enabled);
+    console.log("Update payload:", { ...eventSettings, ...values });
     updateEvent({ nodeId: nodeId, updateEvent: { ...eventSettings, ...values } })
       .unwrap()
       .then(() => {
@@ -70,12 +76,23 @@ export const TabCustomerPortal: React.FC<{ nodeId: number; eventSettings: Restri
       })
       .catch((err) => {
         setSubmitting(false);
+        console.error("Error updating event:", err);
         toast.error(t("settings.updateEventFailed", { reason: err.error }));
       });
   };
+  
+  // Create a properly typed initial values object from the event settings
+  const initialValues: CustomerPortalSettings = {
+    customer_portal_url: eventSettings.customer_portal_url,
+    customer_portal_contact_email: eventSettings.customer_portal_contact_email,
+    customer_portal_about_page_url: eventSettings.customer_portal_about_page_url,
+    customer_portal_data_privacy_url: eventSettings.customer_portal_data_privacy_url,
+    donation_enabled: eventSettings.donation_enabled
+  };
+  
   return (
     <Formik
-      initialValues={eventSettings as CustomerPortalSettings} // TODO: figure out a way of not needing to cast this
+      initialValues={initialValues}
       onSubmit={handleSubmit}
       validationSchema={toFormikValidationSchema(CustomerPortalSettingsSchema)}
       enableReinitialize={true}
@@ -89,7 +106,7 @@ export const TabCustomerPortal: React.FC<{ nodeId: number; eventSettings: Restri
               type="submit"
               color="primary"
               variant="contained"
-              disabled={formik.isSubmitting || Object.keys(formik.touched).length === 0}
+              disabled={formik.isSubmitting || !formik.dirty}
             >
               {t("save")}
             </Button>
