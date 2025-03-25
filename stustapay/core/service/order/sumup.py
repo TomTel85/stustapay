@@ -125,6 +125,16 @@ class SumupService(Service[Config]):
     ) -> CompletedTicketSale | CompletedTopUp | None:
         try:
             self.logger.debug(f"Processing pending order {pending_order.uuid}")
+            
+            # Check if order has already been processed
+            existing_order = await conn.fetchrow(
+                "SELECT status FROM ordr WHERE uuid = $1",
+                pending_order.uuid
+            )
+            if existing_order is not None:
+                self.logger.info(f"Order {pending_order.uuid} has already been processed with status {existing_order['status']}")
+                return None
+                
             event = await fetch_restricted_event_settings_for_node(conn=conn, node_id=pending_order.node_id)
             
             if not event.sumup_api_key or not event.sumup_merchant_code:
