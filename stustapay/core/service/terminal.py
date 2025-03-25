@@ -269,7 +269,7 @@ class TerminalService(Service[Config]):
             cash_register_name = cash_reg["name"]
 
         sumup_secrets = None
-        if event_settings.sumup_payment_enabled and profile.enable_card_payment:
+        if event_settings.sumup_payment_enabled:
             sumup_affiliate_key = event_settings.sumup_affiliate_key
             oauth_token = await self._get_terminal_sumup_oauth_token(
                 terminal_id=terminal_id, node=node, event_settings=event_settings
