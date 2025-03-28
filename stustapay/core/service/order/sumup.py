@@ -272,7 +272,12 @@ class SumupService(Service[Config]):
                         if processed_topup is not None:
                             return SumUpCheckoutStatus.PAID
                 except SumUpError as e:
-                    self.logger.debug(f"No transaction found for order {order_uuid}: {e}")
+                    # This is expected for online payments - the transaction API will return NOT_FOUND
+                    # but the checkout API will have the payment information
+                    if "NOT_FOUND" in str(e):
+                        self.logger.info(f"No transaction found for order {order_uuid} via transactions API - checking checkouts API")
+                    else:
+                        self.logger.warning(f"SumUp API error when checking transaction for order {order_uuid}: {e}")
                     # Continue to check for online checkout
                 except Exception as e:
                     self.logger.exception(f"Unexpected error finding transaction for order {order_uuid}: {e}")

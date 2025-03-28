@@ -28,9 +28,10 @@ class SumUpError(ServiceException):
 
 
 class _SumUpErrorFormat(BaseModel):
-    code: str
+    code: str | None = None
     message: str | None = None
     error: str | None = None
+    error_code: str | None = None
 
 
 class _SumUpOAuthTokenResp(BaseModel):
@@ -114,7 +115,9 @@ async def fetch_refresh_token_from_auth_code(client_id: str, client_secret: str,
                     try:
                         resp = await response.json()
                         err = _SumUpErrorFormat.model_validate(resp)
-                        raise SumUpError(f'SumUp API returned an error: "{err.error}"')
+                        error_message = err.message or ""
+                        error_code = err.code or err.error_code or err.error or "UNKNOWN"
+                        raise SumUpError(f"SumUp API returned an error: {error_code} - {error_message}")
                     except Exception as e:
                         logging.error(f"SumUp API error {response.content}, {e}")
                         raise SumUpError("SumUp API returned an unknown error") from e
@@ -153,7 +156,9 @@ async def fetch_new_oauth_token(client_id: str, client_secret: str, refresh_toke
                     try:
                         resp = await response.json()
                         err = _SumUpErrorFormat.model_validate(resp)
-                        raise SumUpError(f'SumUp API returned an error: "{err.error}"')
+                        error_message = err.message or ""
+                        error_code = err.code or err.error_code or err.error or "UNKNOWN"
+                        raise SumUpError(f"SumUp API returned an error: {error_code} - {error_message}")
                     except Exception as e:
                         logging.error(f"SumUp API error {response.content}, {e}")
                         raise SumUpError("SumUp API returned an unknown error") from e
@@ -198,7 +203,9 @@ class SumUpApi:
                         try:
                             resp = await response.json()
                             err = _SumUpErrorFormat.model_validate(resp)
-                            raise SumUpError(f"SumUp API returned an error: {err.code} - {err.message}")
+                            error_message = err.message or ""
+                            error_code = err.code or err.error_code or err.error or "UNKNOWN"
+                            raise SumUpError(f"SumUp API returned an error: {error_code} - {error_message}")
                         except Exception as parse_err:
                             logger.error(f"Failed to parse SumUp error response: {parse_err}")
                             raise SumUpError(f"SumUp API returned an error with status {response.status}: {resp_text}")
@@ -226,7 +233,9 @@ class SumUpApi:
                         try:
                             resp = await response.json()
                             err = _SumUpErrorFormat.model_validate(resp)
-                            raise SumUpError(f'SumUp API returned an error: "{err.error}"')
+                            error_message = err.message or ""
+                            error_code = err.code or err.error_code or err.error or "UNKNOWN"
+                            raise SumUpError(f"SumUp API returned an error: {error_code} - {error_message}")
                         except Exception as parse_err:
                             logger.error(f"Failed to parse SumUp error response: {parse_err}")
                             raise SumUpError(f"SumUp API returned an error with status {response.status}: {resp_text}")

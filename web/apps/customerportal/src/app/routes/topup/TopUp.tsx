@@ -125,10 +125,10 @@ export const TopUp: React.FC = () => {
             // TODO: retry somehow as the status is still pending
           })
           .catch((error) => {
-            // If we get a 404, the payment might have succeeded but the order was already processed
-            // This can happen when the order is marked as booked before we check its status
-            if (error?.status === 404) {
-              console.log("Order not found, checking bookings...");
+            // If we get a 404 error or any 4xx error, the payment might have succeeded but there was an issue with the API
+            // Check if the type was 'success' which means SumUp confirms the payment succeeded
+            if (type === "success") {
+              console.log("SumUp reports success, but checkout check failed with error:", error);
               dispatch({ type: "sumup-success" });
             } else {
               console.error("Error checking payment status:", error);
