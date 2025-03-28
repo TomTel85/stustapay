@@ -29,7 +29,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
   },
   errorPage: {
     error: "Fehler",
-    currentlyUnavailable: "Das StuStaPay Kundenportal ist aktuell nicht verfügbar",
+    currentlyUnavailable: "Das TeamFestlichPay Kundenportal ist aktuell nicht verfügbar",
   },
   transaction:
   {

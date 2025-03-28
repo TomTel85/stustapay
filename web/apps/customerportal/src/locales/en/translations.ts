@@ -32,7 +32,7 @@ export const translations = {
   },
   errorPage: {
     error: "Error",
-    currentlyUnavailable: "The StuStaPay customer portal is currently unavailable",
+    currentlyUnavailable: "The TeamFestlichPay customer portal is currently unavailable",
   },
   balance: "Balance",
   tagUid: "Voucher card Tag ID",
