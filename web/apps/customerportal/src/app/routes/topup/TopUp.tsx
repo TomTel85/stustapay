@@ -30,7 +30,8 @@ type TopUpState =
   | { stage: "initial" }
   | { stage: "sumup"; topupAmount: number; checkoutId: string; orderUUID: string }
   | { stage: "success" }
-  | { stage: "error"; message?: string };
+  | { stage: "error"; message?: string }
+  | { stage: "cancelled"; message?: string };
 
 const initialState: TopUpState = { stage: "initial" };
 
@@ -38,6 +39,7 @@ type TopUpStateAction =
   | { type: "created-checkout"; topupAmount: number; checkoutId: string; orderUUID: string }
   | { type: "sumup-success" }
   | { type: "sumup-error"; message?: string }
+  | { type: "sumup-cancelled"; message?: string }
   | { type: "reset" };
 
 const reducer = (state: TopUpState, action: TopUpStateAction): TopUpState => {
@@ -62,6 +64,11 @@ const reducer = (state: TopUpState, action: TopUpStateAction): TopUpState => {
         return state;
       }
       return { stage: "error", message: action.message };
+    case "sumup-cancelled":
+      if (state.stage !== "sumup") {
+        return state;
+      }
+      return { stage: "cancelled", message: action.message };
     case "reset":
       return initialState;
   }
@@ -109,33 +116,65 @@ export const TopUp: React.FC = () => {
       }
 
       if (type === "error" || type === "success") {
-        checkCheckout({ checkCheckoutPayload: { order_uuid: state.orderUUID } })
-          .unwrap()
-          .then((resp) => {
-            if (sumupCard.current) {
-              sumupCard.current.unmount();
-              sumupCard.current = undefined;
-            }
+        // If SumUp reports success, we should trust it and retry a few times if our backend has issues
+        const maxRetries = type === "success" ? 3 : 1;
+        let retryCount = 0;
+        
+        const checkPaymentStatus = () => {
+          checkCheckout({ checkCheckoutPayload: { order_uuid: state.orderUUID } })
+            .unwrap()
+            .then((resp) => {
+              if (sumupCard.current) {
+                sumupCard.current.unmount();
+                sumupCard.current = undefined;
+              }
 
-            if (resp.status === "FAILED") {
-              dispatch({ type: "sumup-error" });
-            } else if (resp.status === "PAID") {
-              dispatch({ type: "sumup-success" });
-            }
-            // TODO: retry somehow as the status is still pending
-          })
-          .catch((error) => {
-            // If we get a 404 error or any 4xx error, the payment might have succeeded but there was an issue with the API
-            // Check if the type was 'success' which means SumUp confirms the payment succeeded
-            if (type === "success") {
-              console.log("SumUp reports success, but checkout check failed with error:", error);
-              dispatch({ type: "sumup-success" });
-            } else {
-              console.error("Error checking payment status:", error);
-              toast.error(t("topup.unexpectedError"));
-              dispatch({ type: "sumup-error" });
-            }
-          });
+              if (resp.status === "FAILED") {
+                dispatch({ type: "sumup-cancelled", message: t("topup.cancelled.message") });
+              } else if (resp.status === "PAID") {
+                dispatch({ type: "sumup-success" });
+              } else if (resp.status === "PENDING" && type === "success" && retryCount < maxRetries) {
+                // If SumUp reports success but our backend still shows pending, retry after a delay
+                retryCount++;
+                const delay = 1000 * retryCount; // Increasing delay: 1s, 2s, 3s
+                console.log(`Payment reported as success by SumUp but still pending in backend, retrying in ${delay/1000}s (attempt ${retryCount}/${maxRetries})`);
+                setTimeout(checkPaymentStatus, delay);
+              } else {
+                // Payment still pending after retries
+                if (type === "success") {
+                  // SumUp confirmed success, so we'll show success even if our backend is delayed
+                  console.log("SumUp confirms payment success, but backend still shows pending. Showing success to user.");
+                  dispatch({ type: "sumup-success" });
+                }
+              }
+            })
+            .catch((error) => {
+              // If we get a 404 error or any 4xx error, but SumUp reported success,
+              // the payment might have succeeded but there was a database error in our backend
+              if (type === "success") {
+                if (retryCount < maxRetries) {
+                  // Retry after a delay
+                  retryCount++;
+                  const delay = 1000 * retryCount; // Increasing delay: 1s, 2s, 3s
+                  console.log(`SumUp reports success but API check failed, retrying in ${delay/1000}s (attempt ${retryCount}/${maxRetries})`, error);
+                  setTimeout(checkPaymentStatus, delay);
+                } else {
+                  // After retries, if SumUp confirmed success, show success to user
+                  console.log("SumUp reports success, but checkout check failed with error after retries:", error);
+                  dispatch({ type: "sumup-success" });
+                }
+              } else if (error?.status === 404 || (error?.data && error?.data.detail === "Order not found")) {
+                // The order might have been cancelled in the background
+                dispatch({ type: "sumup-cancelled", message: t("topup.cancelled.message") });
+              } else {
+                console.error("Error checking payment status:", error);
+                toast.error(t("topup.unexpectedError"));
+                dispatch({ type: "sumup-error" });
+              }
+            });
+        };
+        
+        checkPaymentStatus();
       }
     };
 
@@ -166,6 +205,32 @@ export const TopUp: React.FC = () => {
       }
     }
   }, [config, state, i18n, checkCheckout, dispatch]);
+
+  // Add an effect to check for stalled payments
+  React.useEffect(() => {
+    if (state.stage !== "sumup") {
+      return;
+    }
+
+    // Set up a timeout to check if the payment is taking too long (2 minutes)
+    const timeoutId = setTimeout(() => {
+      checkCheckout({ checkCheckoutPayload: { order_uuid: state.orderUUID } })
+        .unwrap()
+        .then((resp) => {
+          if (resp.status === "PENDING") {
+            // Still pending after 2 minutes, offer to restart
+            toast.warning(t("topup.paymentTakingTooLong"));
+          }
+        })
+        .catch(() => {
+          // Ignore errors here
+        });
+    }, 2 * 60 * 1000);  // 2 minutes
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [state, checkCheckout, t]);
 
   if (!config.sumup_topup_enabled) {
     toast.error(t("topup.sumupTopupDisabled"));
@@ -260,8 +325,8 @@ export const TopUp: React.FC = () => {
       return (
         <Container>
           <Alert severity="error" action={<Button onClick={reset}>{t("topup.tryAgain")}</Button>}>
-            <AlertTitle>{t("error.title")}</AlertTitle>
-            {t("error.message")}
+            <AlertTitle>{t("topup.error.title")}</AlertTitle>
+            {t("topup.error.message")}
             {/* <Trans i18nKey={"topup.error.message"}>An error occurred: {{ message: state.message }}, please</Trans> */}
           </Alert>
           <Box
@@ -273,6 +338,33 @@ export const TopUp: React.FC = () => {
             }}
           >
             <CancelIcon color="error" sx={{ fontSize: "15em" }} />
+          </Box>
+        </Container>
+      );
+    case "cancelled":
+      return (
+        <Container>
+          <Alert severity="warning">
+            <AlertTitle>{t("topup.cancelled.title")}</AlertTitle>
+            {state.message || t("topup.cancelled.defaultMessage")}
+          </Alert>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              mt: 2,
+            }}
+          >
+            <Button
+              startIcon={<CancelIcon />}
+              onClick={reset}
+              variant="contained"
+              color="primary"
+              sx={{ mt: 2 }}
+            >
+              {t("topup.tryAgain")}
+            </Button>
           </Box>
         </Container>
       );
