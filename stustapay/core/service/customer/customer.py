@@ -49,6 +49,7 @@ class CustomerPortalApiConfig(BaseModel):
     allowed_country_codes: Optional[list[str]]
     translation_texts: dict[Language, dict[str, str]]
     event_name: str
+    node_id: int
 
 
 class CustomerLoginSuccess(BaseModel):
@@ -76,15 +77,16 @@ class CustomerService(Service[Config]):
         )
 
     @with_db_transaction
-    async def login_customer(self, *, conn: Connection, uid: int, pin: str) -> CustomerLoginSuccess:
+    async def login_customer(self, *, conn: Connection, uid: int, pin: str, node_id: int) -> CustomerLoginSuccess:
 
         customer = await conn.fetch_maybe_one(
             Customer,
-            "select c.* from user_tag ut join customer c on ut.id = c.user_tag_id where (ut.pin = $1 or ut.pin = $2) AND ut.uid = $3",
+            "select c.* from user_tag ut join customer c on ut.id = c.user_tag_id where (ut.pin = $1 or ut.pin = $2) AND ut.uid = $3 AND c.node_id = $4",
             # TODO: restore case sensitivity
             pin.lower(),  # for simulator
             pin.upper(),  # for humans
             uid,
+            node_id,
         )
         if customer is None:
             raise AccessDenied("Invalid user tag or pin")
@@ -338,4 +340,5 @@ class CustomerService(Service[Config]):
             translation_texts=node.event.translation_texts,
             currency_identifier=node.event.currency_identifier,
             event_name=node.name,
+            node_id=node_id,
         )
