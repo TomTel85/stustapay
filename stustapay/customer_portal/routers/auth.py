@@ -55,6 +55,7 @@ async def login(
     # Get node_id from config - extract the host from the request
     # Use the host without port as the base_url to match the database format
     base_url = str(request.url).split("/auth")[0]
+    print(f"base_url: {base_url}")
     config = await customer_service.get_api_config(base_url=base_url)
     
     response = await customer_service.login_customer(uid=user_tag_uid, pin=payload.pin, node_id=config.node_id)
