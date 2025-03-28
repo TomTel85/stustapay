@@ -117,10 +117,14 @@ export const TopUp: React.FC = () => {
 
       if (type === "error" || type === "success") {
         // If SumUp reports success, we should trust it and retry a few times if our backend has issues
-        const maxRetries = type === "success" ? 3 : 1;
+        // For success, we'll check up to 5 times with a longer total wait time
+        const maxRetries = type === "success" ? 5 : 1;
         let retryCount = 0;
+        let sumupReportedSuccess = type === "success";
         
         const checkPaymentStatus = () => {
+          console.log(`Checking payment status for order ${state.orderUUID}, attempt ${retryCount + 1}/${maxRetries}`);
+          
           checkCheckout({ checkCheckoutPayload: { order_uuid: state.orderUUID } })
             .unwrap()
             .then((resp) => {
@@ -129,51 +133,80 @@ export const TopUp: React.FC = () => {
                 sumupCard.current = undefined;
               }
 
-              if (resp.status === "FAILED") {
-                dispatch({ type: "sumup-cancelled", message: t("topup.cancelled.message") });
-              } else if (resp.status === "PAID") {
+              // If the status is PAID, it was successful
+              if (resp.status === "PAID") {
+                console.log(`Payment confirmed as PAID for order ${state.orderUUID}`);
                 dispatch({ type: "sumup-success" });
-              } else if (resp.status === "PENDING" && type === "success" && retryCount < maxRetries) {
-                // If SumUp reports success but our backend still shows pending, retry after a delay
-                retryCount++;
-                const delay = 1000 * retryCount; // Increasing delay: 1s, 2s, 3s
-                console.log(`Payment reported as success by SumUp but still pending in backend, retrying in ${delay/1000}s (attempt ${retryCount}/${maxRetries})`);
-                setTimeout(checkPaymentStatus, delay);
-              } else {
-                // Payment still pending after retries
-                if (type === "success") {
-                  // SumUp confirmed success, so we'll show success even if our backend is delayed
-                  console.log("SumUp confirms payment success, but backend still shows pending. Showing success to user.");
+                return;
+              }
+              
+              // If SumUp reported success but our backend still shows PENDING or FAILED,
+              // we need to handle this carefully
+              if (sumupReportedSuccess) {
+                if (resp.status === "FAILED") {
+                  console.log(`SumUp reported success but backend reports FAILED for order ${state.orderUUID}. Retrying...`);
+                }
+                
+                if (retryCount < maxRetries) {
+                  // Exponential backoff for retries: 1s, 2s, 4s, 8s, 16s
+                  retryCount++;
+                  const delay = 1000 * Math.pow(2, retryCount - 1);
+                  console.log(`SumUp reports success but backend shows ${resp.status}. Retrying in ${delay/1000}s (attempt ${retryCount}/${maxRetries})`);
+                  setTimeout(checkPaymentStatus, delay);
+                } else {
+                  // After multiple retries, if SumUp confirmed success, trust SumUp over our backend
+                  console.log(`Reached maximum retries. SumUp reported success, showing success to user despite backend status ${resp.status}`);
                   dispatch({ type: "sumup-success" });
+                }
+              } else {
+                // SumUp didn't report success and backend says FAILED
+                if (resp.status === "FAILED") {
+                  console.log(`Payment confirmed as FAILED for order ${state.orderUUID}`);
+                  dispatch({ type: "sumup-cancelled", message: t("topup.cancelled.message") });
+                } else {
+                  // Status is still pending and we're out of retries
+                  console.log(`Payment status is still ${resp.status} after ${retryCount} retries`);
+                  if (retryCount < maxRetries) {
+                    retryCount++;
+                    const delay = 1000 * retryCount;
+                    setTimeout(checkPaymentStatus, delay);
+                  } else {
+                    dispatch({ type: "sumup-error", message: t("topup.unexpectedError") });
+                  }
                 }
               }
             })
             .catch((error) => {
-              // If we get a 404 error or any 4xx error, but SumUp reported success,
-              // the payment might have succeeded but there was a database error in our backend
-              if (type === "success") {
+              console.log(`Error checking payment status for order ${state.orderUUID}:`, error);
+              
+              // If SumUp reported success, we'll retry or eventually trust SumUp
+              if (sumupReportedSuccess) {
                 if (retryCount < maxRetries) {
-                  // Retry after a delay
                   retryCount++;
-                  const delay = 1000 * retryCount; // Increasing delay: 1s, 2s, 3s
-                  console.log(`SumUp reports success but API check failed, retrying in ${delay/1000}s (attempt ${retryCount}/${maxRetries})`, error);
+                  // Exponential backoff
+                  const delay = 1000 * Math.pow(2, retryCount - 1);
+                  console.log(`SumUp reports success but API check failed. Retrying in ${delay/1000}s (attempt ${retryCount}/${maxRetries})`);
                   setTimeout(checkPaymentStatus, delay);
                 } else {
-                  // After retries, if SumUp confirmed success, show success to user
-                  console.log("SumUp reports success, but checkout check failed with error after retries:", error);
+                  // After multiple retries, if SumUp confirmed success, trust SumUp
+                  console.log(`Reached maximum retries. SumUp reported success, showing success to user despite API errors`);
                   dispatch({ type: "sumup-success" });
                 }
-              } else if (error?.status === 404 || (error?.data && error?.data.detail === "Order not found")) {
-                // The order might have been cancelled in the background
-                dispatch({ type: "sumup-cancelled", message: t("topup.cancelled.message") });
               } else {
-                console.error("Error checking payment status:", error);
-                toast.error(t("topup.unexpectedError"));
-                dispatch({ type: "sumup-error" });
+                // SumUp didn't report success and we got an error from our API
+                if (error?.status === 404 || (error?.data && error?.data.detail === "Order not found")) {
+                  console.log(`Order not found, marking as cancelled`);
+                  dispatch({ type: "sumup-cancelled", message: t("topup.cancelled.message") });
+                } else {
+                  console.error("Unexpected error checking payment status:", error);
+                  toast.error(t("topup.unexpectedError"));
+                  dispatch({ type: "sumup-error" });
+                }
               }
             });
         };
         
+        // Start the payment status check process
         checkPaymentStatus();
       }
     };
@@ -181,7 +214,7 @@ export const TopUp: React.FC = () => {
     handleSumupCardLoad.current = () => {
       console.log("sumup card loaded");
     };
-  }, [checkCheckout, dispatch, state]);
+  }, [checkCheckout, dispatch, state, t]);
 
   React.useEffect(() => {
     if (state.stage !== "sumup") {
