@@ -76,16 +76,6 @@ def requires_sumup_online_topup_enabled(func):
     return wrapper
 
 
-def _should_check_order(order: PendingOrder) -> bool:
-    if order.last_checked is None:
-        return True
-    if datetime.now(tz=timezone.utc) > order.created_at + SUMUP_INITIAL_CHECK_TIMEOUT:
-        return True
-    if datetime.now(tz=timezone.utc) > order.last_checked + timedelta(seconds=order.check_interval):
-        return True
-    return False
-
-
 class SumupService(Service[Config]):
     def __init__(self, db_pool: asyncpg.Pool, config: Config, auth_service: AuthService):
         super().__init__(db_pool, config)
@@ -120,6 +110,12 @@ class SumupService(Service[Config]):
             booked_at=pending_order.created_at,
         )
         await conn.execute("update pending_sumup_order set status = 'booked' where uuid = $1", pending_order.uuid)
+
+    async def pending_order_exists_at_sumup(self, conn: Connection, pending_order: PendingOrder) -> bool:
+        event = await fetch_restricted_event_settings_for_node(conn=conn, node_id=pending_order.node_id)
+        sumup_api = self._create_sumup_api(merchant_code=event.sumup_merchant_code, api_key=event.sumup_api_key)
+        sumup_checkout = await sumup_api.find_checkout(pending_order.uuid)
+        return sumup_checkout is not None
 
     async def process_pending_order(
         self, conn: Connection, pending_order: PendingOrder

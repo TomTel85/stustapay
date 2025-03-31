@@ -239,7 +239,8 @@ class SumUpApi:
                         except Exception as parse_err:
                             logger.error(f"Failed to parse SumUp error response: {parse_err}")
                             raise SumUpError(f"SumUp API returned an error with status {response.status}: {resp_text}")
-                    return await response.json()
+                    # ignore content type as responses may be text/plain
+                    return await response.json(content_type=None)
             except asyncio.TimeoutError as e:
                 logger.error(f"SumUp API timeout on POST {url}: {e}")
                 raise SumUpError("SumUp API timeout") from e

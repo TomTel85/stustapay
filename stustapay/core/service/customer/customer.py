@@ -81,10 +81,14 @@ class CustomerService(Service[Config]):
 
         customer = await conn.fetch_maybe_one(
             Customer,
-            "select c.* from user_tag ut join customer c on ut.id = c.user_tag_id where (ut.pin = $1 or ut.pin = $2) AND ut.uid = $3 AND c.node_id = $4",
+            "select c.* from customer c "
+            "   left join user_tag ut on ut.id = c.user_tag_id "
+            "   left join ticket_voucher tv on tv.customer_account_id = c.id "
+            "where (ut.pin = $1 or ut.pin = $2 or tv.token = $3) AND ut.uid = $3 AND c.node_id = $4",
             # TODO: restore case sensitivity
             pin.lower(),  # for simulator
             pin.upper(),  # for humans
+            pin,
             uid,
             node_id,
         )
