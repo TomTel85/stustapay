@@ -405,38 +405,41 @@ class SumupService(Service[Config]):
             return
 
         self.logger.info("Starting periodic job to check pending sumup transactions")
+        
+        while True:
+            try:
+                async with self.db_pool.acquire() as conn:
+                    pending_orders = await fetch_pending_orders(conn=conn)
+                    self.logger.info(f"Found {len(pending_orders)} pending SumUp orders to process")
 
-        # Fetch all pending orders
-        try:
-            async with self.db_pool.acquire() as conn:
-                pending_orders = await fetch_pending_orders(conn=conn)
-                self.logger.info(f"Found {len(pending_orders)} pending SumUp orders to process")
+                    for pending_order in pending_orders:
+                        self.logger.info(f"Checking pending order uuid = {pending_order.uuid}")
+                        try:
+                            # Check if the order has been pending for too long
+                            current_time = datetime.now(timezone.utc)
+                            order_creation_time = pending_order.created_at
+                            if order_creation_time is not None and (current_time - order_creation_time) > SUMUP_PENDING_ORDER_TIMEOUT:
+                                self.logger.warning(f"Order {pending_order.uuid} has been pending for more than {SUMUP_PENDING_ORDER_TIMEOUT}, marking as cancelled")
+                                # Update the order status to cancelled in the database
+                                await conn.execute(
+                                    "UPDATE pending_sumup_order SET status = $1 WHERE uuid = $2",
+                                    PendingOrderStatus.cancelled.value,
+                                    pending_order.uuid,
+                                )
+                                continue
 
-                for pending_order in pending_orders:
-                    self.logger.info(f"Checking pending order uuid = {pending_order.uuid}")
-                    try:
-                        # Check if the order has been pending for too long
-                        current_time = datetime.now(timezone.utc)
-                        order_creation_time = pending_order.created_at
-                        if order_creation_time is not None and (current_time - order_creation_time) > SUMUP_PENDING_ORDER_TIMEOUT:
-                            self.logger.warning(f"Order {pending_order.uuid} has been pending for more than {SUMUP_PENDING_ORDER_TIMEOUT}, marking as cancelled")
-                            # Update the order status to cancelled in the database
-                            await conn.execute(
-                                "UPDATE pending_sumup_order SET status = $1 WHERE uuid = $2",
-                                PendingOrderStatus.cancelled.value,
-                                pending_order.uuid,
-                            )
-                            continue
-
-                        self.logger.info(f"Processing pending order {pending_order.uuid}")
-                        async with conn.transaction(isolation="serializable"):
-                            await self.process_pending_order(conn=conn, pending_order=pending_order)
-                    except Exception as order_err:
-                        self.logger.exception(f"Error processing individual order {pending_order.uuid}: {order_err}")
-                        # Continue with other orders
-        except asyncpg.exceptions.PostgresError as db_err:
-            self.logger.exception(f"Database error in payment processor: {db_err}")
-        except Exception as e:
-            self.logger.exception(f"Process pending orders threw an error: {e}")
-            # Sleep a bit longer after an error to avoid hammering the system
-            await asyncio.sleep(10)
+                            self.logger.info(f"Processing pending order {pending_order.uuid}")
+                            async with conn.transaction(isolation="serializable"):
+                                await self.process_pending_order(conn=conn, pending_order=pending_order)
+                        except Exception as order_err:
+                            self.logger.exception(f"Error processing individual order {pending_order.uuid}: {order_err}")
+                            # Continue with other orders
+            except asyncpg.exceptions.PostgresError as db_err:
+                self.logger.exception(f"Database error in payment processor: {db_err}")
+            except Exception as e:
+                self.logger.exception(f"Process pending orders threw an error: {e}")
+                # Sleep a bit longer after an error to avoid hammering the system
+                await asyncio.sleep(10)
+                
+            # Sleep before checking again
+            await asyncio.sleep(SUMUP_CHECKOUT_POLL_INTERVAL.seconds)
