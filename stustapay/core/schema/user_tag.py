@@ -1,10 +1,9 @@
 from typing import Optional
 
 from pydantic import BaseModel
-from typing import Optional
 
-from stustapay.core.schema.account import UserTagAccountAssociation
 from stustapay.core.schema.product import ProductRestriction
+from stustapay.core.schema.user_tag_models import UserTagDetail
 
 
 def format_user_tag_uid(uid: Optional[int]) -> Optional[str]:
@@ -48,17 +47,3 @@ class NewUserTag(BaseModel):
     uid: Optional[int] = None
     is_vip: bool = False
     comment: Optional[str] = None
-
-
-class UserTagDetail(BaseModel):
-    id: int
-    pin: str
-    uid: Optional[int]
-    node_id: int
-
-    comment: Optional[str] = None
-    account_id: Optional[int] = None
-    user_id: Optional[int] = None
-    is_vip: bool = False
-
-    account_history: list[UserTagAccountAssociation]

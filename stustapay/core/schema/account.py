@@ -6,6 +6,7 @@ from pydantic import BaseModel, computed_field
 
 from stustapay.core.schema.product import ProductRestriction
 from stustapay.core.schema.user import format_user_tag_uid
+from stustapay.core.schema.user_tag_models import UserTagAccountAssociation, UserTagDetail
 
 
 class AccountType(enum.Enum):
@@ -24,30 +25,6 @@ class AccountType(enum.Enum):
     donation_exit = "donation_exit"
     sepa_exit = "sepa_exit"
     cash_register = "cash_register"
-
-
-class UserTagAccountAssociation(BaseModel):
-    account_id: int
-    mapping_was_valid_until: datetime
-
-
-class UserTagDetail(BaseModel):
-    id: int
-    pin: str
-    uid: Optional[int]
-    node_id: int
-
-    comment: Optional[str] = None
-    account_id: Optional[int] = None
-    user_id: Optional[int] = None
-    is_vip: bool = False
-
-    account_history: list[UserTagAccountAssociation]
-
-    @computed_field  # type: ignore[misc]
-    @property
-    def uid_hex(self) -> Optional[str]:
-        return format_user_tag_uid(self.uid)
 
 
 class UserTagHistoryEntry(BaseModel):

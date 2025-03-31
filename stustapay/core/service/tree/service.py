@@ -204,7 +204,7 @@ async def _sync_optional_event_metadata(conn: Connection, event_id: int, event: 
         )
     if event.payout_registered_message is not None:
         await conn.execute(
-            "update event set payout_registered_message = $1 where id = $2", event.payout_registered_subject, event_id
+            "update event set payout_registered_message = $1 where id = $2", event.payout_registered_message, event_id
         )
 
 
@@ -221,7 +221,7 @@ async def create_event(conn: Connection, parent_id: int, event: NewEvent) -> Nod
         "sumup_oauth_client_id, sumup_oauth_client_secret, post_payment_allowed, donation_enabled, pretix_presale_enabled, pretix_shop_url, pretix_api_key, "
         " pretix_organizer, pretix_event, pretix_ticket_ids) "
         "values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, "
-        "$25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $33, $34, $35)"
+        "$25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)"
         "returning id",
         event.currency_identifier,
         event.sumup_topup_enabled,
@@ -331,8 +331,8 @@ class TreeService(Service[Config]):
             "   email_smtp_host = $28, email_smtp_port = $29, email_smtp_username = $30, email_smtp_password = $31, "
             "   payout_done_subject = $32, payout_done_message = $33, payout_registered_subject = $34, "
             "   payout_registered_message = $35, payout_sender = $36, sumup_oauth_client_id = $37, "
-            "   sumup_oauth_client_secret = $38, post_payment_allowed = $39, donation_enabled = $40, pretix_presale_enabled = $34,"
-            "   pretix_shop_url = $35, pretix_api_key = $36, pretix_organizer = $37, pretix_event = $38, pretix_ticket_ids = $39 "
+            "   sumup_oauth_client_secret = $38, post_payment_allowed = $39, donation_enabled = $40, pretix_presale_enabled = $41,"
+            "   pretix_shop_url = $42, pretix_api_key = $43, pretix_organizer = $44, pretix_event = $45, pretix_ticket_ids = $46 "
             "where id = $1",
             event_id,
             event.currency_identifier,
