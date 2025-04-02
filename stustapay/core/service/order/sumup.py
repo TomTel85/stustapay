@@ -50,7 +50,7 @@ from stustapay.payment.sumup.api import (
 
 SUMUP_CHECKOUT_POLL_INTERVAL = timedelta(seconds=5)
 SUMUP_INITIAL_CHECK_TIMEOUT = timedelta(seconds=20)
-SUMUP_PENDING_ORDER_TIMEOUT = timedelta(minutes=30)  # Time after which pending orders are considered failed
+SUMUP_PENDING_ORDER_TIMEOUT = timedelta(minutes=5)  # Time after which pending orders are considered failed
 
 
 class CreateCheckout(BaseModel):
