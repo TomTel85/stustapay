@@ -201,7 +201,7 @@ class SumUpApi:
                         resp_text = await response.text()
                         logger.error(f"SumUp API error response: {resp_text}, status: {response.status}")
                         try:
-                            resp = await response.json()
+                            resp = await response.json(content_type=None)
                             err = _SumUpErrorFormat.model_validate(resp)
                             error_message = err.message or ""
                             error_code = err.code or err.error_code or err.error or "UNKNOWN"
@@ -209,7 +209,7 @@ class SumUpApi:
                         except Exception as parse_err:
                             logger.error(f"Failed to parse SumUp error response: {parse_err}")
                             raise SumUpError(f"SumUp API returned an error with status {response.status}: {resp_text}")
-                    return await response.json()
+                    return await response.json(content_type=None)
             except asyncio.TimeoutError as e:
                 logger.error(f"SumUp API timeout on GET {url}: {e}")
                 raise SumUpError("SumUp API timeout") from e
@@ -231,7 +231,7 @@ class SumUpApi:
                         resp_text = await response.text()
                         logger.error(f"SumUp API error response: {resp_text}, status: {response.status}")
                         try:
-                            resp = await response.json()
+                            resp = await response.json(content_type=None)
                             err = _SumUpErrorFormat.model_validate(resp)
                             error_message = err.message or ""
                             error_code = err.code or err.error_code or err.error or "UNKNOWN"

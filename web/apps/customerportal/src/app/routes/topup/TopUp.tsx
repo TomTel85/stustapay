@@ -143,8 +143,11 @@ export const TopUp: React.FC = () => {
               // If SumUp reported success but our backend still shows PENDING or FAILED,
               // we need to handle this carefully
               if (sumupReportedSuccess) {
-                if (resp.status === "FAILED") {
-                  console.log(`SumUp reported success but backend reports FAILED for order ${state.orderUUID}. Retrying...`);
+                const status = resp.status as string; // Type assertion to avoid TypeScript narrowing
+                if (status === "FAILED") {
+                  console.log(`SumUp reported success but backend reports FAILED for order ${state.orderUUID}. Showing failure to user.`);
+                  dispatch({ type: "sumup-error", message: t("topup.error.message") });
+                  return;
                 }
                 
                 if (retryCount < maxRetries) {
@@ -154,15 +157,29 @@ export const TopUp: React.FC = () => {
                   console.log(`SumUp reports success but backend shows ${resp.status}. Retrying in ${delay/1000}s (attempt ${retryCount}/${maxRetries})`);
                   setTimeout(checkPaymentStatus, delay);
                 } else {
-                  // After multiple retries, if SumUp confirmed success, trust SumUp over our backend
-                  console.log(`Reached maximum retries. SumUp reported success, showing success to user despite backend status ${resp.status}`);
-                  dispatch({ type: "sumup-success" });
+                  // After maximum retries, decide based on current status
+                  console.log(`Reached maximum retries. Status from backend: ${resp.status}`);
+                  
+                  // Use simple if/else with string comparisons
+                  if (status === "PAID") {
+                    console.log(`Payment confirmed as PAID after retries`);
+                    dispatch({ type: "sumup-success" });
+                  } else if (status === "FAILED") {
+                    console.log(`Backend reports FAILED despite SumUp reporting success`);
+                    dispatch({ type: "sumup-error", message: t("topup.error.message") });
+                  } else {
+                    // For PENDING or other unknown states after all retries
+                    console.log(`Payment still in state ${status} after all retries`);
+                    dispatch({ type: "sumup-success" });
+                  }
                 }
               } else {
                 // SumUp didn't report success and backend says FAILED
-                if (resp.status === "FAILED") {
+                const status = resp.status as string; // Type assertion
+                if (status === "FAILED") {
                   console.log(`Payment confirmed as FAILED for order ${state.orderUUID}`);
                   dispatch({ type: "sumup-cancelled", message: t("topup.cancelled.message") });
+                  return;
                 } else {
                   // Status is still pending and we're out of retries
                   console.log(`Payment status is still ${resp.status} after ${retryCount} retries`);
@@ -188,9 +205,10 @@ export const TopUp: React.FC = () => {
                   console.log(`SumUp reports success but API check failed. Retrying in ${delay/1000}s (attempt ${retryCount}/${maxRetries})`);
                   setTimeout(checkPaymentStatus, delay);
                 } else {
-                  // After multiple retries, if SumUp confirmed success, trust SumUp
-                  console.log(`Reached maximum retries. SumUp reported success, showing success to user despite API errors`);
-                  dispatch({ type: "sumup-success" });
+                  // After maximum retries, if backend API request failed but SumUp reported success
+                  // We should be cautious and show an error message instead of falsely confirming success
+                  console.log(`Reached maximum retries. API checks failed. Showing error message to user despite SumUp success.`);
+                  dispatch({ type: "sumup-error", message: t("topup.error.message") });
                 }
               } else {
                 // SumUp didn't report success and we got an error from our API
