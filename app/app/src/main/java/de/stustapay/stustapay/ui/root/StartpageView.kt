@@ -3,6 +3,7 @@ package de.stustapay.stustapay.ui.root
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
