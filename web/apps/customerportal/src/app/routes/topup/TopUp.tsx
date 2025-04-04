@@ -206,9 +206,9 @@ export const TopUp: React.FC = () => {
                   setTimeout(checkPaymentStatus, delay);
                 } else {
                   // After maximum retries, if backend API request failed but SumUp reported success
-                  // We should be cautious and show an error message instead of falsely confirming success
-                  console.log(`Reached maximum retries. API checks failed. Showing error message to user despite SumUp success.`);
-                  dispatch({ type: "sumup-error", message: t("topup.error.message") });
+                  // Trust SumUp's success response since the payment is likely processed correctly
+                  console.log(`Reached maximum retries. API checks failed. Trusting SumUp success response.`);
+                  dispatch({ type: "sumup-success" });
                 }
               } else {
                 // SumUp didn't report success and we got an error from our API

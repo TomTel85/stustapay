@@ -150,47 +150,7 @@ class SumupService(Service[Config]):
                     
                 sumup_api = self._create_sumup_api(merchant_code=event.sumup_merchant_code, api_key=event.sumup_api_key)
                 
-                # First try to find the transaction using the transactions API (for Solo device payments)
-                try:
-                    transaction = await sumup_api.get_transaction(str(pending_order.uuid))
-                    self.logger.info(f"Found transaction for order {pending_order.uuid} with status {transaction.status}")
-                    if transaction.status == "SUCCESSFUL":
-                        # Process the successful transaction
-                        node = await fetch_node(conn=conn, node_id=pending_order.node_id)
-                        if node is None:
-                            self.logger.error(f"Found a pending order without a matching node: {pending_order.uuid}")
-                            raise InvalidArgument("Found a pending order without a matching node")
-                        till = await fetch_till(conn=conn, node=node, till_id=pending_order.till_id)
-                        if till is None:
-                            self.logger.error(f"Found a pending order without a matching till: {pending_order.uuid}")
-                            raise InvalidArgument("Found a pending order without a matching till")
-                            
-                        if pending_order.order_type == PendingOrderType.topup:
-                            topup = load_pending_topup(pending_order)
-                            result = await self._process_topup(conn=conn, node=node, till=till, pending_order=pending_order, topup=topup)
-                            self.logger.info(f"Successfully processed transaction topup for order {pending_order.uuid}")
-                            return result
-                        elif pending_order.order_type == PendingOrderType.ticket:
-                            ticket_sale = load_pending_ticket_sale(pending_order)
-                            result = await self._process_ticket_sale(conn=conn, node=node, till=till, pending_order=pending_order, ticket_sale=ticket_sale)
-                            self.logger.info(f"Successfully processed transaction ticket sale for order {pending_order.uuid}")
-                            return result
-                    else:
-                        self.logger.info(f"Transaction for order {pending_order.uuid} has status {transaction.status}, not processing")
-                        # For non-successful transactions, don't keep checking
-                        if transaction.status == "FAILED" or transaction.status == "CANCELLED":
-                            await conn.execute(
-                                "UPDATE pending_sumup_order SET status = 'cancelled' WHERE uuid = $1", 
-                                pending_order.uuid
-                            )
-                except SumUpError as e:
-                    self.logger.debug(f"No transaction found for order {pending_order.uuid}: {e}")
-                    # Continue to check for online checkout
-                except Exception as e:
-                    self.logger.exception(f"Unexpected error finding transaction for order {pending_order.uuid}: {e}")
-                    # Continue to check for online checkout
-                
-                # If no transaction found, try to find the checkout (for online payments)
+                # For online payments, only check the checkout API
                 try:
                     sumup_checkout = await sumup_api.find_checkout(pending_order.uuid)
                     if not sumup_checkout:
@@ -294,33 +254,21 @@ class SumupService(Service[Config]):
                     
                 sumup_api = self._create_sumup_api(merchant_code=event.sumup_merchant_code, api_key=event.sumup_api_key)
                 
-                # For online payments, check checkout API first and only if that fails, check transaction API
+                # Only check the checkout status, don't process the payment
                 try:
-                    # First try to find the checkout (for online payments)
+                    # Find the checkout
                     sumup_checkout = await sumup_api.find_checkout(order_uuid)
                     if sumup_checkout:
                         self.logger.info(f"Found checkout for order {order_uuid} with status {sumup_checkout.status}")
+                        # Just return the checkout status - let the payment processor handle the actual processing
                         if sumup_checkout.status == SumUpCheckoutStatus.PAID:
-                            processed_topup = await self.process_pending_order(conn=conn, pending_order=pending_order)
-                            if processed_topup is not None:
-                                return SumUpCheckoutStatus.PAID
+                            # Mark the order as seen as PAID but don't process it here
+                            # The background payment processor will handle the actual processing
+                            self.logger.info(f"Customer portal detected PAID status for order {order_uuid}, letting payment processor handle it")
+                            return SumUpCheckoutStatus.PAID
+                        return sumup_checkout.status
                     else:
-                        self.logger.debug(f"Checkout not found for order {order_uuid}, checking transactions API")
-                        
-                        # If checkout not found, try the transactions API (for Solo device payments)
-                        try:
-                            transaction = await sumup_api.get_transaction(str(order_uuid))
-                            self.logger.info(f"Found transaction for order {order_uuid} with status {transaction.status}")
-                            if transaction.status == "SUCCESSFUL":
-                                processed_topup = await self.process_pending_order(conn=conn, pending_order=pending_order)
-                                if processed_topup is not None:
-                                    return SumUpCheckoutStatus.PAID
-                        except SumUpError as e:
-                            if "NOT_FOUND" in str(e):
-                                self.logger.info(f"No transaction found for order {order_uuid} via transactions API")
-                            else:
-                                self.logger.warning(f"SumUp API error when checking transaction for order {order_uuid}: {e}")
-                                
+                        self.logger.debug(f"Checkout not found for order {order_uuid}")
                 except SumUpError as e:
                     self.logger.error(f"SumUp API error while finding checkout for order {order_uuid}: {e}")
                     return SumUpCheckoutStatus.FAILED
