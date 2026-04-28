@@ -1,12 +1,15 @@
 package de.stustapay.stustapay.ui.payinout.payout
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.stustapay.api.models.CompletedPayOut
 import de.stustapay.api.models.UserTag
 import de.stustapay.libssp.model.NfcTag
 import de.stustapay.libssp.net.Response
+import de.stustapay.stustapay.R
 import de.stustapay.stustapay.repository.PayOutRepository
 import de.stustapay.stustapay.repository.TerminalConfigRepository
 import de.stustapay.stustapay.repository.UserRepository
@@ -22,6 +25,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class PayOutViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val terminalConfigRepository: TerminalConfigRepository,
     private val userRepository: UserRepository,
     private val payOutRepository: PayOutRepository,
@@ -53,6 +57,8 @@ class PayOutViewModel @Inject constructor(
     )
 
     suspend fun tagScanned(tag: NfcTag) {
+        // Set immediately so the UI never briefly treats (tag set, no checked payout) as a failed check.
+        _status.update { context.getString(R.string.payout_status_checking) }
         _payOutState.update {
             PayOutState(tag = tag)
         }
@@ -75,10 +81,18 @@ class PayOutViewModel @Inject constructor(
         }
     }
 
+    fun selectMaximumPayout() {
+        _payOutState.update {
+            val newState = it.copy()
+            newState.selectMaximumPayout()
+            newState
+        }
+    }
+
     fun clearDraft() {
         _completedPayOut.update { null }
         _payOutState.update { PayOutState() }
-        _status.update { "ready" }
+        _status.update { context.getString(R.string.operator_status_ready) }
     }
 
     /** the big payout button was pressed */
@@ -96,7 +110,7 @@ class PayOutViewModel @Inject constructor(
     /** when the confirmation dialog is confirmed */
     suspend fun confirmPayOut() {
         _showPayOutConfirm.update { false }
-        _status.update { "processing payout..." }
+        _status.update { context.getString(R.string.payout_status_processing) }
 
         bookPayOut()
     }
@@ -109,7 +123,7 @@ class PayOutViewModel @Inject constructor(
     /** when the success dialog is dismissed */
     fun dismissPayOutSuccess() {
         _completedPayOut.update { null }
-        _status.update { "ready" }
+        _status.update { context.getString(R.string.operator_status_ready) }
     }
 
     /**
@@ -118,19 +132,19 @@ class PayOutViewModel @Inject constructor(
     private suspend fun checkPayOut(): Boolean {
         val newPayOut = _payOutState.value.getNewPayOut()
         if (newPayOut == null) {
-            _status.update { "No tag known" }
+            _status.update { context.getString(R.string.payout_status_no_tag_known) }
             return false
         }
 
         // local check: amount has to be negative for payouts
         val amount = newPayOut.amount
         if (amount != null && amount >= 0.0) {
-            _status.update { "Amount is zero" }
+            _status.update { context.getString(R.string.payout_status_amount_is_zero) }
             return false
         }
 
         // server-side check
-        _status.update { "Checking PayOut" }
+        _status.update { context.getString(R.string.payout_status_checking) }
         return when (val response = payOutRepository.checkPayOut(newPayOut)) {
             is Response.OK -> {
                 _payOutState.update {
@@ -138,12 +152,27 @@ class PayOutViewModel @Inject constructor(
                     state.updateWithPendingPayOut(response.data)
                     state
                 }
-                _status.update { "PayOut valid" }
                 true
             }
 
+            is Response.Error.Service.NotEnoughFunds -> {
+                _status.update { context.getString(R.string.no_balance_for_payout) }
+                false
+            }
+
             is Response.Error.Service -> {
-                _status.update { response.msg() }
+                // Some server variants send English messages even for “no balance” scenarios.
+                // Map them back to our localized UI strings.
+                val msg = response.msg()
+                if (msg.contains("Cannot payout", ignoreCase = true) &&
+                    (msg.contains("zero", ignoreCase = true) ||
+                        msg.contains("negative", ignoreCase = true) ||
+                        msg.contains("current balance", ignoreCase = true))
+                ) {
+                    _status.update { context.getString(R.string.no_balance_for_payout) }
+                } else {
+                    _status.update { msg }
+                }
                 false
             }
 
@@ -158,21 +187,21 @@ class PayOutViewModel @Inject constructor(
         val newPayOut = _payOutState.value.getCheckedNewPayout()
 
         if (newPayOut == null) {
-            _status.update { "payout was not checked before" }
+            _status.update { context.getString(R.string.payout_status_not_checked_before) }
             return
         }
 
-        _status.update { "Pay-Out in progress..." }
+        _status.update { context.getString(R.string.payout_status_in_progress) }
 
         when (val response = payOutRepository.bookPayOut(newPayOut)) {
             is Response.OK -> {
                 clearDraft()
                 _completedPayOut.update { response.data }
-                _status.update { "Pay-Out booked successfully" }
+                _status.update { context.getString(R.string.payout_status_booked_successfully) }
             }
 
             is Response.Error -> {
-                _status.update { "Failed Pay-Out booking! ${response.msg()}" }
+                _status.update { context.getString(R.string.payout_status_booking_failed, response.msg()) }
             }
         }
     }

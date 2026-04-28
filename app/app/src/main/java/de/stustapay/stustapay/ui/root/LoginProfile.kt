@@ -1,21 +1,28 @@
 package de.stustapay.stustapay.ui.root
 
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import de.stustapay.stustapay.R
+import de.stustapay.stustapay.ui.common.selfservice.SelfServicePalette
 
 @Composable
 fun LoginProfile(
-    viewModel: TerminalConfigViewModel
+    viewModel: TerminalConfigViewModel,
+    selfServiceMode: Boolean = false,
 ) {
     val loginProfileUiState: LoginProfileUIState by viewModel.loginProfileUIState.collectAsStateWithLifecycle()
+    val titleColor = if (selfServiceMode) SelfServicePalette.title else Color.Unspecified
+    val subtitleColor = if (selfServiceMode) SelfServicePalette.subtitle else Color.Unspecified
 
     /*
     var image: ImageVector = Icons.Filled.Person
@@ -41,13 +48,15 @@ fun LoginProfile(
                 modifier = Modifier.padding(top = 5.dp),
                 textAlign = TextAlign.Center,
                 text = login.username,
-                style = MaterialTheme.typography.h5,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
+                color = titleColor,
             )
             Text(
                 modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                 text = login.role,
-                style = MaterialTheme.typography.body1,
+                fontSize = 18.sp,
+                color = subtitleColor,
             )
         }
 
@@ -55,8 +64,9 @@ fun LoginProfile(
             Text(
                 modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                 textAlign = TextAlign.Center,
-                text = "No Login",
-                style = MaterialTheme.typography.body1,
+                text = stringResource(R.string.not_logged_in),
+                fontSize = 18.sp,
+                color = subtitleColor,
             )
         }
 
@@ -69,7 +79,8 @@ fun LoginProfile(
                     bottom = 30.dp,
                 ),
                 text = login.message,
-                style = MaterialTheme.typography.body1,
+                fontSize = 18.sp,
+                color = subtitleColor,
             )
         }
     }

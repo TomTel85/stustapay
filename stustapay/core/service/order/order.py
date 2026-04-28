@@ -1,5 +1,4 @@
 import logging
-from collections import defaultdict
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Dict, Optional, Set
@@ -43,8 +42,12 @@ from stustapay.core.schema.order import (
     PendingTicketSale,
     PendingTopUp,
     Transaction,
-    get_source_account,
-    get_target_account,
+)
+from stustapay.core.schema.order import (
+    get_source_account as get_source_account,
+)
+from stustapay.core.schema.order import (
+    get_target_account as get_target_account,
 )
 from stustapay.core.schema.product import Product, ProductRestriction, ProductType
 from stustapay.core.schema.terminal import CurrentTerminal
@@ -73,14 +76,15 @@ from stustapay.core.service.order.pending_order import (
     fetch_pending_order,
     load_pending_ticket_sale,
     load_pending_topup,
+    make_sale_bookings,
     make_ticket_sale_bookings,
     make_topup_bookings,
+    save_pending_sale,
     save_pending_ticket_sale,
     save_pending_topup,
 )
-from stustapay.core.service.order.sumup import SumupService
 from stustapay.core.service.order.stats import build_selected_date_condition, get_selected_date_ranges
-from stustapay.core.service.tree.common import fetch_event_for_node
+from stustapay.core.service.order.sumup import SumupService
 from stustapay.core.service.product import (
     fetch_discount_product,
     fetch_pay_out_product,
@@ -88,8 +92,11 @@ from stustapay.core.service.product import (
     fetch_top_up_product,
 )
 from stustapay.core.service.till.common import fetch_till, fetch_virtual_till
-from stustapay.core.service.transaction import book_transaction
-from stustapay.core.service.tree.common import fetch_node, fetch_restricted_event_settings_for_node
+from stustapay.core.service.tree.common import (
+    fetch_event_for_node,
+    fetch_node,
+    fetch_restricted_event_settings_for_node,
+)
 
 from ..till.common import get_cash_register_account_id
 from .booking import BookingIdentifier, NewLineItem, book_order
@@ -236,10 +243,33 @@ async def fetch_order(*, conn: Connection, order_id: int) -> Optional[Order]:
     return await conn.fetch_maybe_one(Order, "select * from order_value where id = $1", order_id)
 
 
+async def fetch_order_at_node(*, conn: Connection, node: Node, order_id: int) -> Optional[Order]:
+    return await conn.fetch_maybe_one(
+        Order,
+        "select * from order_value_prefiltered(array[$1]::bigint[], $2)",
+        order_id,
+        node.event_node_id,
+    )
+
+
 async def fetch_transaction(*, conn: Connection, node: Node, transaction_id: int) -> Transaction:
-    del node  # unused
-    # TODO: tree permissions
-    return await conn.fetch_one(Transaction, "select * from transaction_with_order t where id = $1", transaction_id)
+    return await conn.fetch_one(
+        Transaction,
+        "select t.* "
+        "from transaction_with_order t "
+        "left join ordr o on t.order_id = o.id "
+        "left join till ot on o.till_id = ot.id "
+        "left join node order_node on ot.node_id = order_node.id "
+        "where t.id = $1 and ("
+        "   order_node.event_node_id = $2 "
+        "   or exists ("
+        "       select from account a where a.id in (t.source_account, t.target_account) and a.node_id = any($3)"
+        "   )"
+        ")",
+        transaction_id,
+        node.event_node_id,
+        node.ids_to_event_node,
+    )
 
 
 class OrderService(Service[Config]):
@@ -267,6 +297,7 @@ class OrderService(Service[Config]):
     async def _get_products_from_buttons(
         *,
         conn: Connection,
+        node: Node,
         till_profile_id: int,
         buttons: list[BookedButton],
     ) -> list[BookedProduct]:
@@ -284,9 +315,14 @@ class OrderService(Service[Config]):
                     button.id,
                     till_profile_id,
                 )
+                if any(product.node_id not in node.ids_to_event_node for product in products):
+                    raise InvalidArgument("this till profile is not allowed to use these buttons")
             else:
                 products = await conn.fetch_many(
-                    Product, "select p.* from product_with_tax_and_restrictions p where p.id = $1", button.id
+                    Product,
+                    "select p.* from product_with_tax_and_restrictions p where p.id = $1 and p.node_id = any($2)",
+                    button.id,
+                    node.ids_to_event_node,
                 )
             if len(products) == 0:
                 raise InvalidArgument("this till profile is not allowed to use these buttons")
@@ -553,7 +589,7 @@ class OrderService(Service[Config]):
         pending_order = await fetch_pending_order(conn=conn, uuid=order_uuid)
         if pending_order.till_id != current_till.id:
             raise InvalidArgument("Cannot cancel an order for a different till")
-        if pending_order.order_type != PendingOrderType.topup:
+        if pending_order.order_type not in {PendingOrderType.topup, PendingOrderType.ticket, PendingOrderType.sale}:
             raise InvalidArgument("Invalid order uuid")
         if pending_order.status == PendingOrderStatus.booked:
             raise InvalidArgument("Order was already successfully booked")
@@ -601,7 +637,7 @@ class OrderService(Service[Config]):
             )
 
         booked_products = await self._get_products_from_buttons(
-            conn=conn, till_profile_id=till.active_profile_id, buttons=new_sale.buttons
+            conn=conn, node=node, till_profile_id=till.active_profile_id, buttons=new_sale.buttons
         )
         line_items = await self._preprocess_order_positions(
             customer_restrictions=(
@@ -724,6 +760,69 @@ class OrderService(Service[Config]):
             buttons=new_sale.buttons,
         )
 
+    @with_db_transaction(read_only=False)
+    @requires_terminal(user_privileges=[Privilege.can_book_orders])
+    async def register_pending_sale(
+        self,
+        *,
+        conn: Connection,
+        current_till: Till,
+        current_terminal: CurrentTerminal,
+        node: Node,
+        current_user: CurrentUser,
+        new_sale: NewSale,
+    ) -> PendingSale:
+        if new_sale.payment_method != PaymentMethod.sumup:
+            raise InvalidArgument("Only sumup payments can be marked as pending")
+
+        pending_sale = await self.check_sale(  # pylint: disable=unexpected-keyword-arg, missing-kwoa
+            conn=conn,
+            current_terminal=current_terminal,
+            current_till=current_till,
+            node=node,
+            new_sale=new_sale,
+        )
+        await save_pending_sale(
+            conn=conn,
+            node_id=node.id,
+            till_id=current_till.id,
+            cashier_id=current_user.id,
+            sale=pending_sale,
+        )
+        return pending_sale
+
+    @with_db_transaction(read_only=False)
+    @requires_terminal(user_privileges=[Privilege.can_book_orders])
+    async def check_pending_sale(
+        self,
+        *,
+        conn: Connection,
+        current_till: Till,
+        order_uuid: UUID,
+    ) -> CompletedSale | None:
+        pending_order = await fetch_pending_order(conn=conn, uuid=order_uuid)
+        if pending_order.till_id != current_till.id:
+            raise InvalidArgument("Cannot check an order for a different till")
+        if pending_order.order_type != PendingOrderType.sale:
+            raise InvalidArgument("Invalid order uuid")
+        if pending_order.status == PendingOrderStatus.booked:
+            return None
+        if pending_order.status == PendingOrderStatus.cancelled:
+            return None
+
+        sale = await self.sumup.process_pending_order(conn=conn, pending_order=pending_order)
+        if sale is None:
+            return None
+        if isinstance(sale, CompletedSale):
+            event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=current_till.node_id)
+            sale.bon_url = event_settings.customer_portal_url + "/bon/" + str(sale.uuid)
+            return sale
+
+        logger.warning(
+            f"Weird order state for uuid = {order_uuid}. Sumup order was accepted but we have the wrong order type"
+        )
+        return None
+
     @with_db_transaction(read_only=True)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
     async def check_sale_products(
@@ -790,93 +889,24 @@ class OrderService(Service[Config]):
             new_sale=new_sale,
         )
 
-        line_items = [
-            NewLineItem(
-                quantity=line_item.quantity,
-                product_id=line_item.product.id,
-                product_price=line_item.product_price,
-                tax_rate_id=line_item.tax_rate_id,
-            )
-            for line_item in pending_sale.line_items
-        ]
-
-        cash_entry_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.cash_entry)
-        cash_topup_acc = await get_system_account_for_node(
-            conn=conn, node=node, account_type=AccountType.cash_topup_source
-        )
-        sumup_entry_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.sumup_entry)
-        sale_exit_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.sale_exit)
-
-        # combine booking based on (source, target) -> amount
-        bookings: Dict[BookingIdentifier, float] = defaultdict(lambda: 0.0)
-        for line_item in pending_sale.line_items:
-            product = line_item.product
-
-            source_acc_id = None
-            target_acc_id = None
-            if pending_sale.payment_method == PaymentMethod.tag:
-                assert pending_sale.customer_account_id is not None
-                source_acc_id = get_source_account(OrderType.sale, pending_sale.customer_account_id)
-                target_acc_id = get_target_account(OrderType.sale, product, sale_exit_acc.id)
-            elif pending_sale.payment_method == PaymentMethod.cash:
-                if till.active_cash_register_id is None:
-                    raise InvalidArgument("Cash payments require a cash register")
-                cash_register_account_id = await get_cash_register_account_id(
-                    conn=conn, node=node, cash_register_id=till.active_cash_register_id
-                )
-                bookings[
-                    BookingIdentifier(source_account_id=cash_entry_acc.id, target_account_id=cash_register_account_id)
-                ] += float(line_item.total_price)
-                source_acc_id = get_source_account(OrderType.sale, cash_topup_acc.id)
-                target_acc_id = get_target_account(OrderType.sale, product, sale_exit_acc.id)
-            elif pending_sale.payment_method == PaymentMethod.sumup:
-                source_acc_id = get_source_account(OrderType.sale, sumup_entry_acc.id)
-                target_acc_id = get_target_account(OrderType.sale, product, sale_exit_acc.id)
-
-            assert source_acc_id is not None
-            assert target_acc_id is not None
-
-            bookings[BookingIdentifier(source_account_id=source_acc_id, target_account_id=target_acc_id)] += float(
-                line_item.total_price
-            )
-
-        order_info = await book_order(
+        booked_sale = await make_sale_bookings(
             conn=conn,
-            order_type=OrderType.sale,
-            uuid=pending_sale.uuid,
-            payment_method=pending_sale.payment_method,
-            customer_account_id=pending_sale.customer_account_id,
-            cashier_id=current_user.id,
+            current_till=till,
+            node=node,
+            current_user_id=current_user.id,
+            sale=pending_sale,
             cash_register_id=current_user.cash_register_id,
-            line_items=line_items,
-            bookings=bookings,
-            till_id=till.id,
+            buttons=[],
         )
-
-        if pending_sale.used_vouchers > 0:
-            assert pending_sale.customer_account_id is not None
-            await book_transaction(
-                conn=conn,
-                order_id=order_info.id,
-                source_account_id=pending_sale.customer_account_id,
-                target_account_id=sale_exit_acc.id,
-                voucher_amount=pending_sale.used_vouchers,
+        if pending_sale.payment_method == PaymentMethod.sumup:
+            await conn.execute(
+                "update pending_sumup_order set status = 'booked' "
+                "where uuid = $1 and order_type = 'sale' and status = 'pending'",
+                pending_sale.uuid,
             )
-
         completed_order = InternalCompletedSale(
+            **booked_sale.model_dump(exclude={"bon_url", "buttons"}),
             buttons=pending_sale.buttons,
-            id=order_info.id,
-            uuid=order_info.uuid,
-            old_balance=pending_sale.old_balance,
-            new_balance=pending_sale.new_balance,
-            old_voucher_balance=pending_sale.old_voucher_balance,
-            new_voucher_balance=pending_sale.new_voucher_balance,
-            customer_account_id=pending_sale.customer_account_id,
-            payment_method=pending_sale.payment_method,
-            line_items=pending_sale.line_items,
-            booked_at=order_info.booked_at,
-            till_id=till.id,
-            cashier_id=current_user.id,
         )
 
         if completed_order.payment_method == PaymentMethod.tag:
@@ -1017,11 +1047,13 @@ class OrderService(Service[Config]):
         order_id: int,
         edit_sale: EditSaleProducts,
     ) -> CompletedSaleProducts:
-        order = await fetch_order(conn=conn, order_id=order_id)
+        order = await fetch_order_at_node(conn=conn, node=node, order_id=order_id)
         if order is None:
             raise InvalidArgument("Order does not exist")
         virtual_till = await fetch_virtual_till(conn=conn, node=node)
-        await self._cancel_sale(conn=conn, current_user=current_user, order_id=order_id, till_id=virtual_till.id)
+        await self._cancel_sale(
+            conn=conn, node=node, current_user=current_user, order_id=order_id, till_id=virtual_till.id
+        )
 
         assert order.customer_tag_uid is not None
 
@@ -1086,13 +1118,22 @@ class OrderService(Service[Config]):
         conn: Connection,
         current_user: CurrentUser,
         till_id: int,
+        node: Node,
         order_id: int,
     ):
-        is_order_cancelled = await conn.fetchval("select true from ordr where cancels_order = $1", order_id)
+        is_order_cancelled = await conn.fetchval(
+            "select true "
+            "from ordr o "
+            "join till t on o.till_id = t.id "
+            "join node n on t.node_id = n.id "
+            "where o.cancels_order = $1 and n.event_node_id = $2",
+            order_id,
+            node.event_node_id,
+        )
         if is_order_cancelled:
             raise InvalidArgument("Order has already been cancelled")
 
-        order = await fetch_order(conn=conn, order_id=order_id)
+        order = await fetch_order_at_node(conn=conn, node=node, order_id=order_id)
         if order is None:
             raise InvalidArgument("Order does not exist")
         if order.order_type != OrderType.sale:
@@ -1143,15 +1184,21 @@ class OrderService(Service[Config]):
 
     @with_db_transaction(read_only=False)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
-    async def cancel_sale(self, *, conn: Connection, current_till: Till, current_user: CurrentUser, order_id: int):
-        await self._cancel_sale(conn=conn, till_id=current_till.id, current_user=current_user, order_id=order_id)
+    async def cancel_sale(
+        self, *, conn: Connection, node: Node, current_till: Till, current_user: CurrentUser, order_id: int
+    ):
+        await self._cancel_sale(
+            conn=conn, node=node, till_id=current_till.id, current_user=current_user, order_id=order_id
+        )
 
     @with_db_transaction(read_only=False)
     @requires_node()
     @requires_user([Privilege.can_book_orders])
     async def cancel_sale_admin(self, *, conn: Connection, node: Node, current_user: CurrentUser, order_id: int):
         virtual_till = await fetch_virtual_till(conn=conn, node=node)
-        await self._cancel_sale(conn=conn, till_id=virtual_till.id, current_user=current_user, order_id=order_id)
+        await self._cancel_sale(
+            conn=conn, node=node, till_id=virtual_till.id, current_user=current_user, order_id=order_id
+        )
 
     @with_db_transaction(read_only=False)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
@@ -1180,7 +1227,13 @@ class OrderService(Service[Config]):
             conn=conn, node=node, customer_tag_uid=new_pay_out.customer_tag_uid
         )
 
-        if node.event.post_payment_allowed:
+        event_settings = node.event
+        if event_settings is None:
+            if node.event_node_id is None:
+                raise InvalidArgument("Cannot process payout: till node has no associated event")
+            event_settings = await fetch_event_for_node(conn=conn, node=node)
+
+        if event_settings.post_payment_allowed:
             # Post-payment is allowed; customers can only pay in to reduce their debt
 
             if new_pay_out.amount is None:
@@ -1190,7 +1243,9 @@ class OrderService(Service[Config]):
             new_balance = customer_account.balance + new_pay_out.amount
 
             # Get the appropriate balance limit based on VIP status
-            max_negative_balance = -1 * (node.event.vip_max_account_balance if customer_account.is_vip else node.event.max_account_balance)  # Should be negative
+            max_negative_balance = -1 * (
+                event_settings.vip_max_account_balance if customer_account.is_vip else event_settings.max_account_balance
+            )  # Should be negative
             if new_balance < max_negative_balance:
                 too_much = max_negative_balance - new_balance
                 raise InvalidArgument(
@@ -1233,7 +1288,9 @@ class OrderService(Service[Config]):
             new_balance = customer_account.balance - abs(payout_amount)
 
             # Get the appropriate balance limit based on VIP status
-            max_positive_balance = node.event.vip_max_account_balance if customer_account.is_vip else node.event.max_account_balance
+            max_positive_balance = (
+                event_settings.vip_max_account_balance if customer_account.is_vip else event_settings.max_account_balance
+            )
 
             # Ensure the payout does not violate any constraints
             if new_balance > max_positive_balance:
@@ -1248,7 +1305,7 @@ class OrderService(Service[Config]):
         # For post-payment: payout_amount can be negative (customer paying into debt)
         return PendingPayOut(
             uuid=new_pay_out.uuid,
-            amount=abs(payout_amount) if not node.event.post_payment_allowed else payout_amount,
+            amount=abs(payout_amount) if not event_settings.post_payment_allowed else payout_amount,
             customer_tag_uid=new_pay_out.customer_tag_uid,
             customer_account_id=customer_account.id,
             old_balance=customer_account.balance,
@@ -1646,7 +1703,7 @@ class OrderService(Service[Config]):
 
     @with_db_transaction(read_only=True)
     @requires_node()
-    @requires_user([Privilege.node_administration])
+    @requires_user([Privilege.node_administration, Privilege.can_book_orders])
     async def list_orders(self, *, conn: Connection, node: Node, customer_account_id: int) -> list[Order]:
         return await conn.fetch_many(
             Order,
@@ -1657,7 +1714,7 @@ class OrderService(Service[Config]):
 
     @with_db_transaction(read_only=True)
     @requires_node()
-    @requires_user([Privilege.node_administration])
+    @requires_user([Privilege.node_administration, Privilege.can_book_orders])
     async def list_orders_by_till(self, *, conn: Connection, node: Node, till_id: int) -> list[Order]:
         return await conn.fetch_many(
             Order,
@@ -1668,7 +1725,7 @@ class OrderService(Service[Config]):
 
     @with_db_transaction(read_only=True)
     @requires_node()
-    @requires_user([Privilege.node_administration])
+    @requires_user([Privilege.node_administration, Privilege.can_book_orders])
     async def list_orders_filtered(
         self,
         *,
@@ -1687,6 +1744,8 @@ class OrderService(Service[Config]):
         params: list = [scope_node.id]
 
         conditions.append("o.id IN (SELECT id FROM orders_at_node_and_children($1))")
+        params.append(OrderType.money_transfer.name)
+        conditions.append(f"o.order_type != ${len(params)}")
 
         if from_timestamp is not None:
             params.append(from_timestamp)
@@ -1775,9 +1834,9 @@ class OrderService(Service[Config]):
 
     @with_db_transaction(read_only=True)
     @requires_node()
-    @requires_user([Privilege.node_administration])
-    async def get_order(self, *, conn: Connection, order_id: int) -> Optional[Order]:
-        return await fetch_order(conn=conn, order_id=order_id)
+    @requires_user([Privilege.node_administration, Privilege.can_book_orders])
+    async def get_order(self, *, conn: Connection, node: Node, order_id: int) -> Optional[Order]:
+        return await fetch_order_at_node(conn=conn, node=node, order_id=order_id)
 
     @with_db_transaction(read_only=True)
     @requires_node()

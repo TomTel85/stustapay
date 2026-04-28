@@ -3,15 +3,27 @@ package de.stustapay.stustapay.ui.sale
 import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
-import androidx.compose.material.MaterialTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.material.Button
+import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
@@ -19,8 +31,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ui.chipscan.NfcScanDialog
+import de.stustapay.stustapay.ui.chipscan.NfcScanDialogVariant
 import de.stustapay.stustapay.ui.chipscan.rememberNfcScanDialogState
-import de.stustapay.stustapay.ui.common.ErrorDialog
+import de.stustapay.stustapay.ui.common.FailureIcon
+import de.stustapay.stustapay.ui.common.operator.OperatorPalette
+import de.stustapay.stustapay.ui.common.operator.OperatorPanel
 import kotlinx.coroutines.launch
 
 
@@ -59,6 +74,7 @@ fun SaleView(
 
     NfcScanDialog(
         state = scanState,
+        variant = NfcScanDialogVariant.Sale,
         onScan = { uid ->
             scope.launch {
                 viewModel.tagScanned(uid)
@@ -70,11 +86,10 @@ fun SaleView(
     )
 
     if (error != null) {
-        ErrorDialog(onDismiss = { viewModel.errorPopupDismissed() }) {
-            Text(text = stringResource(R.string.error), style = MaterialTheme.typography.h3)
-
-            Text(error, style = MaterialTheme.typography.h4)
-        }
+        SaleErrorDialog(
+            message = error,
+            onDismiss = { viewModel.errorPopupDismissed() }
+        )
     }
 
     BackHandler {
@@ -131,6 +146,54 @@ fun SaleView(
                 },
                 viewModel = viewModel,
             )
+        }
+    }
+}
+
+@Composable
+private fun SaleErrorDialog(
+    message: String,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        OperatorPanel(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 520.dp),
+            backgroundColor = OperatorPalette.panel,
+            borderColor = OperatorPalette.danger,
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                FailureIcon()
+                Text(
+                    text = message,
+                    color = OperatorPalette.title,
+                    fontSize = 24.sp,
+                    lineHeight = 32.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .widthIn(max = 240.dp)
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = OperatorPalette.accent,
+                        contentColor = OperatorPalette.accentText,
+                    ),
+                ) {
+                    Text(
+                        text = stringResource(R.string.back),
+                        color = Color.Black,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
         }
     }
 }

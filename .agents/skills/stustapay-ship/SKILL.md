@@ -7,12 +7,17 @@ description: Use when a StuStaPay change is near completion and you need final r
 
 Use this skill for the last pass before handing work back.
 
+## Start
+
+- Prefer the stage bootstrap when the release summary or follow-up list should be durable:
+  - `python3 .agents/scripts/workflow_bootstrap.py --stage ship --output markdown --write-state`
+
 ## Ship gate
 
 - Confirm the right verification commands ran for every touched surface.
 - Confirm generated artifacts are either intentionally present or intentionally absent.
 - Confirm docs and AGENTS guidance were updated if the developer workflow changed.
-- Confirm config and packaging follow-ups are called out when code changes alone are not enough.
+- Confirm config, deploy, CI, Pretix, and packaging follow-ups are called out when code changes alone are not enough.
 
 ## Output
 

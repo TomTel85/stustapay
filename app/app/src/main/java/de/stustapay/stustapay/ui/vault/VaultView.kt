@@ -22,6 +22,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,6 +32,7 @@ import de.stustapay.libssp.ui.theme.MoneyAmountStyle
 import de.stustapay.libssp.ui.theme.NfcScanStyle
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ui.chipscan.NfcScanDialog
+import de.stustapay.stustapay.ui.chipscan.PencilOperatorScanContent
 import de.stustapay.stustapay.ui.common.CloseContent
 import de.stustapay.stustapay.ui.common.SuccessIcon
 import de.stustapay.stustapay.ui.common.amountselect.AmountConfig
@@ -54,15 +56,14 @@ fun VaultView(
         leaveView()
     }
 
-    LaunchedEffect(null) {
+    LaunchedEffect(Unit) {
         viewModel.initialReset()
     }
 
     NavScaffold(navigateBack = leaveView,
         title = { Text(stringResource(R.string.management_vault_title)) }) {
-        Box(modifier = Modifier.padding(it)) {
-            Scaffold(content = {
-                Box(modifier = Modifier.padding(it)) {
+            Scaffold(content = { innerPadding ->
+                Box(modifier = Modifier.padding(innerPadding)) {
                     if (uiState.nav is VaultNavState.Scan) {
                         NfcScanDialog(state = uiState.scanState,
                             onDismiss = leaveView,
@@ -70,9 +71,12 @@ fun VaultView(
                                 scope.launch {
                                     viewModel.fetchTag(tag)
                                 }
-                            }) {
-                            Text(
-                                stringResource(R.string.nfc_scan_prompt), style = NfcScanStyle
+                            }) { _, compactLayout ->
+                            PencilOperatorScanContent(
+                                title = stringResource(R.string.nfc_scan_title_plain),
+                                subtitle = stringResource(R.string.nfc_scan_description),
+                                scanStatus = "",
+                                isSmallScreen = compactLayout,
                             )
                         }
                     }
@@ -168,7 +172,7 @@ fun VaultView(
                                                 viewModel.completeWithdraw()
                                             }
                                         }) {
-                                        Text("Withdraw")
+                                        Text(stringResource(R.string.vault_pack))
                                     }
                                 }
                             }
@@ -196,7 +200,7 @@ fun VaultView(
                                                 viewModel.completeDeposit()
                                             }
                                         }) {
-                                        Text("Deposit")
+                                        Text(stringResource(R.string.vault_unpack))
                                     }
                                 }
                             }
@@ -214,11 +218,12 @@ fun VaultView(
                                 ) {
                                     SuccessIcon(modifier = Modifier.size(120.dp))
                                     Text(
-                                        "Withdrawal successfull",
-                                        style = MaterialTheme.typography.h5
+                                        stringResource(R.string.vault_pack_success),
+                                        fontSize = 32.sp,
+                                        fontWeight = FontWeight.Bold,
                                     )
                                     ProductConfirmItem(
-                                        name = "Withdrawn",
+                                        name = stringResource(R.string.vault_packed_label),
                                         price = uiState.amount.toDouble() / 100.0,
                                         bigStyle = true,
                                     )
@@ -229,7 +234,7 @@ fun VaultView(
                                         ),
                                         style = MoneyAmountStyle,
                                     )
-                                    Text("in transport account", fontSize = 30.sp)
+                                    Text(stringResource(R.string.vault_balance_in_transport_account), fontSize = 30.sp)
                                 }
                             }
                         }
@@ -245,9 +250,13 @@ fun VaultView(
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     SuccessIcon(modifier = Modifier.size(120.dp))
-                                    Text("Deposit successfull", style = MaterialTheme.typography.h5)
+                                    Text(
+                                        stringResource(R.string.vault_unpack_success),
+                                        fontSize = 32.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
                                     ProductConfirmItem(
-                                        name = "Deposited",
+                                        name = stringResource(R.string.vault_unpacked_label),
                                         price = uiState.amount.toDouble() / 100.0,
                                         bigStyle = true,
                                     )
@@ -258,7 +267,7 @@ fun VaultView(
                                         ),
                                         style = MoneyAmountStyle,
                                     )
-                                    Text("in transport account", fontSize = 30.sp)
+                                    Text(stringResource(R.string.vault_balance_in_transport_account), fontSize = 30.sp)
                                 }
                             }
                         }
@@ -337,6 +346,5 @@ fun VaultView(
                     }
                 }
             })
-        }
     }
 }

@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional
 
@@ -41,8 +42,8 @@ from stustapay.core.service.common.decorators import (
     requires_user,
 )
 from sftkit.error import AccessDenied, NotFound
+from stustapay.core.service.till.common import assign_cash_register_to_active_user_till
 from stustapay.core.service.till.till import (
-    assign_cash_register_to_till_if_available,
     assign_till_to_terminal,
     logout_user_from_terminal,
     remove_terminal_from_till,
@@ -52,32 +53,62 @@ from stustapay.core.service.tree.common import (
     fetch_node,
     fetch_restricted_event_settings_for_node,
 )
+from stustapay.core.service.sumup_link import resolve_terminal_sumup_access
 from stustapay.core.service.user import list_assignable_roles_for_user_at_node
 from stustapay.payment.sumup.api import SumUpOAuthToken, fetch_new_oauth_token
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class SumUpOAuthCacheKey:
+    source_node_id: int
+    merchant_code: str
+    refresh_token: str
+    oauth_client_id: str
+    oauth_client_secret: str
+
+
+def _terminal_scope_node_ids(node: Node) -> list[int]:
+    if node.ids_to_event_node is not None:
+        return node.ids_to_event_node
+    return node.ids_to_root
+
+
 async def _fetch_terminal(conn: Connection, node: Node, terminal_id: int) -> Terminal | None:
+    scope_node_ids = _terminal_scope_node_ids(node)
     return await conn.fetch_maybe_one(
         Terminal,
-        "select t.*, till.id as till_id from terminal t left join till on t.id = till.terminal_id "
-        "where t.id = $1 and t.node_id = any($2)",
+        "select t.*, till.id as till_id "
+        "from terminal t "
+        "left join till on t.id = till.terminal_id "
+        "join node n on t.node_id = n.id "
+        "where t.id = $1 and (n.id = any($2) or $3 = any(n.parent_ids))",
         terminal_id,
-        node.ids_to_root,
+        scope_node_ids,
+        node.id,
     )
 
 
 async def _ensure_entry_area(conn: Connection, node: Node, entry_area_id: int) -> EntryArea:
+    scope_node_ids = _terminal_scope_node_ids(node)
     entry_area = await conn.fetch_maybe_one(
         EntryArea,
-        "select * from entry_area where id = $1 and node_id = any($2)",
+        "select ea.* "
+        "from entry_area ea "
+        "join node n on ea.node_id = n.id "
+        "where ea.id = $1 and (n.id = any($2) or $3 = any(n.parent_ids))",
         entry_area_id,
-        node.ids_to_root,
+        scope_node_ids,
+        node.id,
     )
     if entry_area is None:
         raise InvalidArgument(f"Entry area {entry_area_id} does not exist")
     return entry_area
+
+
+def _normalize_self_service(terminal: NewTerminal) -> bool:
+    return terminal.mode == TerminalMode.till and terminal.self_service
 
 
 class TerminalService(Service[Config]):
@@ -85,7 +116,7 @@ class TerminalService(Service[Config]):
         super().__init__(db_pool, config)
         self.auth_service = auth_service
 
-        self.sumup_oauth_cache: dict[int, SumUpOAuthToken] = {}
+        self.sumup_oauth_cache: dict[SumUpOAuthCacheKey, SumUpOAuthToken] = {}
 
     @with_db_transaction
     @requires_node(object_types=[ObjectType.terminal])
@@ -100,13 +131,14 @@ class TerminalService(Service[Config]):
             await _ensure_entry_area(conn=conn, node=node, entry_area_id=terminal.entry_area_id)
 
         terminal_id = await conn.fetchval(
-            "insert into terminal (node_id, name, description, mode, entry_area_id) "
-            "values ($1, $2, $3, $4, $5) returning id",
+            "insert into terminal (node_id, name, description, mode, entry_area_id, self_service) "
+            "values ($1, $2, $3, $4, $5, $6) returning id",
             node.id,
             terminal.name,
             terminal.description,
             terminal.mode.value,
             terminal.entry_area_id,
+            _normalize_self_service(terminal),
         )
         t = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         assert t is not None
@@ -116,11 +148,17 @@ class TerminalService(Service[Config]):
     @requires_node()
     @requires_user([Privilege.node_administration])
     async def list_terminals(self, *, conn: Connection, node: Node) -> list[Terminal]:
+        scope_node_ids = _terminal_scope_node_ids(node)
         return await conn.fetch_many(
             Terminal,
-            "select t.*, till.id as till_id from terminal t left join till on t.id = till.terminal_id "
-            "where t.node_id = any($1) order by t.name",
-            node.ids_to_root,
+            "select t.*, till.id as till_id "
+            "from terminal t "
+            "left join till on t.id = till.terminal_id "
+            "join node n on t.node_id = n.id "
+            "where n.id = any($1) or $2 = any(n.parent_ids) "
+            "order by t.name",
+            scope_node_ids,
+            node.id,
         )
 
     @with_db_transaction(read_only=True)
@@ -147,17 +185,18 @@ class TerminalService(Service[Config]):
                 raise InvalidArgument("Entry terminals must be assigned to an entry area")
             await _ensure_entry_area(conn=conn, node=node, entry_area_id=terminal.entry_area_id)
             if existing_terminal.till_id is not None:
-                await remove_terminal_from_till(conn=conn, node_id=node.id, till_id=existing_terminal.till_id)
+                await remove_terminal_from_till(conn=conn, till_id=existing_terminal.till_id)
 
         term_id = await conn.fetchval(
-            "update terminal set name = $1, description = $2, mode = $3, entry_area_id = $4 "
-            "where id = $5 and node_id = $6 returning id",
+            "update terminal set name = $1, description = $2, mode = $3, entry_area_id = $4, self_service = $5 "
+            "where id = $6 and node_id = $7 returning id",
             terminal.name,
             terminal.description,
             terminal.mode.value,
             terminal.entry_area_id,
+            _normalize_self_service(terminal),
             terminal_id,
-            node.id,
+            existing_terminal.node_id,
         )
         if term_id is None:
             raise NotFound(element_type="terminal", element_id=terminal_id)
@@ -169,7 +208,10 @@ class TerminalService(Service[Config]):
     @requires_node(object_types=[ObjectType.terminal])
     @requires_user([Privilege.node_administration])
     async def delete_terminal(self, *, conn: Connection, node: Node, terminal_id: int) -> bool:
-        result = await conn.execute("delete from terminal where id = $1 and node_id = $2", terminal_id, node.id)
+        terminal = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
+        if terminal is None:
+            return False
+        result = await conn.execute("delete from terminal where id = $1 and node_id = $2", terminal_id, terminal.node_id)
         return result != "DELETE 0"
 
     @with_db_transaction(read_only=False)
@@ -200,19 +242,22 @@ class TerminalService(Service[Config]):
     @requires_node(object_types=[ObjectType.terminal])
     @requires_user([Privilege.node_administration])
     async def logout_terminal_id(self, *, conn: Connection, node: Node, terminal_id: int) -> bool:
+        terminal = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
+        if terminal is None:
+            raise NotFound(element_type="terminal", element_id=terminal_id)
+
         row = await conn.fetchrow(
             "update terminal set registration_uuid = gen_random_uuid(), session_uuid = null "
             "where id = $1 and node_id = $2 returning id",
             terminal_id,
-            node.id,
+            terminal.node_id,
         )
         if row is None:
             raise NotFound(element_type="terminal", element_id=terminal_id)
 
         till_id = await conn.fetchval("select id from till where terminal_id = $1", terminal_id)
         if till_id is not None:
-            till_node_id = await conn.fetchval("select node_id from till where id = $1", till_id)
-            await remove_terminal_from_till(conn=conn, node_id=till_node_id, till_id=till_id)
+            await remove_terminal_from_till(conn=conn, till_id=till_id)
 
         return True
 
@@ -224,8 +269,7 @@ class TerminalService(Service[Config]):
         if terminal is None:
             raise NotFound(element_type="terminal", element_id=terminal_id)
         if terminal.till_id is not None:
-            till_node_id = await conn.fetchval("select node_id from till where id = $1", terminal.till_id)
-            await remove_terminal_from_till(conn=conn, node_id=till_node_id, till_id=terminal.till_id)
+            await remove_terminal_from_till(conn=conn, till_id=terminal.till_id)
 
         await assign_till_to_terminal(conn=conn, node=node, till_id=new_till_id, terminal_id=terminal_id)
 
@@ -237,31 +281,36 @@ class TerminalService(Service[Config]):
             current_terminal.id,
         )
         if current_terminal.till is not None:
-            await remove_terminal_from_till(
-                conn=conn, node_id=current_terminal.till.node_id, till_id=current_terminal.till.id
-            )
+            await remove_terminal_from_till(conn=conn, till_id=current_terminal.till.id)
 
     async def _get_terminal_sumup_oauth_token(
-        self, terminal_id: int, node: Node, event_settings: RestrictedEventSettings
+        self, conn: Connection, terminal_id: int, node: Node, event_settings: RestrictedEventSettings
     ) -> SumUpOAuthToken | None:
         del terminal_id
         if not event_settings.sumup_payment_enabled:
             return None
-        if event_settings.sumup_oauth_client_id == "" or event_settings.sumup_oauth_client_secret == "":
+        access = await resolve_terminal_sumup_access(conn=conn, node_id=node.id, event_settings=event_settings)
+        if access is None or not access.is_oauth:
+            return None
+        if access.refresh_token is None or access.oauth_client_id is None or access.oauth_client_secret is None:
             return None
 
-        event_node_id = node.event_node_id
-        assert event_node_id is not None
-
-        current_token = self.sumup_oauth_cache.get(event_node_id, None)
+        cache_key = SumUpOAuthCacheKey(
+            source_node_id=access.source_node_id,
+            merchant_code=access.merchant_code,
+            refresh_token=access.refresh_token,
+            oauth_client_id=access.oauth_client_id,
+            oauth_client_secret=access.oauth_client_secret,
+        )
+        current_token = self.sumup_oauth_cache.get(cache_key, None)
         if current_token and current_token.is_valid():
             return current_token
 
-        logger.info(f"Refreshing SumUp Oauth token for event with ID {event_node_id}")
+        logger.info("Refreshing SumUp OAuth token for node %s via source %s", node.id, access.source_node_id)
         new_token = await fetch_new_oauth_token(
-            client_id=event_settings.sumup_oauth_client_id,
-            client_secret=event_settings.sumup_oauth_client_secret,
-            refresh_token=event_settings.sumup_oauth_refresh_token,
+            client_id=access.oauth_client_id,
+            client_secret=access.oauth_client_secret,
+            refresh_token=access.refresh_token,
         )
         if new_token is None and current_token is not None and current_token.is_valid(tolerance=timedelta(minutes=2)):
             return current_token
@@ -269,7 +318,12 @@ class TerminalService(Service[Config]):
         if new_token is None:
             return None
 
-        self.sumup_oauth_cache[node.id] = new_token
+        self.sumup_oauth_cache = {
+            key: token
+            for key, token in self.sumup_oauth_cache.items()
+            if key == cache_key or (key.source_node_id != access.source_node_id and token.is_valid())
+        }
+        self.sumup_oauth_cache[cache_key] = new_token
         return new_token
 
     async def _get_terminal_till_config(
@@ -330,15 +384,20 @@ class TerminalService(Service[Config]):
 
         sumup_secrets = None
         if event_settings.sumup_payment_enabled:
-            sumup_affiliate_key = event_settings.sumup_affiliate_key
+            access = await resolve_terminal_sumup_access(conn=conn, node_id=node.id, event_settings=event_settings)
+            sumup_affiliate_key = access.affiliate_key if access is not None else ""
             oauth_token = await self._get_terminal_sumup_oauth_token(
-                terminal_id=terminal_id, node=node, event_settings=event_settings
+                conn=conn,
+                terminal_id=terminal_id,
+                node=node,
+                event_settings=event_settings,
             )
             sumup_api_oauth_token = oauth_token.access_token if oauth_token is not None else ""
             sumup_api_oauth_valid_until = oauth_token.expires_at if oauth_token is not None else None
             sumup_secrets = TerminalSumupSecrets(
                 sumup_affiliate_key=sumup_affiliate_key,
                 sumup_api_key=sumup_api_oauth_token,
+                sumup_merchant_code=access.merchant_code if access is not None else "",
                 sumup_api_key_expires_at=sumup_api_oauth_valid_until,
             )
 
@@ -421,7 +480,8 @@ class TerminalService(Service[Config]):
         
         # If SumUp is enabled, set the affiliate key
         if event_settings and event_settings.sumup_payment_enabled:
-            sumup_affiliate_key = event_settings.sumup_affiliate_key or ""
+            access = await resolve_terminal_sumup_access(conn=conn, node_id=event_node.id, event_settings=event_settings)
+            sumup_affiliate_key = access.affiliate_key if access is not None else ""
         
         # Return the combined secrets in the format expected by the Android app
         return TerminalSecrets(
@@ -466,41 +526,9 @@ class TerminalService(Service[Config]):
 
         till_config = None
         if current_terminal.till is not None:
-            # If the till doesn't have an active cash register, but the user does,
-            # try to assign it now to fix the "no cash register" issue
-            user_cash_register_id = None
-            if current_terminal.active_user_id is not None:
-                user_cash_register_id = await conn.fetchval(
-                    "select cash_register_id from usr where id = $1", 
-                    current_terminal.active_user_id
-                )
-                
-                # If user has a cash register, verify it's from the same event
-                if user_cash_register_id is not None:
-                    cash_register_exists = await conn.fetchval(
-                        "select exists(select 1 from cash_register cr "
-                        "join node n on cr.node_id = n.id "
-                        "where cr.id = $1 and (cr.node_id = $2 OR n.event_node_id = $2))", 
-                        user_cash_register_id, event_node.id
-                    )
-                    
-                    if cash_register_exists:
-                        # Check if till already has an active cash register
-                        till_cash_register = await conn.fetchval(
-                            "select active_cash_register_id from till where id = $1", 
-                            current_terminal.till.id
-                        )
-                        
-                        # If till doesn't have a cash register, assign the user's
-                        if till_cash_register is None:
-                            await conn.execute(
-                                "update till set active_cash_register_id = $1 where id = $2", 
-                                user_cash_register_id, 
-                                current_terminal.till.id
-                            )
-            
+            till = await conn.fetch_one(Till, "select * from till_with_cash_register where id = $1", current_terminal.till.id)
             till_config = await self._get_terminal_till_config(
-                conn=conn, terminal_id=current_terminal.id, till=current_terminal.till, event_node=event_node
+                conn=conn, terminal_id=current_terminal.id, till=till, event_node=event_node
             )
         available_roles = await self._get_assignable_roles_for_user_at_node(
             conn=conn, current_terminal=current_terminal
@@ -508,11 +536,16 @@ class TerminalService(Service[Config]):
 
         entry_area = None
         if current_terminal.entry_area_id is not None:
+            entry_area_scope_node_ids = _terminal_scope_node_ids(event_node)
             entry_area = await conn.fetch_maybe_one(
                 EntryAreaConfig,
-                "select id, name, description from entry_area where id = $1 and node_id = any($2)",
+                "select ea.id, ea.name, ea.description "
+                "from entry_area ea "
+                "join node n on ea.node_id = n.id "
+                "where ea.id = $1 and (n.id = any($2) or $3 = any(n.parent_ids))",
                 current_terminal.entry_area_id,
-                event_node.ids_to_root,
+                entry_area_scope_node_ids,
+                event_node.id,
             )
 
         return TerminalConfig(
@@ -522,6 +555,7 @@ class TerminalService(Service[Config]):
             description=current_terminal.description,
             mode=current_terminal.mode,
             entry_area=entry_area,
+            self_service=current_terminal.self_service,
             user_privileges=user_privileges,
             available_roles=available_roles,
             active_user_id=current_terminal.active_user_id,
@@ -671,8 +705,10 @@ class TerminalService(Service[Config]):
             )
             
             if cash_register_exists:
-                await assign_cash_register_to_till_if_available(
-                    conn=conn, till_id=current_terminal.till.id, cash_register_id=cash_register_id
+                await assign_cash_register_to_active_user_till(
+                    conn=conn,
+                    user_id=user_id,
+                    cash_register_id=cash_register_id,
                 )
 
         # Directly query for the user information instead of using get_current_user
@@ -761,7 +797,10 @@ class TerminalService(Service[Config]):
     @requires_node(object_types=[ObjectType.till])
     @requires_user([Privilege.node_administration])
     async def force_logout_user(self, *, conn: Connection, node: Node, terminal_id: int):
-        await logout_user_from_terminal(conn=conn, node_id=node.id, terminal_id=terminal_id)
+        terminal = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
+        if terminal is None:
+            raise NotFound(element_type="terminal", element_id=terminal_id)
+        await logout_user_from_terminal(conn=conn, node_id=terminal.node_id, terminal_id=terminal_id)
 
     @with_db_transaction(read_only=True)
     @requires_terminal()
@@ -851,11 +890,7 @@ class TerminalService(Service[Config]):
         """
         Login a User to a terminal by user_id and role_id from the administration API
         """
-        # Check if terminal exists
-        terminal = await conn.fetchrow(
-            "select * from terminal where id = $1 and node_id = $2", terminal_id, node.id
-        )
-        
+        terminal = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         if terminal is None:
             raise NotFound(f"Terminal with id {terminal_id} not found")
             
@@ -894,8 +929,10 @@ class TerminalService(Service[Config]):
         
         # If there's a till and cash register, assign it
         if till is not None and cash_register_id is not None:
-            await assign_cash_register_to_till_if_available(
-                conn=conn, till_id=till["id"], cash_register_id=cash_register_id
+            await assign_cash_register_to_active_user_till(
+                conn=conn,
+                user_id=user_id,
+                cash_register_id=cash_register_id,
             )
         
 
@@ -907,14 +944,17 @@ class TerminalService(Service[Config]):
     async def list_headwind_mappings(
         self, *, conn: Connection, node: Node
     ) -> list[HeadwindDeviceMappingWithTerminal]:
+        scope_node_ids = _terminal_scope_node_ids(node)
         return await conn.fetch_many(
             HeadwindDeviceMappingWithTerminal,
             "select tdm.*, t.name as terminal_name, t.description as terminal_description "
             "from terminal_device_mapping tdm "
             "join terminal t on t.id = tdm.terminal_id "
-            "where tdm.node_id = any($1) "
+            "join node n on tdm.node_id = n.id "
+            "where n.id = any($1) or $2 = any(n.parent_ids) "
             "order by t.name asc",
-            node.ids_to_root,
+            scope_node_ids,
+            node.id,
         )
 
     @with_db_transaction(read_only=True)
@@ -923,11 +963,16 @@ class TerminalService(Service[Config]):
     async def get_headwind_mapping_for_terminal(
         self, *, conn: Connection, node: Node, terminal_id: int
     ) -> HeadwindDeviceMapping | None:
+        scope_node_ids = _terminal_scope_node_ids(node)
         return await conn.fetch_maybe_one(
             HeadwindDeviceMapping,
-            "select * from terminal_device_mapping where terminal_id = $1 and node_id = any($2)",
+            "select tdm.* "
+            "from terminal_device_mapping tdm "
+            "join node n on tdm.node_id = n.id "
+            "where tdm.terminal_id = $1 and (n.id = any($2) or $3 = any(n.parent_ids))",
             terminal_id,
-            node.ids_to_root,
+            scope_node_ids,
+            node.id,
         )
 
     @with_db_transaction(read_only=True)
@@ -936,14 +981,17 @@ class TerminalService(Service[Config]):
     async def get_headwind_mapping_with_terminal(
         self, *, conn: Connection, node: Node, terminal_id: int
     ) -> HeadwindDeviceMappingWithTerminal | None:
+        scope_node_ids = _terminal_scope_node_ids(node)
         return await conn.fetch_maybe_one(
             HeadwindDeviceMappingWithTerminal,
             "select tdm.*, t.name as terminal_name, t.description as terminal_description "
             "from terminal_device_mapping tdm "
             "join terminal t on t.id = tdm.terminal_id "
-            "where tdm.terminal_id = $1 and tdm.node_id = any($2)",
+            "join node n on tdm.node_id = n.id "
+            "where tdm.terminal_id = $1 and (n.id = any($2) or $3 = any(n.parent_ids))",
             terminal_id,
-            node.ids_to_root,
+            scope_node_ids,
+            node.id,
         )
 
     @with_db_transaction
@@ -1006,6 +1054,9 @@ class TerminalService(Service[Config]):
                 "    last_token_pushed_at = null, "
                 "    last_push_status = null, "
                 "    last_push_error = null, "
+                "    last_wifi_pushed_at = null, "
+                "    last_wifi_push_status = null, "
+                "    last_wifi_push_error = null, "
                 "    updated_at = now() "
                 "where id = $6 "
                 "returning *",
@@ -1032,10 +1083,22 @@ class TerminalService(Service[Config]):
     async def delete_headwind_mapping(
         self, *, conn: Connection, node: Node, terminal_id: int
     ) -> bool:
-        deleted = await conn.fetchrow(
-            "delete from terminal_device_mapping where terminal_id = $1 and node_id = any($2) returning id",
+        scope_node_ids = _terminal_scope_node_ids(node)
+        mapping = await conn.fetch_maybe_one(
+            HeadwindDeviceMapping,
+            "select tdm.* "
+            "from terminal_device_mapping tdm "
+            "join node n on tdm.node_id = n.id "
+            "where tdm.terminal_id = $1 and (n.id = any($2) or $3 = any(n.parent_ids))",
             terminal_id,
-            node.ids_to_root,
+            scope_node_ids,
+            node.id,
+        )
+        if mapping is None:
+            return False
+        deleted = await conn.fetchrow(
+            "delete from terminal_device_mapping where id = $1 returning id",
+            mapping.id,
         )
         return deleted is not None
 
@@ -1075,6 +1138,18 @@ class TerminalService(Service[Config]):
         error_message: str | None,
     ) -> HeadwindDeviceMapping:
         status = "success" if success else "error"
+        mapping = await conn.fetch_maybe_one(
+            HeadwindDeviceMapping,
+            "select tdm.* "
+            "from terminal_device_mapping tdm "
+            "join node n on tdm.node_id = n.id "
+            "where tdm.id = $1 and (n.id = any($2) or $3 = any(n.parent_ids))",
+            mapping_id,
+            _terminal_scope_node_ids(node),
+            node.id,
+        )
+        if mapping is None:
+            raise NotFound(element_type="headwind_mapping", element_id=mapping_id)
         return await conn.fetch_one(
             HeadwindDeviceMapping,
             "update terminal_device_mapping "
@@ -1082,12 +1157,50 @@ class TerminalService(Service[Config]):
             "    last_push_status = $2, "
             "    last_push_error = $3, "
             "    updated_at = now() "
-            "where id = $1 and node_id = any($4) "
+            "where id = $1 "
             "returning *",
-            mapping_id,
+            mapping.id,
             status,
             error_message,
-            node.ids_to_root,
+        )
+
+    @with_db_transaction
+    @requires_node(object_types=[ObjectType.terminal])
+    @requires_user([Privilege.node_administration])
+    async def record_headwind_wifi_push_result(
+        self,
+        *,
+        conn: Connection,
+        node: Node,
+        mapping_id: int,
+        success: bool,
+        error_message: str | None,
+    ) -> HeadwindDeviceMapping:
+        status = "success" if success else "error"
+        mapping = await conn.fetch_maybe_one(
+            HeadwindDeviceMapping,
+            "select tdm.* "
+            "from terminal_device_mapping tdm "
+            "join node n on tdm.node_id = n.id "
+            "where tdm.id = $1 and (n.id = any($2) or $3 = any(n.parent_ids))",
+            mapping_id,
+            _terminal_scope_node_ids(node),
+            node.id,
+        )
+        if mapping is None:
+            raise NotFound(element_type="headwind_mapping", element_id=mapping_id)
+        return await conn.fetch_one(
+            HeadwindDeviceMapping,
+            "update terminal_device_mapping "
+            "set last_wifi_pushed_at = now(), "
+            "    last_wifi_push_status = $2, "
+            "    last_wifi_push_error = $3, "
+            "    updated_at = now() "
+            "where id = $1 "
+            "returning *",
+            mapping.id,
+            status,
+            error_message,
         )
 
     # endregion

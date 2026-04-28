@@ -22,15 +22,14 @@ fun TopUpView(
         TopUpPage.Selection -> {
             TopUpSelection(
                 viewModel = viewModel,
+                onBack = onFinished,
             )
         }
 
         TopUpPage.Done -> {
             TopUpSuccess(
-                onDismiss = {
-                    viewModel.dismissSuccess()
-                    onFinished?.invoke()
-                },
+                onDismiss = { viewModel.dismissSuccess() },
+                onLeaveSelfService = onFinished,
                 viewModel = viewModel,
             )
         }
@@ -38,6 +37,7 @@ fun TopUpView(
         TopUpPage.Failure -> {
             TopUpError(
                 onDismiss = { viewModel.dismissFailure() },
+                onLeaveSelfService = onFinished,
                 viewModel = viewModel,
             )
         }

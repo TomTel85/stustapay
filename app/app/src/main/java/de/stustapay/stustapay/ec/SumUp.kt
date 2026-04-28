@@ -17,6 +17,41 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import com.sumup.merchant.reader.api.SumUpState as SumUpReaderState
 
+internal fun toUserFacingSumUpConfigError(message: String): String {
+    val detail = when {
+        message == "no terminal ec secrets in config" ->
+            "No SumUp credentials are configured for this terminal."
+        message.startsWith("invalid affiliate key") ->
+            "The configured SumUp affiliate key is invalid."
+        message == "no terminal configuration for ec" ->
+            "No terminal configuration is available for SumUp payments."
+
+        else -> message.toSentence()
+    }
+
+    return "Failed to load SumUp configuration. $detail"
+}
+
+private fun String.toSentence(): String {
+    val trimmed = trim()
+    if (trimmed.isEmpty()) {
+        return "Unknown error."
+    }
+
+    val capitalized = trimmed.replaceFirstChar { first ->
+        if (first.isLowerCase()) {
+            first.titlecase()
+        } else {
+            first.toString()
+        }
+    }
+
+    return if (capitalized.endsWith('.') || capitalized.endsWith('!') || capitalized.endsWith('?')) {
+        capitalized
+    } else {
+        "$capitalized."
+    }
+}
 
 data class ECTerminalConfig(
     val name: String,
@@ -28,8 +63,17 @@ data class ECTerminalConfig(
 data class SumUpConfig(
     val affiliateKey: String,
     val apiKey: String,
+    val merchantCode: String,
     val terminal: ECTerminalConfig,
 )
+
+internal fun shouldEnableTipOnCardReader(terminalConfig: ECTerminalConfig, payment: ECPayment): Boolean {
+    return terminalConfig.enableCardPayment && payment.allowTipOnCardReader
+}
+
+internal fun isExpectedSumUpMerchant(loggedInMerchantCode: String?, expectedMerchantCode: String): Boolean {
+    return expectedMerchantCode.isNotBlank() && loggedInMerchantCode == expectedMerchantCode
+}
 
 sealed interface SumUpConfigState {
     data class OK(val cfg: SumUpConfig) : SumUpConfigState
@@ -115,14 +159,20 @@ class SumUp @Inject constructor(
      * global configuration for our statemachine...
      */
     private var sumUpPaymentState = SumUpPaymentState()
+    private var attachedActivityCallback: ActivityCallback? = null
+    private var registeredActivityCallback: ActivityCallback? = null
+    private var initializedActivityCallback: ActivityCallback? = null
 
-    fun init(activityCallback: ActivityCallback) {
+    fun attachActivityCallback(activityCallback: ActivityCallback) {
+        attachedActivityCallback = activityCallback
+        if (registeredActivityCallback === activityCallback) {
+            return
+        }
+
         val activity = activityCallback.context as Activity
 
-        // since sumup spawns its own activity for the checkout,
-        // we register the launch and callbacks to our activity.
-
-        SumUpReaderState.init(activity)
+        // Register callbacks eagerly so returning SumUp activities still reach the current activity
+        // even when the SDK itself has not been initialized yet for this launch.
         activityCallback.registerHandler(ecPaymentActivityCallbackId) { resultCode, extras ->
             paymentResult(activity, resultCode, extras)
         }
@@ -135,10 +185,25 @@ class SumUp @Inject constructor(
         activityCallback.registerHandler(ecCardReaderActivityCallbackId) { resultCode, extras ->
             cardReaderResult(activity, resultCode, extras)
         }
+        registeredActivityCallback = activityCallback
+        initializedActivityCallback = null
+    }
 
+    private fun ensureInitialized(): Boolean {
+        val activityCallback = attachedActivityCallback
+        if (activityCallback == null) {
+            _status.update { "sumup activity callback missing" }
+            return false
+        }
+        if (initializedActivityCallback === activityCallback) {
+            return true
+        }
+
+        SumUpReaderState.init(activityCallback.context as Activity)
         updateLoginInfo()
-
         _status.update { "sumup api initialized" }
+        initializedActivityCallback = activityCallback
+        return true
     }
 
     private fun checkResultCode(stage: String, resultCode: Int): Boolean {
@@ -239,7 +304,7 @@ class SumUp @Inject constructor(
     private suspend fun setState(target: SumUpAction, payment: ECPayment? = null): Boolean {
         return when (val sumUpConfig = fetchConfig()) {
             is SumUpConfigState.Error -> {
-                _paymentStatus.update { SumUpState.Failed("failed fetching sumup configuration: ${sumUpConfig.msg}") }
+                _paymentStatus.update { SumUpState.Failed(toUserFacingSumUpConfigError(sumUpConfig.msg)) }
                 false
             }
 
@@ -271,10 +336,14 @@ class SumUp @Inject constructor(
                 if (!secrets.sumupAffiliateKey.startsWith("sup_afk")) {
                     return SumUpConfigState.Error("invalid affiliate key: '${secrets.sumupAffiliateKey}'")
                 }
+                if (secrets.sumupMerchantCode.isBlank()) {
+                    return SumUpConfigState.Error("no sumup merchant configured")
+                }
 
                 sumUpConfig = SumUpConfig(
                     affiliateKey = secrets.sumupAffiliateKey,
                     apiKey = secrets.sumupApiKey,
+                    merchantCode = secrets.sumupMerchantCode,
                     terminal = ECTerminalConfig(
                         name = cfg.name,
                         id = cfg.id.toString(),
@@ -293,6 +362,9 @@ class SumUp @Inject constructor(
     }
 
     fun isLoggedIn(): Boolean {
+        if (!ensureInitialized()) {
+            return false
+        }
         return SumUpAPI.isLoggedIn()
     }
 
@@ -302,6 +374,10 @@ class SumUp @Inject constructor(
     suspend fun login(
         context: Activity,
     ) {
+        if (!ensureInitialized()) {
+            _paymentStatus.update { SumUpState.Error("sumup api not initialized") }
+            return
+        }
         if (setState(target = SumUpAction.LoginUserPassword, payment = null)) {
             nextAction(context)
         }
@@ -313,6 +389,10 @@ class SumUp @Inject constructor(
     suspend fun tokenLogin(
         context: Activity,
     ) {
+        if (!ensureInitialized()) {
+            _paymentStatus.update { SumUpState.Error("sumup api not initialized") }
+            return
+        }
         if (setState(target = SumUpAction.LoginToken, payment = null)) {
             nextAction(context)
         }
@@ -322,6 +402,9 @@ class SumUp @Inject constructor(
      * logout from sumup account.
      */
     suspend fun logout() {
+        if (!ensureInitialized()) {
+            return
+        }
         SumUpAPI.logout()
         _loginApiKeyUsed = null
         _loginStatus.update { null }
@@ -338,15 +421,14 @@ class SumUp @Inject constructor(
         context: Activity,
         payment: ECPayment,
     ) {
-        // Create a new payment with the same data but new ID to avoid duplicate foreign transaction IDs
-        val modifiedPayment = payment.copy(
-            id = "${payment.id}_retry_${System.currentTimeMillis()}"
-        )
-        
+        if (!ensureInitialized()) {
+            _paymentStatus.update { SumUpState.Error("sumup api not initialized") }
+            return
+        }
         // Reset the payment state to avoid any leftover state from previous attempts
         _paymentStatus.update { SumUpState.None }
         
-        if (setState(target = SumUpAction.Checkout, payment = modifiedPayment)) {
+        if (setState(target = SumUpAction.Checkout, payment = payment)) {
             nextAction(context)
         }
     }
@@ -355,6 +437,9 @@ class SumUp @Inject constructor(
      * for quicker payments, wake the ec reader in advance.
      */
     suspend fun wakeup() {
+        if (!ensureInitialized()) {
+            return
+        }
         // wake the device for a faster experience
         if (SumUpAPI.isLoggedIn()) {
             SumUpAPI.prepareForCheckout()
@@ -367,6 +452,10 @@ class SumUp @Inject constructor(
     suspend fun settingsOld(
         context: Activity
     ) {
+        if (!ensureInitialized()) {
+            _paymentStatus.update { SumUpState.Error("sumup api not initialized") }
+            return
+        }
         if (setState(target = SumUpAction.OldSettings, payment = null)) {
             nextAction(context)
         }
@@ -378,8 +467,36 @@ class SumUp @Inject constructor(
     suspend fun cardReaderSettings(
         context: Activity
     ) {
+        if (!ensureInitialized()) {
+            _paymentStatus.update { SumUpState.Error("sumup api not initialized") }
+            return
+        }
         if (setState(target = SumUpAction.CardReader, payment = null)) {
             nextAction(context)
+        }
+    }
+
+    /**
+     * Attempt to wake an already connected reader without opening the connection flow.
+     * Returns true when direct activation was attempted successfully.
+     */
+    suspend fun reactivateConnectedReader(): Boolean {
+        if (!ensureInitialized()) {
+            _paymentStatus.update { SumUpState.Error("sumup api not initialized") }
+            return false
+        }
+        if (!SumUpAPI.isLoggedIn()) {
+            return false
+        }
+
+        return try {
+            SumUpAPI.prepareForCheckout()
+            true
+        } catch (exc: Exception) {
+            _paymentStatus.update {
+                SumUpState.Error("failed to activate connected card reader: ${exc.message ?: "unknown error"}")
+            }
+            false
         }
     }
 
@@ -480,6 +597,18 @@ class SumUp @Inject constructor(
             _paymentStatus.update { SumUpState.Error("no payment status") }
             return
         }
+        val loggedInMerchantCode = SumUpAPI.getCurrentMerchant()?.merchantCode
+        if (!isExpectedSumUpMerchant(loggedInMerchantCode, cfg.merchantCode)) {
+            SumUpAPI.logout()
+            _loginApiKeyUsed = null
+            _loginStatus.update { "no logged in merchant" }
+            _paymentStatus.update {
+                SumUpState.Error(
+                    "SumUp merchant mismatch. Expected ${cfg.merchantCode}, got ${loggedInMerchantCode ?: "no logged in merchant"}."
+                )
+            }
+            return
+        }
 
         // wake up pin device
         SumUpAPI.prepareForCheckout()
@@ -501,12 +630,12 @@ class SumUp @Inject constructor(
             .skipSuccessScreen()
             // optional: skip the failed screen
             .skipFailedScreen()
-        
-        // Only enable tip on card reader if card payment is enabled in the till profile
-        if (cfg.terminal.enableCardPayment) {
+
+        // Only enable tip on card reader if card payment is enabled and the flow allows tipping.
+        if (shouldEnableTipOnCardReader(cfg.terminal, payment)) {
             sumUpPaymentBuilder.tipOnCardReader()
         }
-        
+
         val sumUpPayment = sumUpPaymentBuilder.build()
 
         _paymentStatus.update { SumUpState.Started(payment.id) }
@@ -560,8 +689,9 @@ class SumUp @Inject constructor(
 
             else -> {
                 // For ERROR_DUPLICATE_FOREIGN_TX_ID, provide a clearer error message
-                val errorMsg = if (result == SumUpResultCode.ERROR_DUPLICATE_FOREIGN_TX_ID) {
-                    "Duplicate transaction ID. Please try again."
+                val mayHaveCreatedCharge = result == SumUpResultCode.ERROR_DUPLICATE_FOREIGN_TX_ID
+                val errorMsg = if (mayHaveCreatedCharge) {
+                    "Duplicate transaction ID. Pending payment will be reconciled by the server."
                 } else {
                     "checkout result: $result: $resultMsg"
                 }
@@ -570,7 +700,7 @@ class SumUp @Inject constructor(
                 sumUpPaymentState = SumUpPaymentState()
                 
                 _paymentStatus.update {
-                    SumUpState.Error(errorMsg)
+                    SumUpState.Error(errorMsg, mayHaveCreatedCharge)
                 }
             }
         }

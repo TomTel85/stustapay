@@ -1,5 +1,16 @@
 import * as React from "react";
-import { NodeSeenByUser, useGetAvailableDatesQuery, useListTillsQuery, useListProductsQuery, useGetRevenuePredictionQuery, api } from "@/api";
+import {
+  NodeSeenByUser,
+  useGetAvailableDatesQuery,
+  useGetDashboardOverviewQuery,
+  useGetPaymentMethodStatsQuery,
+  useGetProductStatsQuery,
+  useGetRevenueByCounterQuery,
+  useListTillsQuery,
+  useListProductsQuery,
+  useGetRevenuePredictionQuery,
+  api,
+} from "@/api";
 import { Privilege } from "@stustapay/models";
 import { DateTime } from "luxon";
 import { useTranslation } from "react-i18next";
@@ -26,6 +37,7 @@ import {
 import type { Theme } from "@mui/material/styles";
 import { useCurrentEventSettings, useCurrentNode, useCurrentUserHasPrivilege } from "@/hooks";
 import { Navigate } from "react-router-dom";
+import { OrderRoutes } from "@/app/routes";
 import {
   useAppDispatch,
   useAppSelector,
@@ -60,10 +72,11 @@ export const NodeStats: React.FC = () => {
   const { t } = useTranslation();
   const canViewNodeStats = useCurrentUserHasPrivilege(Privilege.view_node_stats);
   const canAdminNode = useCurrentUserHasPrivilege(Privilege.node_administration);
+  const canViewOrders = useCurrentUserHasPrivilege(OrderRoutes.privilege);
   const { eventSettings } = useCurrentEventSettings();
   const { currentNode } = useCurrentNode();
   const dispatch = useAppDispatch();
-  const [datePreset, setDatePreset] = React.useState<DatePreset>("all");
+  const [datePreset, setDatePreset] = React.useState<DatePreset>("today");
   const [selectedDates, setSelectedDates] = React.useState<string[]>([]);
   const [selectedSubnodeId, setSelectedSubnodeId] = React.useState<number | undefined>(undefined);
   const [selectedTillId, setSelectedTillId] = React.useState<number | undefined>(undefined);
@@ -75,6 +88,14 @@ export const NodeStats: React.FC = () => {
   const predictionPollingIntervalMs = pollingIntervalMs > 0 ? Math.max(pollingIntervalMs, 300000) : 0;
 
   const effectiveFilterNodeId = selectedSubnodeId ?? currentNode.id;
+  const isFiltersExpanded = expandedSections.filters;
+  const isKpisExpanded = expandedSections.kpis;
+  const isPredictionExpanded = expandedSections.prediction;
+  const isCounterChartExpanded = expandedSections.counterChart;
+  const isProductChartExpanded = expandedSections.productChart;
+  const isQuantityTableExpanded = expandedSections.quantityTable;
+  const isCounterTableExpanded = expandedSections.counterTable;
+  const isOrdersExpanded = expandedSections.orders;
 
   const subnodeOptions = React.useMemo(() => {
     const options: Array<{ id: number; name: string; depth: number }> = [];
@@ -108,12 +129,34 @@ export const NodeStats: React.FC = () => {
     }
   }, [selectedSubnodeId, subnodeOptions]);
 
+  const isCustomDateSelection = datePreset === "custom";
+  const shouldLoadAvailableDates = isFiltersExpanded || isCustomDateSelection;
+  const isProductDataEnabled = isProductChartExpanded || isQuantityTableExpanded || isKpisExpanded;
+  const isCounterDataEnabled = isCounterChartExpanded || isCounterTableExpanded;
+  const isOverviewDataEnabled = isKpisExpanded;
+  const isOrdersDataEnabled = isOrdersExpanded && canViewOrders;
+
   const { data: availableDates } = useGetAvailableDatesQuery(
     { nodeId: currentNode.id, subnodeId: selectedSubnodeId },
-    statsQueryOptions(pollingIntervalMs)
+    {
+      ...statsQueryOptions(pollingIntervalMs, shouldLoadAvailableDates),
+      skip: !shouldLoadAvailableDates,
+    }
   );
-  const { data: tills } = useListTillsQuery({ nodeId: effectiveFilterNodeId }, statsQueryOptions(pollingIntervalMs));
-  const { data: products } = useListProductsQuery({ nodeId: effectiveFilterNodeId }, statsQueryOptions(pollingIntervalMs));
+  const { data: tills } = useListTillsQuery(
+    { nodeId: effectiveFilterNodeId },
+    {
+      ...statsQueryOptions(pollingIntervalMs, isFiltersExpanded || isOrdersDataEnabled),
+      skip: !isFiltersExpanded && !isOrdersDataEnabled,
+    }
+  );
+  const { data: products } = useListProductsQuery(
+    { nodeId: effectiveFilterNodeId },
+    {
+      ...statsQueryOptions(pollingIntervalMs, isFiltersExpanded || isProductDataEnabled),
+      skip: !isFiltersExpanded && !isProductDataEnabled,
+    }
+  );
   const { data: prediction, isLoading: isPredictionLoading } = useGetRevenuePredictionQuery(
     {
       nodeId: currentNode.id,
@@ -121,8 +164,8 @@ export const NodeStats: React.FC = () => {
       subnodeId: selectedSubnodeId,
     },
     {
-      ...statsQueryOptions(predictionPollingIntervalMs),
-      skip: currentNode.event == null || !isPredictionEnabled || selectedProductId !== undefined,
+      ...statsQueryOptions(predictionPollingIntervalMs, isPredictionExpanded),
+      skip: currentNode.event == null || !isPredictionEnabled || selectedProductId !== undefined || !isPredictionExpanded,
     }
   );
 
@@ -139,8 +182,10 @@ export const NodeStats: React.FC = () => {
   }, []);
 
   const sectionSx = {
-    backgroundColor: (theme: Theme) => (theme.palette.mode === "dark" ? "rgba(26, 27, 30, 0.8)" : "rgba(255, 255, 255, 0.9)"),
-    border: (theme: Theme) => `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
+    backgroundColor: (theme: Theme) =>
+      theme.palette.mode === "dark" ? "rgba(26, 27, 30, 0.8)" : "rgba(255, 255, 255, 0.9)",
+    border: (theme: Theme) =>
+      `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
     boxShadow: "none",
     "&::before": { display: "none" },
   };
@@ -238,6 +283,34 @@ export const NodeStats: React.FC = () => {
     return fromTimestamp.plus({ days: 1 }).minus({ milliseconds: 1 });
   }, [fromTimestamp, datePreset, sortedSelectedDates, eventSettings.daily_end_time, businessDayStartForDate]);
 
+  const sharedStatsArgs = React.useMemo(
+    () => ({
+      nodeId: currentNode.id,
+      fromTimestamp: fromTimestamp?.toISO() ?? undefined,
+      toTimestamp: toTimestamp?.toISO() ?? undefined,
+      selectedDates: selectedDatesForQuery,
+      tillId: selectedTillId,
+      subnodeId: selectedSubnodeId,
+    }),
+    [currentNode.id, fromTimestamp, selectedDatesForQuery, selectedTillId, selectedSubnodeId, toTimestamp]
+  );
+  const { data: overview, isLoading: isOverviewLoading } = useGetDashboardOverviewQuery(sharedStatsArgs, {
+    ...statsQueryOptions(pollingIntervalMs, isOverviewDataEnabled),
+    skip: !isOverviewDataEnabled,
+  });
+  const { data: paymentMethods, isLoading: isPaymentMethodsLoading } = useGetPaymentMethodStatsQuery(sharedStatsArgs, {
+    ...statsQueryOptions(pollingIntervalMs, isOverviewDataEnabled),
+    skip: !isOverviewDataEnabled,
+  });
+  const { data: productStats, isLoading: isProductStatsLoading } = useGetProductStatsQuery(sharedStatsArgs, {
+    ...statsQueryOptions(pollingIntervalMs, isProductDataEnabled),
+    skip: !isProductDataEnabled,
+  });
+  const { data: revenueByCounter, isLoading: isRevenueByCounterLoading } = useGetRevenueByCounterQuery(sharedStatsArgs, {
+    ...statsQueryOptions(pollingIntervalMs, isCounterDataEnabled),
+    skip: !isCounterDataEnabled,
+  });
+
   const selectedSubnodeName = React.useMemo(
     () => subnodeOptions.find((node) => node.id === selectedSubnodeId)?.name,
     [subnodeOptions, selectedSubnodeId]
@@ -276,7 +349,7 @@ export const NodeStats: React.FC = () => {
     return <Navigate to="/" />;
   }
 
-  if (eventSettings.start_date == null || eventSettings.end_date == null || eventSettings.daily_end_time == null) {
+  if (currentNode.event != null && (eventSettings.start_date == null || eventSettings.end_date == null || eventSettings.daily_end_time == null)) {
     return (
       <Alert severity="warning">
         <AlertTitle>{t("overview.warningEventDatesNeedConfiguration")}</AlertTitle>
@@ -325,6 +398,15 @@ export const NodeStats: React.FC = () => {
                       renderValue={(selected) => {
                         const values = selected as string[];
                         if (values.length === 0) {
+                          if (datePreset === "today") {
+                            return <em>{t("overview.today")}</em>;
+                          }
+                          if (datePreset === "yesterday") {
+                            return <em>{t("overview.yesterday")}</em>;
+                          }
+                          if (datePreset === "last7") {
+                            return <em>{t("overview.last7Days")}</em>;
+                          }
                           return <em>{t("overview.allDates")}</em>;
                         }
                         if (values.length === 1) {
@@ -332,7 +414,7 @@ export const NodeStats: React.FC = () => {
                         }
                         return t("overview.selectedDatesCount", { count: values.length });
                       }}
-                    >
+                    > 
                       {availableDates && availableDates.length > 0 ? (
                         availableDates.map((date) => (
                           <MenuItem key={date} value={date}>
@@ -425,11 +507,15 @@ export const NodeStats: React.FC = () => {
                         <MenuItem value={1800000}>30min</MenuItem>
                       </Select>
                     </FormControl>
-                    <Tooltip title={isPredictionEnabled ? t("overview.disablePrediction") : t("overview.enablePrediction")}>
+                    <Tooltip
+                      title={isPredictionEnabled ? t("overview.disablePrediction") : t("overview.enablePrediction")}
+                    >
                       <IconButton
                         size="small"
                         onClick={() => setIsPredictionEnabled((prev) => !prev)}
-                        aria-label={isPredictionEnabled ? t("overview.disablePrediction") : t("overview.enablePrediction")}
+                        aria-label={
+                          isPredictionEnabled ? t("overview.disablePrediction") : t("overview.enablePrediction")
+                        }
                         sx={{
                           width: 40,
                           height: 40,
@@ -545,18 +631,11 @@ export const NodeStats: React.FC = () => {
                       </Select>
                     </FormControl>
                   </Grid>
-
                 </Grid>
               )}
 
               {hasActiveFilters && (
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  useFlexGap
-                  flexWrap="wrap"
-                  alignItems="center"
-                >
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
                   {dateFilterLabel && (
                     <Chip
                       size="small"
@@ -602,21 +681,25 @@ export const NodeStats: React.FC = () => {
         </Accordion>
       </Grid>
       <Grid size={12}>
-        <Accordion expanded={expandedSections.kpis} onChange={handleSectionToggle("kpis")} disableGutters sx={sectionSx}>
+        <Accordion
+          expanded={expandedSections.kpis}
+          onChange={handleSectionToggle("kpis")}
+          disableGutters
+          sx={sectionSx}
+        >
           <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={summarySx}>
             <Typography sx={summaryTextSx}>{t("overview.overviewMetrics")}</Typography>
           </AccordionSummary>
           <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>
             <DashboardKPIs
-              fromTimestamp={fromTimestamp}
-              toTimestamp={toTimestamp}
-              selectedDates={selectedDatesForQuery}
-              tillId={selectedTillId}
-              subnodeId={selectedSubnodeId}
+              enabled={isKpisExpanded}
               productId={selectedProductId}
               prediction={isPredictionEnabled ? prediction : undefined}
               isPredictionLoading={isPredictionEnabled ? isPredictionLoading : false}
-              pollingIntervalMs={pollingIntervalMs}
+              isLoading={isOverviewLoading || isPaymentMethodsLoading || (selectedProductId !== undefined && isProductStatsLoading)}
+              overview={overview}
+              paymentMethods={paymentMethods}
+              productStats={productStats}
             />
           </AccordionDetails>
         </Accordion>
@@ -624,7 +707,12 @@ export const NodeStats: React.FC = () => {
       {/* Revenue prediction chart - only show when no product filter is active */}
       {isPredictionEnabled && selectedProductId === undefined && prediction && (
         <Grid size={12}>
-          <Accordion expanded={expandedSections.prediction} onChange={handleSectionToggle("prediction")} disableGutters sx={sectionSx}>
+          <Accordion
+            expanded={expandedSections.prediction}
+            onChange={handleSectionToggle("prediction")}
+            disableGutters
+            sx={sectionSx}
+          >
             <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={summarySx}>
               <Typography sx={summaryTextSx}>{t("overview.revenuePredictionChart")}</Typography>
             </AccordionSummary>
@@ -637,18 +725,21 @@ export const NodeStats: React.FC = () => {
       {/* Only show revenue by counter when no product is selected (not filterable by product) */}
       {selectedProductId === undefined && (
         <Grid size={12}>
-          <Accordion expanded={expandedSections.counterChart} onChange={handleSectionToggle("counterChart")} disableGutters sx={sectionSx}>
+          <Accordion
+            expanded={expandedSections.counterChart}
+            onChange={handleSectionToggle("counterChart")}
+            disableGutters
+            sx={sectionSx}
+          >
             <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={summarySx}>
               <Typography sx={summaryTextSx}>{t("overview.revenuePerCounterChart")}</Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>
               <RevenueByCounterChart
-                fromTimestamp={fromTimestamp}
-                toTimestamp={toTimestamp}
-                selectedDates={selectedDatesForQuery}
                 tillId={selectedTillId}
-                subnodeId={selectedSubnodeId}
-                pollingIntervalMs={pollingIntervalMs}
+                enabled={isCounterChartExpanded}
+                isLoading={isRevenueByCounterLoading}
+                data={revenueByCounter}
                 onBarClick={(tillId) => setSelectedTillId(tillId)}
                 onClearFilter={() => setSelectedTillId(undefined)}
               />
@@ -657,19 +748,21 @@ export const NodeStats: React.FC = () => {
         </Grid>
       )}
       <Grid size={12}>
-        <Accordion expanded={expandedSections.productChart} onChange={handleSectionToggle("productChart")} disableGutters sx={sectionSx}>
+        <Accordion
+          expanded={expandedSections.productChart}
+          onChange={handleSectionToggle("productChart")}
+          disableGutters
+          sx={sectionSx}
+        >
           <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={summarySx}>
             <Typography sx={summaryTextSx}>{t("overview.revenuePerProduct")}</Typography>
           </AccordionSummary>
           <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>
             <RevenueByProductChart
-              fromTimestamp={fromTimestamp}
-              toTimestamp={toTimestamp}
-              selectedDates={selectedDatesForQuery}
-              tillId={selectedTillId}
-              subnodeId={selectedSubnodeId}
+              enabled={isProductChartExpanded}
               productId={selectedProductId}
-              pollingIntervalMs={pollingIntervalMs}
+              isLoading={isProductStatsLoading}
+              data={productStats}
               onProductClick={(productId) => setSelectedProductId(productId)}
               onClearFilter={() => setSelectedProductId(undefined)}
             />
@@ -677,19 +770,21 @@ export const NodeStats: React.FC = () => {
         </Accordion>
       </Grid>
       <Grid size={12}>
-        <Accordion expanded={expandedSections.quantityTable} onChange={handleSectionToggle("quantityTable")} disableGutters sx={sectionSx}>
+        <Accordion
+          expanded={expandedSections.quantityTable}
+          onChange={handleSectionToggle("quantityTable")}
+          disableGutters
+          sx={sectionSx}
+        >
           <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={summarySx}>
             <Typography sx={summaryTextSx}>{t("overview.quantitiesPerProduct")}</Typography>
           </AccordionSummary>
           <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>
             <QuantitiesByProductTable
-              fromTimestamp={fromTimestamp}
-              toTimestamp={toTimestamp}
-              selectedDates={selectedDatesForQuery}
-              tillId={selectedTillId}
-              subnodeId={selectedSubnodeId}
+              enabled={isQuantityTableExpanded}
               productId={selectedProductId}
-              pollingIntervalMs={pollingIntervalMs}
+              isLoading={isProductStatsLoading}
+              data={productStats}
             />
           </AccordionDetails>
         </Accordion>
@@ -697,7 +792,12 @@ export const NodeStats: React.FC = () => {
       {/* Only show revenue by counter table when no product is selected (not filterable by product) */}
       {selectedProductId === undefined && (
         <Grid size={12}>
-          <Accordion expanded={expandedSections.counterTable} onChange={handleSectionToggle("counterTable")} disableGutters sx={sectionSx}>
+          <Accordion
+            expanded={expandedSections.counterTable}
+            onChange={handleSectionToggle("counterTable")}
+            disableGutters
+            sx={sectionSx}
+          >
             <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={summarySx}>
               <Typography sx={summaryTextSx}>{t("overview.revenuePerCounterTable")}</Typography>
             </AccordionSummary>
@@ -706,32 +806,40 @@ export const NodeStats: React.FC = () => {
                 fromTimestamp={fromTimestamp}
                 toTimestamp={toTimestamp}
                 selectedDates={selectedDatesForQuery}
-                tillId={selectedTillId}
-                subnodeId={selectedSubnodeId}
-                pollingIntervalMs={pollingIntervalMs}
+                enabled={isCounterTableExpanded}
+                isLoading={isRevenueByCounterLoading}
+                data={revenueByCounter}
               />
             </AccordionDetails>
           </Accordion>
         </Grid>
       )}
-      <Grid size={12}>
-        <Accordion expanded={expandedSections.orders} onChange={handleSectionToggle("orders")} disableGutters sx={sectionSx}>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={summarySx}>
-            <Typography sx={summaryTextSx}>{t("overview.orders")}</Typography>
-          </AccordionSummary>
-          <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>
-            <OrdersTable
-              fromTimestamp={fromTimestamp}
-              toTimestamp={toTimestamp}
-              selectedDates={selectedDatesForQuery}
-              tillId={selectedTillId}
-              subnodeId={selectedSubnodeId}
-              productId={selectedProductId}
-              pollingIntervalMs={pollingIntervalMs}
-            />
-          </AccordionDetails>
-        </Accordion>
-      </Grid>
+      {canViewOrders && (
+        <Grid size={12}>
+          <Accordion
+            expanded={expandedSections.orders}
+            onChange={handleSectionToggle("orders")}
+            disableGutters
+            sx={sectionSx}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={summarySx}>
+              <Typography sx={summaryTextSx}>{t("overview.orders")}</Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>
+              <OrdersTable
+                fromTimestamp={fromTimestamp}
+                toTimestamp={toTimestamp}
+                selectedDates={selectedDatesForQuery}
+                tillId={selectedTillId}
+                subnodeId={selectedSubnodeId}
+                productId={selectedProductId}
+                pollingIntervalMs={pollingIntervalMs}
+                enabled={isOrdersDataEnabled}
+              />
+            </AccordionDetails>
+          </Accordion>
+        </Grid>
+      )}
     </Grid>
   );
 };

@@ -1,35 +1,48 @@
 package de.stustapay.stustapay.ui.payinout
 
-import android.app.Activity
-import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.Scaffold
+import androidx.compose.material.Tab
+import androidx.compose.material.TabRow
+import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import de.stustapay.stustapay.R
+import de.stustapay.stustapay.ui.common.operator.OperatorBackground
+import de.stustapay.stustapay.ui.common.operator.OperatorCompactFlowHeader
+import de.stustapay.stustapay.ui.common.operator.OperatorInfoCard
+import de.stustapay.stustapay.ui.common.operator.OperatorPalette
+import de.stustapay.stustapay.ui.common.operator.OperatorSecondaryButton
 import de.stustapay.stustapay.ui.nav.navigateTo
-
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.Text
-import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.Column
-import androidx.compose.material.Scaffold
-import androidx.compose.material.Tab
-import androidx.compose.material.TabRow
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.sp
 import de.stustapay.stustapay.ui.payinout.payout.PayOutView
 import de.stustapay.stustapay.ui.payinout.topup.TopUpView
-import de.stustapay.stustapay.ui.common.ErrorScreen
-import de.stustapay.stustapay.ui.nav.TopAppBar
-import de.stustapay.stustapay.ui.nav.TopAppBarIcon
-import de.stustapay.stustapay.ui.root.RootNavDests
 import kotlinx.coroutines.delay
 
 
@@ -38,9 +51,6 @@ fun CashInOutView(
     leaveView: () -> Unit = {},
     viewModel: PayInOutViewModel = hiltViewModel()
 ) {
-    // Get activity context
-    val context = LocalContext.current
-    
     // State to detect if we should force leave due to logout
     var shouldExitDueToLogout by remember { mutableStateOf(false) }
     
@@ -74,9 +84,9 @@ fun CashInOutView(
         }
     }
 
-    // Disable back button functionality for users with only can_topup privilege
     val loginState by viewModel.terminalLoginState.collectAsStateWithLifecycle()
-    val isSelfServiceMode = loginState.hasOnlyTopUpPrivilege()
+    val selfServiceAccess = loginState.selfServiceAccess()
+    val isSelfServiceMode = loginState.isSelfServiceTerminal()
     BackHandler {
         leaveView()
     }
@@ -86,62 +96,146 @@ fun CashInOutView(
 
     val navController = rememberNavController()
 
-    LaunchedEffect(activeTab) {
-        if (activeTab < tabList.size) {
-            navController.navigateTo(
-                tabList[activeTab].route
-            )
+    LaunchedEffect(isSelfServiceMode, selfServiceAccess.canSelfServiceTopUp) {
+        if (isSelfServiceMode && !selfServiceAccess.canSelfServiceTopUp) {
+            leaveView()
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(loginState.title().title) },
-                // Only show back button if user does not have only the can_topup privilege
-                icon = TopAppBarIcon(type = TopAppBarIcon.Type.BACK) {
-                    leaveView()
-                },
-            )
+    LaunchedEffect(activeTab, tabList) {
+        if (tabList.isEmpty()) {
+            return@LaunchedEffect
         }
-    ) { paddingValues ->
-        Column(modifier = Modifier.padding(paddingValues)) {
 
-            if (tabList.isEmpty()) {
-                ErrorScreen(onDismiss = leaveView) {
-                    Text("no action available", fontSize = 28.sp)
-                }
-            } else {
-                val startRoute = tabList[0].route
+        val safeActiveTab = activeTab.coerceIn(0, tabList.lastIndex)
+        if (safeActiveTab != activeTab) {
+            viewModel.cashInOutTabSelected(safeActiveTab)
+            return@LaunchedEffect
+        }
 
-                // show tab bar only if there's multiple tabs
-                if (tabList.size > 1) {
-                    TabRow(selectedTabIndex = activeTab) {
-                        tabList.forEachIndexed { idx, elem ->
-                            Tab(
-                                text = { Text(elem.title) },
-                                selected = activeTab == idx,
-                                onClick = { viewModel.cashInOutTabSelected(idx) }
-                            )
-                        }
-                    }
-                }
+        navController.navigateTo(tabList[safeActiveTab].route)
+    }
 
-                NavHost(
+    if (isSelfServiceMode) {
+        Scaffold(topBar = { }) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .padding(paddingValues)
+                    .fillMaxSize(),
+            ) {
+                CashInOutNavHost(
+                    tabList = tabList,
+                    activeTab = activeTab,
                     navController = navController,
-                    startDestination = startRoute,
+                    viewModel = viewModel,
+                    leaveView = leaveView,
+                    isSelfServiceMode = true,
+                )
+            }
+        }
+    } else {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val compactHeader = maxWidth < 760.dp
+            OperatorBackground {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    composable(CashInOutTab.TopUp.route) {
-                        TopUpView(
-                            onFinished = if (isSelfServiceMode) {
-                                leaveView
-                            } else null
+                    if (tabList.isNotEmpty()) {
+                        val headerIdx = activeTab.coerceIn(0, tabList.lastIndex)
+                        OperatorCompactFlowHeader(
+                            flowTitle = stringResource(tabList[headerIdx].titleRes),
+                            tillLabel = loginState.title().title.takeIf { it.isNotBlank() },
+                            onBack = leaveView,
+                            compactHandheld = compactHeader,
                         )
                     }
-                    composable(CashInOutTab.PayOut.route) {
-                        PayOutView()
-                    }
+                    CashInOutNavHost(
+                        tabList = tabList,
+                        activeTab = activeTab,
+                        navController = navController,
+                        viewModel = viewModel,
+                        leaveView = leaveView,
+                        isSelfServiceMode = false,
+                    )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.CashInOutNavHost(
+    tabList: List<CashInOutTab>,
+    activeTab: Int,
+    navController: NavHostController,
+    viewModel: PayInOutViewModel,
+    leaveView: () -> Unit,
+    isSelfServiceMode: Boolean,
+) {
+    if (tabList.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = true),
+            contentAlignment = Alignment.Center,
+        ) {
+            OperatorInfoCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 560.dp),
+                title = stringResource(R.string.payinout_no_action_available),
+            ) {
+                Text(
+                    text = stringResource(R.string.payinout_unavailable_desc),
+                    color = OperatorPalette.subtitle,
+                    fontSize = 18.sp,
+                    lineHeight = 24.sp,
+                )
+                OperatorSecondaryButton(
+                    text = stringResource(R.string.back),
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onClick = leaveView,
+                )
+            }
+        }
+        return
+    }
+
+    val startRoute = tabList[0].route
+
+    if (tabList.size > 1) {
+        TabRow(
+            selectedTabIndex = activeTab,
+            backgroundColor = Color.Transparent,
+            contentColor = OperatorPalette.title,
+        ) {
+            tabList.forEachIndexed { idx, elem ->
+                Tab(
+                    text = { Text(stringResource(elem.titleRes)) },
+                    selected = activeTab == idx,
+                    onClick = { viewModel.cashInOutTabSelected(idx) }
+                )
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxWidth().weight(1f, fill = true)) {
+        NavHost(
+            navController = navController,
+            startDestination = startRoute,
+        ) {
+            composable(CashInOutTab.TopUp.route) {
+                TopUpView(
+                    onFinished = if (isSelfServiceMode) {
+                        leaveView
+                    } else null
+                )
+            }
+            composable(CashInOutTab.PayOut.route) {
+                PayOutView()
             }
         }
     }

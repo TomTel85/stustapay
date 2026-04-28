@@ -1,18 +1,23 @@
 package de.stustapay.stustapay.ui.sale
 
 import android.app.Activity
+import android.content.Context
+import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ionspin.kotlin.bignum.integer.BigInteger
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.stustapay.api.models.CompletedSale
 import de.stustapay.api.models.PaymentMethod
 import de.stustapay.libssp.model.NfcTag
 import de.stustapay.libssp.net.Response
 import de.stustapay.libssp.util.mapState
+import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ec.ECPayment
 import de.stustapay.stustapay.repository.ECPaymentRepository
 import de.stustapay.stustapay.repository.ECPaymentResult
+import de.stustapay.stustapay.repository.InfallibleRepository
 import de.stustapay.stustapay.repository.SaleRepository
 import de.stustapay.stustapay.repository.TerminalConfigRepository
 import de.stustapay.stustapay.repository.TerminalConfigState
@@ -25,7 +30,36 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import java.text.NumberFormat
+import java.util.Locale
 import javax.inject.Inject
+
+internal data class InsufficientFundsDetails(
+    val neededAmount: Double,
+    val availableAmount: Double,
+)
+
+private val insufficientFundsPrefix = Regex("Not enough funds available", RegexOption.IGNORE_CASE)
+private val neededAmountRegex = Regex("Needed: ([0-9.]+)")
+private val availableAmountRegex = Regex("Available: ([0-9.]+)")
+
+internal fun parseInsufficientFundsDetails(message: String): InsufficientFundsDetails? {
+    if (!insufficientFundsPrefix.containsMatchIn(message)) {
+        return null
+    }
+
+    val neededAmount = neededAmountRegex.find(message)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
+    val availableAmount = availableAmountRegex.find(message)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
+
+    return if (neededAmount != null && availableAmount != null) {
+        InsufficientFundsDetails(
+            neededAmount = neededAmount,
+            availableAmount = availableAmount,
+        )
+    } else {
+        null
+    }
+}
 
 
 enum class SalePage(val route: String) {
@@ -45,11 +79,28 @@ enum class ScanTarget {
 
 @HiltViewModel
 class SaleViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val saleRepository: SaleRepository,
     private val terminalConfigRepository: TerminalConfigRepository,
     private val ecPaymentRepository: ECPaymentRepository,
+    private val infallibleRepository: InfallibleRepository,
     private val customerDisplayManager: CustomerDisplayManager,
 ) : ViewModel() {
+    private val saleAmountLocale: Locale by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            context.resources.configuration.locales[0]
+        } else {
+            @Suppress("DEPRECATION")
+            context.resources.configuration.locale
+        }
+    }
+
+    private val saleAmountNumberFormat: NumberFormat by lazy {
+        NumberFormat.getNumberInstance(saleAmountLocale).apply {
+            minimumFractionDigits = 2
+            maximumFractionDigits = 2
+        }
+    }
 
     // navigation in views
     private val _navState = MutableStateFlow(SalePage.ProductSelect)
@@ -69,7 +120,7 @@ class SaleViewModel @Inject constructor(
     val saleCompleted = _saleCompleted.asStateFlow()
 
     // status message
-    private val _status = MutableStateFlow("loading")
+    private val _status = MutableStateFlow("")
     val status = _status.asStateFlow()
 
     // error popup
@@ -152,9 +203,9 @@ class SaleViewModel @Inject constructor(
         customerDisplayManager.updateState(CustomerDisplayState.Welcome)
         
         if (success) {
-            _status.update { "Order cleared - ready." }
+            _status.update { context.getString(R.string.sale_status_order_cleared_ready) }
         } else {
-            _status.update { "Order cleared" }
+            _status.update { context.getString(R.string.ticket_order_cleared) }
         }
     }
 
@@ -208,7 +259,7 @@ class SaleViewModel @Inject constructor(
         // and not fold them and check if sum == 0
         // because one can have negative returnable items!
         if (_saleStatus.value.buttonSelection.isEmpty()) {
-            _error.update { "No items in sale" }
+            _error.update { context.getString(R.string.sale_status_no_items) }
             _navState.update { SalePage.Error }
             return
         }
@@ -236,7 +287,7 @@ class SaleViewModel @Inject constructor(
 
         val tag = _saleStatus.value.tag
         if (tag == null) {
-            _status.update { "Scanning tag..." }
+            _status.update { context.getString(R.string.sale_status_scanning_tag) }
             scanTarget.update { ScanTarget.CheckSale }
             _enableScan.update { true }
             
@@ -246,7 +297,7 @@ class SaleViewModel @Inject constructor(
             return
         }
 
-        _status.update { "Checking order..." }
+        _status.update { context.getString(R.string.order_checking) }
 
         // check if the sale is nice and well
         val response = saleRepository.checkSale(
@@ -260,7 +311,7 @@ class SaleViewModel @Inject constructor(
                     newSale.updateWithPendingSale(response.data)
                     newSale
                 }
-                _status.update { "Order validated!" }
+                _status.update { context.getString(R.string.sale_status_order_validated) }
                 
                 // Update customer display with the validated sale
                 val pendingSale = response.data
@@ -281,51 +332,38 @@ class SaleViewModel @Inject constructor(
             }
 
             is Response.Error.Service -> {
-                // Check if the error is related to insufficient funds
-                val isInsufficientFunds = response.msg().contains("Not enough funds available", ignoreCase = true)
-                
-                if (isInsufficientFunds) {
-                    // Parse the specific error message format from the backend
-                    // Format: "Not enough funds available:\nNeeded: X\nAvailable: Y"
-                    val neededRegex = "Needed: ([0-9.]+)".toRegex()
-                    val availableRegex = "Available: ([0-9.]+)".toRegex()
-                    
-                    val neededAmount = neededRegex.find(response.msg())?.groupValues?.get(1) ?: 
-                        _saleStatus.value.getRoughTotalPrice(saleConfig.value).toString()
-                    
-                    val availableAmount = availableRegex.find(response.msg())?.groupValues?.get(1) ?: "0"
-                    
-                    // Show insufficient funds message on customer display
+                val insufficientFundsDetails = parseInsufficientFundsDetails(response.msg())
+
+                if (insufficientFundsDetails != null) {
                     customerDisplayManager.updateState(
                         CustomerDisplayState.InsufficientFunds(
-                            totalPrice = neededAmount,
-                            currentBalance = availableAmount
+                            totalPrice = insufficientFundsDetails.neededAmount.toString(),
+                            currentBalance = insufficientFundsDetails.availableAmount.toString(),
                         )
                     )
                 } else {
-                    // Reset customer display to welcome state for other errors
                     customerDisplayManager.updateState(CustomerDisplayState.Welcome)
                 }
-                
-                // maybe only clear tag for some errors.
+
                 clearScannedTag()
-                _error.update { response.msg() }
-                _status.update { response.msg() }
+                val localizedMessage = localizeSaleErrorMessage(response.msg())
+                _error.update { localizedMessage }
+                _status.update { localizedMessage }
             }
 
             is Response.Error -> {
-                _status.update { response.msg() }
+                _status.update { localizeSaleErrorMessage(response.msg()) }
             }
         }
     }
 
     suspend fun checkSaleCash() {
         if (_saleStatus.value.buttonSelection.isEmpty()) {
-            _status.update { "Nothing ordered!" }
+            _status.update { context.getString(R.string.sale_status_nothing_ordered) }
             return
         }
 
-        _status.update { "Checking order..." }
+        _status.update { context.getString(R.string.order_checking) }
 
         val response = saleRepository.checkSale(
             _saleStatus.value.getNewSale(method = PaymentMethod.cash)
@@ -338,30 +376,31 @@ class SaleViewModel @Inject constructor(
                     newSale.updateWithPendingSale(response.data)
                     newSale
                 }
-                _status.update { "Order validated!" }
+                _status.update { context.getString(R.string.sale_status_order_validated) }
                 _navState.update { SalePage.Confirm }
             }
 
             is Response.Error.Service -> {
                 // maybe only clear tag for some errors.
                 clearScannedTag()
-                _error.update { response.msg() }
-                _status.update { response.msg() }
+                val localizedMessage = localizeSaleErrorMessage(response.msg())
+                _error.update { localizedMessage }
+                _status.update { localizedMessage }
             }
 
             is Response.Error -> {
-                _status.update { response.msg() }
+                _status.update { localizeSaleErrorMessage(response.msg()) }
             }
         }
     }
 
     suspend fun checkSaleCard() {
         if (_saleStatus.value.buttonSelection.isEmpty()) {
-            _status.update { "Nothing ordered!" }
+            _status.update { context.getString(R.string.sale_status_nothing_ordered) }
             return
         }
 
-        _status.update { "Checking order..." }
+        _status.update { context.getString(R.string.order_checking) }
 
         val response = saleRepository.checkSale(
             _saleStatus.value.getNewSale(method = PaymentMethod.sumup)
@@ -374,20 +413,37 @@ class SaleViewModel @Inject constructor(
                     newSale.updateWithPendingSale(response.data)
                     newSale
                 }
-                _status.update { "Order validated!" }
+                _status.update { context.getString(R.string.sale_status_order_validated) }
                 _navState.update { SalePage.Confirm }
             }
 
             is Response.Error.Service -> {
                 // maybe only clear tag for some errors.
                 clearScannedTag()
-                _error.update { response.msg() }
-                _status.update { response.msg() }
+                val localizedMessage = localizeSaleErrorMessage(response.msg())
+                _error.update { localizedMessage }
+                _status.update { localizedMessage }
             }
 
             is Response.Error -> {
-                _status.update { response.msg() }
+                _status.update { localizeSaleErrorMessage(response.msg()) }
             }
+        }
+    }
+
+    private fun localizeSaleErrorMessage(message: String): String {
+        val insufficientFundsDetails = parseInsufficientFundsDetails(message) ?: return message
+
+        return context.getString(
+            R.string.sale_status_insufficient_funds,
+            formatSaleAmountForLocale(insufficientFundsDetails.neededAmount),
+            formatSaleAmountForLocale(insufficientFundsDetails.availableAmount),
+        )
+    }
+
+    private fun formatSaleAmountForLocale(value: Double): String {
+        return synchronized(saleAmountNumberFormat) {
+            saleAmountNumberFormat.format(value)
         }
     }
 
@@ -402,23 +458,39 @@ class SaleViewModel @Inject constructor(
         val tag = _saleStatus.value.tag
         val sale = _saleStatus.value.checkedSale
         if (sale == null) {
-            _status.update { "Unchecked sale!" }
+            _status.update { context.getString(R.string.sale_status_unchecked_sale) }
             return
         }
+        val newSale = _saleStatus.value.getNewSale(tag, sale.paymentMethod)
 
         if (sale.paymentMethod == PaymentMethod.sumup) {
             ecPaymentRepository.wakeup()
 
             val payment = ECPayment(
-                id = sale.uuid.toString(),
+                id = newSale.uuid.toString(),
                 amount = BigDecimal(sale.totalPrice),
                 // we don't have a NFC tag for direct card sales.
                 tag = NfcTag(BigInteger(0), null),
             )
 
-            // TODO: register pending sale for guaranteed sumup processing
+            when (val registerResponse = saleRepository.registerPendingSale(newSale)) {
+                is Response.OK -> {
+                    _status.update { context.getString(R.string.sale_status_order_announced) }
+                }
 
-            _status.update { "Starting EC transaction..." }
+                is Response.Error.Service -> {
+                    _status.update { registerResponse.msg() }
+                    _navState.update { SalePage.Error }
+                    return
+                }
+
+                is Response.Error -> {
+                    _status.update { registerResponse.msg() }
+                    return
+                }
+            }
+
+            _status.update { context.getString(R.string.sale_status_starting_ec) }
 
             // workaround so the sumup activity is not in foreground too quickly.
             // when it's active, nfc intents are no longer captured by us, apparently,
@@ -428,27 +500,28 @@ class SaleViewModel @Inject constructor(
 
             when (val paymentResult = ecPaymentRepository.pay(context, payment)) {
                 is ECPaymentResult.Failure -> {
-                    _status.update { "EC: ${paymentResult.msg}" }
+                    if (!paymentResult.mayHaveCreatedCharge) {
+                        saleRepository.cancelPendingSale(newSale.uuid)
+                    }
+                    _status.update { context.getString(R.string.topup_status_ec_result, paymentResult.msg) }
                     return
                 }
 
                 is ECPaymentResult.Success -> {
-                    _status.update { "EC: ${paymentResult.result.msg}" }
+                    _status.update { context.getString(R.string.topup_status_ec_result, paymentResult.result.msg) }
                 }
             }
         }
 
         _saleCompleted.update { null }
 
-        val response = saleRepository.bookSale(
-            newSale = _saleStatus.value.getNewSale(tag, sale.paymentMethod)
-        )
+        val response = infallibleRepository.bookSale(newSale)
 
         when (response) {
             is Response.OK -> {
                 // delete the sale draft
                 clearSale()
-                _status.update { "Order booked!" }
+                _status.update { context.getString(R.string.ticket_order_booked) }
                 // now we have a completed sale
                 _saleCompleted.update { response.data }
                 _navState.update { SalePage.Success }
@@ -515,7 +588,7 @@ class SaleViewModel @Inject constructor(
                 is TerminalConfigState.Success -> {
                     val till = terminalConfig.config.till
                     if (till != null) {
-                        _status.update { "Ready for order." }
+                        _status.update { context.getString(R.string.sale_status_ready_for_order) }
                         SaleConfig.Ready(
                             buttons = terminalConfig.config.till?.buttons?.associate {
                                 Pair(
@@ -531,7 +604,7 @@ class SaleViewModel @Inject constructor(
                             till = till,
                         )
                     } else {
-                        _status.update { "No till assigned to terminal" }
+                        _status.update { context.getString(R.string.sale_status_no_till_assigned) }
                         SaleConfig.NotReady
                     }
                 }
@@ -542,7 +615,7 @@ class SaleViewModel @Inject constructor(
                 }
 
                 is TerminalConfigState.NoConfig -> {
-                    _status.update { "Loading..." }
+                    _status.update { context.getString(R.string.operator_console_loading) }
                     SaleConfig.NotReady
                 }
             }

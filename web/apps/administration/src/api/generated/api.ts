@@ -106,6 +106,14 @@ const injectedRtkApi = api
         }),
         invalidatesTags: ["users"],
       }),
+      acceptInvitation: build.mutation<AcceptInvitationApiResponse, AcceptInvitationApiArg>({
+        query: (queryArg) => ({
+          url: `/users/accept-invitation`,
+          method: "POST",
+          body: queryArg.acceptInvitationPayload,
+        }),
+        invalidatesTags: ["users"],
+      }),
       getUser: build.query<GetUserApiResponse, GetUserApiArg>({
         query: (queryArg) => ({
           url: `/users/${queryArg.userId}`,
@@ -154,14 +162,6 @@ const injectedRtkApi = api
           params: {
             node_id: queryArg.nodeId,
           },
-        }),
-        invalidatesTags: ["users"],
-      }),
-      acceptInvitation: build.mutation<AcceptInvitationApiResponse, AcceptInvitationApiArg>({
-        query: (queryArg) => ({
-          url: `/users/accept-invitation`,
-          method: "POST",
-          body: queryArg.acceptInvitationPayload,
         }),
         invalidatesTags: ["users"],
       }),
@@ -680,6 +680,14 @@ const injectedRtkApi = api
       }),
       updateGlobalEmailConfig: build.mutation<UpdateGlobalEmailConfigApiResponse, UpdateGlobalEmailConfigApiArg>({
         query: (queryArg) => ({ url: `/config/email`, method: "POST", body: queryArg.globalEmailConfig }),
+        invalidatesTags: ["config"],
+      }),
+      getGlobalSumupConfig: build.query<GetGlobalSumupConfigApiResponse, GetGlobalSumupConfigApiArg>({
+        query: () => ({ url: `/config/sumup` }),
+        providesTags: ["config"],
+      }),
+      updateGlobalSumupConfig: build.mutation<UpdateGlobalSumupConfigApiResponse, UpdateGlobalSumupConfigApiArg>({
+        query: (queryArg) => ({ url: `/config/sumup`, method: "POST", body: queryArg.globalSumUpConfig }),
         invalidatesTags: ["config"],
       }),
       sendGlobalEmailTest: build.mutation<SendGlobalEmailTestApiResponse, SendGlobalEmailTestApiArg>({
@@ -1359,6 +1367,10 @@ const injectedRtkApi = api
         query: (queryArg) => ({ url: `/tree/events/${queryArg.nodeId}/settings` }),
         providesTags: ["tree"],
       }),
+      clearLegacySumupSettings: build.mutation<ClearLegacySumupSettingsApiResponse, ClearLegacySumupSettingsApiArg>({
+        query: (queryArg) => ({ url: `/tree/events/${queryArg.nodeId}/clear-legacy-sumup-settings`, method: "POST" }),
+        invalidatesTags: ["tree"],
+      }),
       deleteNode: build.mutation<DeleteNodeApiResponse, DeleteNodeApiArg>({
         query: (queryArg) => ({ url: `/tree/nodes/${queryArg.nodeId}`, method: "DELETE" }),
         invalidatesTags: ["tree"],
@@ -1373,6 +1385,14 @@ const injectedRtkApi = api
       }),
       generateRevenueReport: build.mutation<GenerateRevenueReportApiResponse, GenerateRevenueReportApiArg>({
         query: (queryArg) => ({ url: `/tree/nodes/${queryArg.nodeId}/generate-revenue-report`, method: "POST" }),
+        invalidatesTags: ["tree"],
+      }),
+      getNodeSumupLinkStatus: build.query<GetNodeSumupLinkStatusApiResponse, GetNodeSumupLinkStatusApiArg>({
+        query: (queryArg) => ({ url: `/tree/nodes/${queryArg.nodeId}/sumup-link` }),
+        providesTags: ["tree"],
+      }),
+      deleteNodeSumupLink: build.mutation<DeleteNodeSumupLinkApiResponse, DeleteNodeSumupLinkApiArg>({
+        query: (queryArg) => ({ url: `/tree/nodes/${queryArg.nodeId}/sumup-link`, method: "DELETE" }),
         invalidatesTags: ["tree"],
       }),
       configureSumupToken: build.mutation<ConfigureSumupTokenApiResponse, ConfigureSumupTokenApiArg>({
@@ -1651,17 +1671,60 @@ const injectedRtkApi = api
         query: () => ({ url: `/llm/tools` }),
         providesTags: ["llm"],
       }),
+      listNodesLlm: build.query<ListNodesLlmApiResponse, ListNodesLlmApiArg>({
+        query: (queryArg) => ({
+          url: `/llm/nodes`,
+          params: {
+            parent_node_id: queryArg.parentNodeId,
+            name_query: queryArg.nameQuery,
+          },
+        }),
+        providesTags: ["llm"],
+      }),
+      createNodeLlm: build.mutation<CreateNodeLlmApiResponse, CreateNodeLlmApiArg>({
+        query: (queryArg) => ({ url: `/llm/nodes`, method: "POST", body: queryArg.createNodePayload }),
+        invalidatesTags: ["llm"],
+      }),
       createProductLlm: build.mutation<CreateProductLlmApiResponse, CreateProductLlmApiArg>({
         query: (queryArg) => ({ url: `/llm/products`, method: "POST", body: queryArg.createProductPayload }),
         invalidatesTags: ["llm"],
+      }),
+      listProductsLlm: build.query<ListProductsLlmApiResponse, ListProductsLlmApiArg>({
+        query: (queryArg) => ({
+          url: `/llm/products`,
+          params: {
+            node_id: queryArg.nodeId,
+            include_subtree: queryArg.includeSubtree,
+          },
+        }),
+        providesTags: ["llm"],
       }),
       createCashRegisterLlm: build.mutation<CreateCashRegisterLlmApiResponse, CreateCashRegisterLlmApiArg>({
         query: (queryArg) => ({ url: `/llm/cash-registers`, method: "POST", body: queryArg.createCashRegisterPayload }),
         invalidatesTags: ["llm"],
       }),
+      listCashRegistersLlm: build.query<ListCashRegistersLlmApiResponse, ListCashRegistersLlmApiArg>({
+        query: (queryArg) => ({
+          url: `/llm/cash-registers`,
+          params: {
+            node_id: queryArg.nodeId,
+            include_subtree: queryArg.includeSubtree,
+          },
+        }),
+        providesTags: ["llm"],
+      }),
       createTillLlm: build.mutation<CreateTillLlmApiResponse, CreateTillLlmApiArg>({
         query: (queryArg) => ({ url: `/llm/tills`, method: "POST", body: queryArg.createTillPayload }),
         invalidatesTags: ["llm"],
+      }),
+      listTillsLlm: build.query<ListTillsLlmApiResponse, ListTillsLlmApiArg>({
+        query: (queryArg) => ({
+          url: `/llm/tills`,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        providesTags: ["llm"],
       }),
       createTillButtonLlm: build.mutation<CreateTillButtonLlmApiResponse, CreateTillButtonLlmApiArg>({
         query: (queryArg) => ({ url: `/llm/till-buttons`, method: "POST", body: queryArg.createTillButtonPayload }),
@@ -1689,8 +1752,34 @@ const injectedRtkApi = api
         }),
         providesTags: ["llm"],
       }),
+      createTillProfileLlm: build.mutation<CreateTillProfileLlmApiResponse, CreateTillProfileLlmApiArg>({
+        query: (queryArg) => ({ url: `/llm/till-profiles`, method: "POST", body: queryArg.createTillProfilePayload }),
+        invalidatesTags: ["llm"],
+      }),
+      listTillProfilesLlm: build.query<ListTillProfilesLlmApiResponse, ListTillProfilesLlmApiArg>({
+        query: (queryArg) => ({
+          url: `/llm/till-profiles`,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        providesTags: ["llm"],
+      }),
       createTerminalLlm: build.mutation<CreateTerminalLlmApiResponse, CreateTerminalLlmApiArg>({
         query: (queryArg) => ({ url: `/llm/terminals`, method: "POST", body: queryArg.createTerminalPayload }),
+        invalidatesTags: ["llm"],
+      }),
+      listTerminalsLlm: build.query<ListTerminalsLlmApiResponse, ListTerminalsLlmApiArg>({
+        query: (queryArg) => ({
+          url: `/llm/terminals`,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        providesTags: ["llm"],
+      }),
+      createTaxRateLlm: build.mutation<CreateTaxRateLlmApiResponse, CreateTaxRateLlmApiArg>({
+        query: (queryArg) => ({ url: `/llm/tax-rates`, method: "POST", body: queryArg.createTaxRatePayload }),
         invalidatesTags: ["llm"],
       }),
       listTaxRatesLlm: build.query<ListTaxRatesLlmApiResponse, ListTaxRatesLlmApiArg>({
@@ -1707,15 +1796,6 @@ const injectedRtkApi = api
           url: `/llm/events`,
           params: {
             name_query: queryArg.nameQuery,
-          },
-        }),
-        providesTags: ["llm"],
-      }),
-      listTillProfilesLlm: build.query<ListTillProfilesLlmApiResponse, ListTillProfilesLlmApiArg>({
-        query: (queryArg) => ({
-          url: `/llm/till-profiles`,
-          params: {
-            node_id: queryArg.nodeId,
           },
         }),
         providesTags: ["llm"],
@@ -2021,6 +2101,12 @@ export type CreateUserApiArg = {
   nodeId: number;
   createUserPayload: CreateUserPayload;
 };
+export type AcceptInvitationApiResponse = /** status 200 Successful Response */ {
+  [key: string]: string;
+};
+export type AcceptInvitationApiArg = {
+  acceptInvitationPayload: AcceptInvitationPayload;
+};
 export type GetUserApiResponse = /** status 200 Successful Response */ UserRead;
 export type GetUserApiArg = {
   userId: number;
@@ -2047,12 +2133,6 @@ export type InviteUserApiResponse = /** status 200 Successful Response */ UserIn
 export type InviteUserApiArg = {
   userId: number;
   nodeId: number;
-};
-export type AcceptInvitationApiResponse = /** status 200 Successful Response */ {
-  [key: string]: string;
-};
-export type AcceptInvitationApiArg = {
-  acceptInvitationPayload: AcceptInvitationPayload;
 };
 export type ListUserRolesApiResponse = /** status 200 Successful Response */ NormalizedListUserRoleInt;
 export type ListUserRolesApiArg = {
@@ -2320,6 +2400,12 @@ export type GetGlobalEmailConfigApiArg = void;
 export type UpdateGlobalEmailConfigApiResponse = /** status 200 Successful Response */ GlobalEmailConfig;
 export type UpdateGlobalEmailConfigApiArg = {
   globalEmailConfig: GlobalEmailConfig;
+};
+export type GetGlobalSumupConfigApiResponse = /** status 200 Successful Response */ GlobalSumUpConfig;
+export type GetGlobalSumupConfigApiArg = void;
+export type UpdateGlobalSumupConfigApiResponse = /** status 200 Successful Response */ GlobalSumUpConfig;
+export type UpdateGlobalSumupConfigApiArg = {
+  globalSumUpConfig: GlobalSumUpConfig;
 };
 export type SendGlobalEmailTestApiResponse = /** status 200 Successful Response */ {
   [key: string]: string;
@@ -2693,6 +2779,10 @@ export type GetRestrictedEventSettingsApiResponse = /** status 200 Successful Re
 export type GetRestrictedEventSettingsApiArg = {
   nodeId: number;
 };
+export type ClearLegacySumupSettingsApiResponse = /** status 200 Successful Response */ RestrictedEventSettings;
+export type ClearLegacySumupSettingsApiArg = {
+  nodeId: number;
+};
 export type DeleteNodeApiResponse = /** status 200 Successful Response */ any;
 export type DeleteNodeApiArg = {
   nodeId: number;
@@ -2709,7 +2799,15 @@ export type GenerateRevenueReportApiResponse = /** status 200 Successful Respons
 export type GenerateRevenueReportApiArg = {
   nodeId: number;
 };
-export type ConfigureSumupTokenApiResponse = /** status 200 Successful Response */ any;
+export type GetNodeSumupLinkStatusApiResponse = /** status 200 Successful Response */ NodeSumUpConnectionStatus;
+export type GetNodeSumupLinkStatusApiArg = {
+  nodeId: number;
+};
+export type DeleteNodeSumupLinkApiResponse = /** status 200 Successful Response */ NodeSumUpConnectionStatus;
+export type DeleteNodeSumupLinkApiArg = {
+  nodeId: number;
+};
+export type ConfigureSumupTokenApiResponse = /** status 200 Successful Response */ NodeSumUpConnectionStatus;
 export type ConfigureSumupTokenApiArg = {
   nodeId: number;
   sumUpTokenPayload: SumUpTokenPayload;
@@ -2853,17 +2951,40 @@ export type RefreshMappingTokenApiArg = {
 };
 export type ListLlmToolsApiResponse = /** status 200 Successful Response */ ToolDescription[];
 export type ListLlmToolsApiArg = void;
+export type ListNodesLlmApiResponse = /** status 200 Successful Response */ NodeSeenByUser[];
+export type ListNodesLlmApiArg = {
+  parentNodeId: number;
+  nameQuery?: string | null;
+};
+export type CreateNodeLlmApiResponse = /** status 200 Successful Response */ Node;
+export type CreateNodeLlmApiArg = {
+  createNodePayload: CreateNodePayload;
+};
 export type CreateProductLlmApiResponse = /** status 200 Successful Response */ Product;
 export type CreateProductLlmApiArg = {
   createProductPayload: CreateProductPayload;
+};
+export type ListProductsLlmApiResponse = /** status 200 Successful Response */ Product[];
+export type ListProductsLlmApiArg = {
+  nodeId: number;
+  includeSubtree?: boolean;
 };
 export type CreateCashRegisterLlmApiResponse = /** status 200 Successful Response */ CashRegister;
 export type CreateCashRegisterLlmApiArg = {
   createCashRegisterPayload: CreateCashRegisterPayload;
 };
+export type ListCashRegistersLlmApiResponse = /** status 200 Successful Response */ CashRegister[];
+export type ListCashRegistersLlmApiArg = {
+  nodeId: number;
+  includeSubtree?: boolean;
+};
 export type CreateTillLlmApiResponse = /** status 200 Successful Response */ Till;
 export type CreateTillLlmApiArg = {
   createTillPayload: CreateTillPayload;
+};
+export type ListTillsLlmApiResponse = /** status 200 Successful Response */ Till[];
+export type ListTillsLlmApiArg = {
+  nodeId: number;
 };
 export type CreateTillButtonLlmApiResponse = /** status 200 Successful Response */ TillButton;
 export type CreateTillButtonLlmApiArg = {
@@ -2881,9 +3002,25 @@ export type ListTillLayoutsLlmApiResponse = /** status 200 Successful Response *
 export type ListTillLayoutsLlmApiArg = {
   nodeId: number;
 };
+export type CreateTillProfileLlmApiResponse = /** status 200 Successful Response */ TillProfile;
+export type CreateTillProfileLlmApiArg = {
+  createTillProfilePayload: CreateTillProfilePayload;
+};
+export type ListTillProfilesLlmApiResponse = /** status 200 Successful Response */ TillProfile[];
+export type ListTillProfilesLlmApiArg = {
+  nodeId: number;
+};
 export type CreateTerminalLlmApiResponse = /** status 200 Successful Response */ Terminal;
 export type CreateTerminalLlmApiArg = {
   createTerminalPayload: CreateTerminalPayload;
+};
+export type ListTerminalsLlmApiResponse = /** status 200 Successful Response */ Terminal[];
+export type ListTerminalsLlmApiArg = {
+  nodeId: number;
+};
+export type CreateTaxRateLlmApiResponse = /** status 200 Successful Response */ TaxRate;
+export type CreateTaxRateLlmApiArg = {
+  createTaxRatePayload: CreateTaxRatePayload;
 };
 export type ListTaxRatesLlmApiResponse = /** status 200 Successful Response */ TaxRate[];
 export type ListTaxRatesLlmApiArg = {
@@ -2892,10 +3029,6 @@ export type ListTaxRatesLlmApiArg = {
 export type ListEventsLlmApiResponse = /** status 200 Successful Response */ EventSummary[];
 export type ListEventsLlmApiArg = {
   nameQuery?: string | null;
-};
-export type ListTillProfilesLlmApiResponse = /** status 200 Successful Response */ TillProfile[];
-export type ListTillProfilesLlmApiArg = {
-  nodeId: number;
 };
 export type ListEntryAreasApiResponse = /** status 200 Successful Response */ NormalizedListEntryAreaInt;
 export type ListEntryAreasApiArg = {
@@ -3145,6 +3278,10 @@ export type CreateUserPayload = {
   email?: string | null;
   password?: string | null;
 };
+export type AcceptInvitationPayload = {
+  token: string;
+  password: string;
+};
 export type UpdateUserPayload = {
   login: string;
   display_name: string;
@@ -3165,10 +3302,6 @@ export type UserInvitation = {
   expires_at: string;
   accepted_at?: string | null;
   created_by?: number | null;
-};
-export type AcceptInvitationPayload = {
-  token: string;
-  password: string;
 };
 export type UserRole = {
   name: string;
@@ -3574,9 +3707,16 @@ export type GlobalEmailConfig = {
   email_smtp_port?: number | null;
   email_smtp_username?: string | null;
   email_smtp_password?: string | null;
-  invitation_subject?: string | null;
-  invitation_text_body?: string | null;
-  invitation_html_body?: string | null;
+  invitation_texts?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
+};
+export type GlobalSumUpConfig = {
+  sumup_affiliate_key?: string;
+  sumup_oauth_client_id?: string;
+  sumup_oauth_client_secret?: string;
 };
 export type AccountType =
   | "private"
@@ -3646,7 +3786,7 @@ export type AccountRead = {
 export type NormalizedListAccountInt = {
   ids: number[];
   entities: {
-    [key: string]: Account;
+    [key: string]: AccountRead;
   };
 };
 export type FindAccountPayload = {
@@ -4265,6 +4405,8 @@ export type NewEvent = {
   sumup_oauth_client_secret?: string;
   pretix_api_key: string | null;
   email_smtp_password?: string | null;
+  wifi_ssid?: string | null;
+  wifi_passphrase?: string | null;
   currency_identifier: string;
   max_account_balance: number;
   vip_max_account_balance?: number;
@@ -4343,6 +4485,8 @@ export type UpdateEvent = {
   sumup_oauth_client_secret?: string;
   pretix_api_key: string | null;
   email_smtp_password?: string | null;
+  wifi_ssid?: string | null;
+  wifi_passphrase?: string | null;
   currency_identifier: string;
   max_account_balance: number;
   vip_max_account_balance?: number;
@@ -4393,6 +4537,15 @@ export type UpdateEvent = {
     };
   };
 };
+export type SumUpConnectionSource = "node_link" | "legacy_event_oauth" | "legacy_event_api_key";
+export type ResolvedSumUpLink = {
+  source: SumUpConnectionSource;
+  source_node_id: number;
+  source_node_name: string;
+  merchant_code: string;
+  merchant_name?: string | null;
+  inherited?: boolean;
+};
 export type RestrictedEventSettings = {
   sumup_api_key?: string;
   sumup_affiliate_key?: string;
@@ -4401,6 +4554,8 @@ export type RestrictedEventSettings = {
   sumup_oauth_client_secret?: string;
   pretix_api_key: string | null;
   email_smtp_password?: string | null;
+  wifi_ssid?: string | null;
+  wifi_passphrase?: string | null;
   currency_identifier: string;
   max_account_balance: number;
   vip_max_account_balance?: number;
@@ -4453,9 +4608,26 @@ export type RestrictedEventSettings = {
   id: number;
   languages: Language[];
   sumup_oauth_refresh_token: string;
+  resolved_sumup_link?: ResolvedSumUpLink | null;
+  sumup_global_oauth_configured?: boolean;
+  sumup_global_affiliate_key_configured?: boolean;
+  sumup_legacy_api_key_configured?: boolean;
+  sumup_legacy_oauth_configured?: boolean;
+};
+export type NodeSumUpConnectionStatus = {
+  node_id: number;
+  node_name: string;
+  connected: boolean;
+  merchant_code?: string | null;
+  merchant_name?: string | null;
+  linked_event_count?: number;
+  oauth_client_id?: string;
+  oauth_configured?: boolean;
+  affiliate_key_configured?: boolean;
 };
 export type SumUpTokenPayload = {
   authorization_code: string;
+  redirect_uri: string;
 };
 export type BodyUploadEventBannerTreeEventsNodeIdBannerPost = {
   file: Blob;
@@ -4572,6 +4744,7 @@ export type Terminal = {
   description?: string | null;
   mode?: TerminalMode;
   entry_area_id?: number | null;
+  self_service?: boolean;
   id: number;
   node_id: number;
   till_id: number | null;
@@ -4591,6 +4764,7 @@ export type NewTerminal = {
   description?: string | null;
   mode?: TerminalMode;
   entry_area_id?: number | null;
+  self_service?: boolean;
 };
 export type SwitchTillPayload = {
   new_till_id: number;
@@ -4612,6 +4786,9 @@ export type HeadwindDeviceMappingWithTerminal = {
   last_token_pushed_at?: string | null;
   last_push_status?: string | null;
   last_push_error?: string | null;
+  last_wifi_pushed_at?: string | null;
+  last_wifi_push_status?: string | null;
+  last_wifi_push_error?: string | null;
   created_at: string;
   updated_at: string;
   terminal_name: string;
@@ -4651,6 +4828,11 @@ export type ToolDescription = {
     [key: string]: any;
   } | null;
 };
+export type CreateNodePayload = {
+  /** ID of the parent node below which the child node will be created. */
+  parent_node_id: number;
+  node: NewNode;
+};
 export type CreateProductPayload = {
   /** ID of the node/event the product belongs to. */
   node_id: number;
@@ -4676,10 +4858,20 @@ export type CreateTillLayoutPayload = {
   node_id: number;
   layout: NewTillLayout;
 };
+export type CreateTillProfilePayload = {
+  /** ID of the node/event the till profile belongs to. */
+  node_id: number;
+  till_profile: NewTillProfile;
+};
 export type CreateTerminalPayload = {
   /** ID of the node/event the terminal belongs to. */
   node_id: number;
   terminal: NewTerminal;
+};
+export type CreateTaxRatePayload = {
+  /** ID of the node/event the tax rate belongs to. */
+  node_id: number;
+  tax_rate: NewTaxRate;
 };
 export type EventSummary = {
   node_id: number;
@@ -4790,13 +4982,13 @@ export const {
   useListUsersQuery,
   useLazyListUsersQuery,
   useCreateUserMutation,
+  useAcceptInvitationMutation,
   useGetUserQuery,
   useLazyGetUserQuery,
   useUpdateUserMutation,
   useDeleteUserMutation,
   useChangeUserPasswordMutation,
   useInviteUserMutation,
-  useAcceptInvitationMutation,
   useListUserRolesQuery,
   useLazyListUserRolesQuery,
   useCreateUserRoleMutation,
@@ -4875,6 +5067,9 @@ export const {
   useGetGlobalEmailConfigQuery,
   useLazyGetGlobalEmailConfigQuery,
   useUpdateGlobalEmailConfigMutation,
+  useGetGlobalSumupConfigQuery,
+  useLazyGetGlobalSumupConfigQuery,
+  useUpdateGlobalSumupConfigMutation,
   useSendGlobalEmailTestMutation,
   useListSystemAccountsQuery,
   useLazyListSystemAccountsQuery,
@@ -4974,10 +5169,14 @@ export const {
   useUpdateEventMutation,
   useGetRestrictedEventSettingsQuery,
   useLazyGetRestrictedEventSettingsQuery,
+  useClearLegacySumupSettingsMutation,
   useDeleteNodeMutation,
   useGenerateTestBonMutation,
   useGenerateTestReportMutation,
   useGenerateRevenueReportMutation,
+  useGetNodeSumupLinkStatusQuery,
+  useLazyGetNodeSumupLinkStatusQuery,
+  useDeleteNodeSumupLinkMutation,
   useConfigureSumupTokenMutation,
   useUploadEventBannerMutation,
   useDeleteEventBannerMutation,
@@ -5018,22 +5217,35 @@ export const {
   useRefreshMappingTokenMutation,
   useListLlmToolsQuery,
   useLazyListLlmToolsQuery,
+  useListNodesLlmQuery,
+  useLazyListNodesLlmQuery,
+  useCreateNodeLlmMutation,
   useCreateProductLlmMutation,
+  useListProductsLlmQuery,
+  useLazyListProductsLlmQuery,
   useCreateCashRegisterLlmMutation,
+  useListCashRegistersLlmQuery,
+  useLazyListCashRegistersLlmQuery,
   useCreateTillLlmMutation,
+  useListTillsLlmQuery,
+  useLazyListTillsLlmQuery,
   useCreateTillButtonLlmMutation,
   useListTillButtonsLlmQuery,
   useLazyListTillButtonsLlmQuery,
   useCreateTillLayoutLlmMutation,
   useListTillLayoutsLlmQuery,
   useLazyListTillLayoutsLlmQuery,
+  useCreateTillProfileLlmMutation,
+  useListTillProfilesLlmQuery,
+  useLazyListTillProfilesLlmQuery,
   useCreateTerminalLlmMutation,
+  useListTerminalsLlmQuery,
+  useLazyListTerminalsLlmQuery,
+  useCreateTaxRateLlmMutation,
   useListTaxRatesLlmQuery,
   useLazyListTaxRatesLlmQuery,
   useListEventsLlmQuery,
   useLazyListEventsLlmQuery,
-  useListTillProfilesLlmQuery,
-  useLazyListTillProfilesLlmQuery,
   useListEntryAreasQuery,
   useLazyListEntryAreasQuery,
   useCreateEntryAreaMutation,

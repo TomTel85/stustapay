@@ -15,7 +15,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -25,20 +24,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.stustapay.api.models.TerminalMode
 import de.stustapay.libssp.ui.common.Spinner
 import de.stustapay.stustapay.R
-import kotlinx.coroutines.launch
+import de.stustapay.stustapay.ui.common.selfservice.SelfServicePalette
 
 @Composable
 fun TerminalConfig(
     viewModel: TerminalConfigViewModel = hiltViewModel(),
-    fetchConfig: Boolean = true
+    fetchConfig: Boolean = true,
+    selfServiceMode: Boolean = false,
 ) {
     val loginState by viewModel.uiState.collectAsStateWithLifecycle()
     val configLoading by viewModel.configLoading.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
 
     LaunchedEffect(fetchConfig) {
         if (fetchConfig) {
-            viewModel.fetchAccessData()
+            viewModel.refreshAccessData()
         }
     }
 
@@ -52,16 +51,18 @@ fun TerminalConfig(
                 .padding(top = 15.dp, end = 20.dp)
                 .size(30.dp),
             onClick = {
-                scope.launch {
-                    viewModel.fetchAccessData()
-                }
+                viewModel.refreshAccessData()
             },
             enabled = !configLoading,
         ) {
             if (configLoading) {
                 Spinner()
             } else {
-                Icon(Icons.Filled.Refresh, "Refresh")
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = "Aktualisieren",
+                    tint = if (selfServiceMode) SelfServicePalette.title else MaterialTheme.colors.onSurface
+                )
             }
         }
         Column(
@@ -81,17 +82,22 @@ fun TerminalConfig(
             Text(
                 text = title.title,
                 style = MaterialTheme.typography.h4,
+                color = if (selfServiceMode) SelfServicePalette.title else MaterialTheme.colors.onSurface,
                 modifier = Modifier.padding(top = 10.dp)
             )
             if (subtitle != null) {
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.h5,
+                    color = if (selfServiceMode) SelfServicePalette.subtitle else MaterialTheme.colors.onSurface,
                     modifier = Modifier.padding(top = 10.dp)
                 )
             }
 
-            LoginProfile(viewModel)
+            LoginProfile(
+                viewModel = viewModel,
+                selfServiceMode = selfServiceMode,
+            )
         }
     }
 }

@@ -3,7 +3,8 @@
   "info": {
     "title": "TeamFestlichPay Terminal API",
     "license": {
-      "name": "AGPL-3.0"
+      "name": "AGPL-3.0",
+      "url": "https://www.gnu.org/licenses/agpl-3.0.html"
     },
     "version": "0.1.0"
   },
@@ -402,6 +403,52 @@
         ]
       }
     },
+    "/order/register-pending-sale": {
+      "post": {
+        "tags": [
+          "order"
+        ],
+        "summary": "Register a pending sale with the server where the sumup payment is still pending",
+        "operationId": "register_pending_sale",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewSale"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingSale"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/order/check-topup": {
       "post": {
         "tags": [
@@ -547,6 +594,50 @@
         ],
         "summary": "Mark a pending topup as cancelled, e.g. because the sumup booking failed",
         "operationId": "cancel_pending_topup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/order/cancel-pending-sale": {
+      "post": {
+        "tags": [
+          "order"
+        ],
+        "summary": "Mark a pending sale as cancelled, e.g. because the sumup booking failed",
+        "operationId": "cancel_pending_sale",
         "requestBody": {
           "content": {
             "application/json": {
@@ -3872,6 +3963,11 @@
             ],
             "title": "Entry Area Id"
           },
+          "self_service": {
+            "type": "boolean",
+            "title": "Self Service",
+            "default": false
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -4056,6 +4152,10 @@
               }
             ]
           },
+          "self_service": {
+            "type": "boolean",
+            "title": "Self Service"
+          },
           "event_name": {
             "type": "string",
             "title": "Event Name"
@@ -4128,6 +4228,7 @@
           "description",
           "mode",
           "entry_area",
+          "self_service",
           "event_name",
           "active_user_id",
           "available_roles",
@@ -4226,6 +4327,10 @@
             "type": "string",
             "title": "Sumup Api Key"
           },
+          "sumup_merchant_code": {
+            "type": "string",
+            "title": "Sumup Merchant Code"
+          },
           "sumup_api_key_expires_at": {
             "anyOf": [
               {
@@ -4243,6 +4348,7 @@
         "required": [
           "sumup_affiliate_key",
           "sumup_api_key",
+          "sumup_merchant_code",
           "sumup_api_key_expires_at"
         ],
         "title": "TerminalSumupSecrets"
@@ -4652,6 +4758,20 @@
               }
             ],
             "title": "Subnode Id"
+          },
+          "selected_dates": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Dates"
           }
         },
         "type": "object",

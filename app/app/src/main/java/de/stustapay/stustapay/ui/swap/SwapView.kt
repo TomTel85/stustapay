@@ -58,7 +58,7 @@ fun SwapView(
                 viewModel.setOldTagUid(tag.uid)
                 viewModel.setOldTagPin(tag.pin.orEmpty())
                 viewModel.returnToRoot()
-            }) {
+            }) { _, _ ->
             Text(
                 stringResource(R.string.nfc_scan_prompt), style = NfcScanStyle
             )
@@ -70,7 +70,7 @@ fun SwapView(
                 scope.launch {
                     viewModel.swap(tag)
                 }
-            }) {
+            }) { _, _ ->
             Text(
                 stringResource(R.string.nfc_scan_new_prompt), style = NfcScanStyle
             )
@@ -80,9 +80,8 @@ fun SwapView(
     NavScaffold(
         title = { Text(stringResource(R.string.customer_swap)) }, navigateBack = leaveView
     ) {
-        Box(modifier = Modifier.padding(it)) {
-            Scaffold(content = {
-                Box(modifier = Modifier.padding(it)) {
+            Scaffold(content = { innerPadding ->
+                Box(modifier = Modifier.padding(innerPadding)) {
                     when (uiState.nav) {
                         is SwapNavState.Root, SwapNavState.ScanNew, SwapNavState.ScanOld -> {
                             Column(
@@ -162,7 +161,7 @@ fun SwapView(
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     SuccessIcon(modifier = Modifier.size(120.dp))
-                                    Text("Swap successfull", style = MaterialTheme.typography.h5)
+                                    Text(stringResource(R.string.swap_successful), style = MaterialTheme.typography.h5)
                                 }
                             }
                         }
@@ -194,6 +193,5 @@ fun SwapView(
                     }
                 }
             })
-        }
     }
 }

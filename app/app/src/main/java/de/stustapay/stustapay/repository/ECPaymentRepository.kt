@@ -11,7 +11,10 @@ import javax.inject.Singleton
 
 sealed interface ECPaymentResult {
     data class Success(val result: SumUpState.Success) : ECPaymentResult
-    data class Failure(val msg: String) : ECPaymentResult
+    data class Failure(
+        val msg: String,
+        val mayHaveCreatedCharge: Boolean = false,
+    ) : ECPaymentResult
 }
 
 @Singleton
@@ -20,6 +23,37 @@ class ECPaymentRepository @Inject constructor(
     private val terminalConfigRepository: TerminalConfigRepository,
 )
 {
+    fun isReady(): Boolean {
+        return sumUp.isLoggedIn()
+    }
+
+    suspend fun startCardReaderSetup(_context: Activity): String? {
+        return try {
+            if (!sumUp.reactivateConnectedReader()) {
+                return "Could not activate the connected card reader."
+            }
+            when (val state = sumUp.paymentStatus.value) {
+                is SumUpState.Error -> state.msg
+                is SumUpState.Failed -> state.msg
+                else -> null
+            }
+        } catch (exc: Exception) {
+            exc.message ?: "EC reader setup could not be started."
+        }
+    }
+
+    suspend fun reactivateReader(): String? {
+        return try {
+            if (sumUp.reactivateConnectedReader()) {
+                null
+            } else {
+                "Could not activate the connected card reader."
+            }
+        } catch (exc: Exception) {
+            exc.message ?: "EC reader could not be activated."
+        }
+    }
+
     suspend fun wakeup() {
         sumUp.wakeup()
     }
@@ -54,8 +88,14 @@ class ECPaymentRepository @Inject constructor(
                 return ECPaymentResult.Failure("SumUp not finished? ${sumUpState.msg()}")
             }
 
-            is SumUpState.Failed,
             is SumUpState.Error -> {
+                return ECPaymentResult.Failure(
+                    msg = "SumUp failed: ${sumUpState.msg()}",
+                    mayHaveCreatedCharge = sumUpState.mayHaveCreatedCharge,
+                )
+            }
+
+            is SumUpState.Failed -> {
                 return ECPaymentResult.Failure("SumUp failed: ${sumUpState.msg()}")
             }
 

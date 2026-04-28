@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.Card
@@ -144,7 +145,7 @@ fun RoleButtonList(
 ) {
     when (roles) {
         is UserRolesState.Unknown -> {
-            Text("Loading roles...", fontSize = 20.sp, textAlign = TextAlign.Center)
+            Text(stringResource(R.string.user_roles_loading), fontSize = 20.sp, textAlign = TextAlign.Center)
         }
 
         is UserRolesState.Error -> {
@@ -153,8 +154,8 @@ fun RoleButtonList(
 
         is UserRolesState.OK -> {
             LazyColumn(modifier = modifier) {
-                for (role in roles.roles) {
-                    item {
+                items(roles.roles, key = { it.id }) { role ->
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Button(
                             modifier = Modifier.fillMaxWidth(),
                             onClick = { onSelect(role.id) }

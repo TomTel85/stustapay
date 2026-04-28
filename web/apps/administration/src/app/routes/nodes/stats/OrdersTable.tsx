@@ -36,6 +36,7 @@ export type OrdersTableProps = {
   subnodeId?: number;
   productId?: number;
   pollingIntervalMs?: number;
+  enabled?: boolean;
 };
 
 type TableRowData = {
@@ -61,6 +62,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   subnodeId,
   productId,
   pollingIntervalMs = 0,
+  enabled = true,
 }) => {
   const { currentNode } = useCurrentNode();
   const formatCurrency = useCurrencyFormatter();
@@ -90,7 +92,11 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   const lastIntegratedPageKeyRef = React.useRef<string | null>(null);
 
   const { data: tills } = useListTillsQuery({ nodeId: effectiveNodeId }, statsQueryOptions(pollingIntervalMs));
-  const { data: ordersData, isLoading, fulfilledTimeStamp } = useListOrdersFilteredQuery(
+  const {
+    data: ordersData,
+    isLoading,
+    fulfilledTimeStamp,
+  } = useListOrdersFilteredQuery(
     {
       nodeId: currentNode.id,
       fromTimestamp: fromTimestamp?.toISO() ?? undefined,
@@ -101,7 +107,10 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
       limit: PAGE_SIZE,
       offset: currentOffset,
     },
-    statsQueryOptions(pollingIntervalMs)
+    {
+      ...statsQueryOptions(pollingIntervalMs, enabled),
+      skip: !canViewOrderLinks || !enabled,
+    }
   );
 
   const currentPageOrders = React.useMemo(() => {
@@ -109,9 +118,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
       return undefined;
     }
 
-    return ordersData.ids
-      .map((id) => ordersData.entities[id])
-      .filter((order): order is Order => order != null);
+    return ordersData.ids.map((id) => ordersData.entities[id]).filter((order): order is Order => order != null);
   }, [ordersData]);
 
   React.useEffect(() => {
@@ -251,10 +258,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
         field: "orderType",
         label: t("overview.orderType"),
         type: "select",
-        options: [
-          { value: "", label: t("overview.all") },
-          ...orderTypes.map((type) => ({ value: type, label: type })),
-        ],
+        options: [{ value: "", label: t("overview.all") }, ...orderTypes.map((type) => ({ value: type, label: type }))],
       },
     ],
     [orderTypes, t]
@@ -286,6 +290,10 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
     setPendingAppendOffset(nextOffset);
     setCurrentOffset(nextOffset);
   }, [currentOffset, hasMoreOrders]);
+
+  if (!canViewOrderLinks || !enabled) {
+    return null;
+  }
 
   if (isLoading && !orders) {
     return (
@@ -371,7 +379,11 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
           {isSmallMobile ? (
             <Stack spacing={1}>
               {filteredData.length === 0 ? (
-                <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.8rem", textAlign: "center", py: 2 }}>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ fontSize: "0.8rem", textAlign: "center", py: 2 }}
+                >
                   {t("overview.noOrdersMatchFilter")}
                 </Typography>
               ) : (
@@ -403,7 +415,8 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                       </Stack>
                       <Typography sx={{ fontSize: "0.8rem", fontWeight: 500 }}>{row.lineItem.product.name}</Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.72rem" }}>
-                        {DateTime.fromISO(row.order.booked_at).toFormat("MM-dd HH:mm")} · {t("item.quantity")}: {row.lineItem.quantity}
+                        {DateTime.fromISO(row.order.booked_at).toFormat("MM-dd HH:mm")} · {t("item.quantity")}:{" "}
+                        {row.lineItem.quantity}
                       </Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.72rem" }}>
                         {t("overview.orderType")}: {row.order.order_type} · {t("common.till")}: {row.tillName}

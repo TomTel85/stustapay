@@ -2,8 +2,10 @@ package de.stustapay.stustapay.ui.payinout.postpayment
 
 
 import android.app.Activity
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.stustapay.api.models.CompletedPayOut
 import de.stustapay.api.models.CompletedTopUp
@@ -11,6 +13,7 @@ import de.stustapay.api.models.NewTopUp
 import de.stustapay.api.models.PaymentMethod
 import de.stustapay.libssp.model.NfcTag
 import de.stustapay.libssp.net.Response
+import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ec.ECPayment
 import de.stustapay.stustapay.netsource.TopUpRemoteDataSource
 import de.stustapay.stustapay.repository.ECPaymentRepository
@@ -48,6 +51,7 @@ enum class PostPaymentPage(val route: String) {
 
 @HiltViewModel
 class PostPaymentViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val topUpApi: TopUpRemoteDataSource,
     private val terminalConfigRepository: TerminalConfigRepository,
     userRepository: UserRepository,
@@ -82,11 +86,6 @@ class PostPaymentViewModel @Inject constructor(
     // when we finished a sale
     private val _topUpCompleted = MutableStateFlow<CompletedTopUp?>(null)
     val topUpCompleted = _topUpCompleted.asStateFlow()
-
-    // dirty hack to make the error page an ok page for already-booked errors
-    // todo: remove :)
-    private val _actuallyOk = MutableStateFlow(false)
-    val actuallyOk = _actuallyOk.asStateFlow()
 
     private val _showPayOutConfirm = MutableStateFlow(false)
     val showPayOutConfirm = _showPayOutConfirm.asStateFlow()
@@ -123,19 +122,19 @@ class PostPaymentViewModel @Inject constructor(
     private suspend fun checkPayOut(): Boolean {
         val newPayOut = _payOutState.value.getNewPayOut()
         if (newPayOut == null) {
-            _status.update { "No tag known" }
+            _status.update { context.getString(R.string.payout_status_no_tag_known) }
             return false
         }
 
         // local check: amount has to be negative for payouts
         val amount = newPayOut.amount
         if (amount != null && amount >= 0.0) {
-            _status.update { "Amount is zero" }
+            _status.update { context.getString(R.string.payout_status_amount_is_zero) }
             return false
         }
 
         // server-side check
-        _status.update { "Checking PayOut" }
+        _status.update { context.getString(R.string.payout_status_checking) }
         return when (val response = payOutRepository.checkPayOut(newPayOut)) {
             is Response.OK -> {
                 _payOutState.update {
@@ -143,12 +142,27 @@ class PostPaymentViewModel @Inject constructor(
                     state.updateWithPendingPayOut(response.data)
                     state
                 }
-                _status.update { "PayOut valid" }
                 true
             }
 
+            is Response.Error.Service.NotEnoughFunds -> {
+                _status.update { context.getString(R.string.no_balance_for_payout) }
+                false
+            }
+
             is Response.Error.Service -> {
-                _status.update { response.msg() }
+                // Some server variants send English messages even for “no balance” scenarios.
+                // Map them back to our localized UI strings.
+                val msg = response.msg()
+                if (msg.contains("Cannot payout", ignoreCase = true) &&
+                    (msg.contains("zero", ignoreCase = true) ||
+                        msg.contains("negative", ignoreCase = true) ||
+                        msg.contains("current balance", ignoreCase = true))
+                ) {
+                    _status.update { context.getString(R.string.no_balance_for_payout) }
+                } else {
+                    _status.update { msg }
+                }
                 false
             }
 
@@ -178,21 +192,10 @@ class PostPaymentViewModel @Inject constructor(
     fun clearDraft() {
         _topUpCompleted.update { null }
         _postPaymentState.update { PostPaymentState() }
-        _status.update { "ready" }
+        _successMessage.update { null }
+        _status.update { context.getString(R.string.operator_status_ready) }
         clearPayOutState()
     }
-
-    fun checkAmountLocal(amount: Double): Boolean {
-        val minimum = 1.0
-        if (amount != 0.0) {
-            _status.update { "Mindestbetrag %.2f €".format(minimum) }
-            return false
-        }
-        return true
-    }
-
-
-
 
     /**
      * validates the amount so we can continue to checkout
@@ -202,7 +205,7 @@ class PostPaymentViewModel @Inject constructor(
         // server-side check
         return when (val response = topUpApi.checkTopUp(newTopUp)) {
             is Response.OK -> {
-                _status.update { "TopUp possible" }
+                _status.update { context.getString(R.string.topup_status_topup_possible) }
                 true
             }
 
@@ -228,6 +231,22 @@ class PostPaymentViewModel @Inject constructor(
         }
     }
 
+    fun setPayOutAmountCents(cents: UInt) {
+        _payOutState.update {
+            val newState = it.copy()
+            newState.setAmount(cents)
+            newState
+        }
+    }
+
+    fun selectMaximumPayOut() {
+        _payOutState.update {
+            val newState = it.copy()
+            newState.selectMaximumPayout()
+            newState
+        }
+    }
+
     /** the big payout button was pressed */
     suspend fun requestPayOut() {
         var showConfirm = true
@@ -243,7 +262,7 @@ class PostPaymentViewModel @Inject constructor(
     /** when the confirmation dialog is confirmed */
     suspend fun confirmPayOut() {
         _showPayOutConfirm.update { false }
-        _status.update { "Processing payout..." }
+        _status.update { context.getString(R.string.payout_status_processing) }
 
         bookPayOut()
     }
@@ -257,21 +276,21 @@ class PostPaymentViewModel @Inject constructor(
         val newPayOut = _payOutState.value.getCheckedNewPayout()
 
         if (newPayOut == null) {
-            _status.update { "Payout was not checked before" }
+            _status.update { context.getString(R.string.payout_status_not_checked_before) }
             return
         }
 
-        _status.update { "Pay-Out in progress..." }
+        _status.update { context.getString(R.string.payout_status_in_progress) }
 
         when (val response = payOutRepository.bookPayOut(newPayOut)) {
             is Response.OK -> {
                 clearDraft()
                 _completedPayOut.update { response.data }
-                _status.update { "Pay-Out booked successfully" }
+                _status.update { context.getString(R.string.payout_status_booked_successfully) }
             }
 
             is Response.Error -> {
-                _status.update { "Failed Pay-Out booking! ${response.msg()}" }
+                _status.update { context.getString(R.string.payout_status_booking_failed, response.msg()) }
             }
         }
     }
@@ -285,12 +304,17 @@ class PostPaymentViewModel @Inject constructor(
             id = newTopUp.uuid.toString(),
             amount = BigDecimal(newTopUp.amount),
             tag = NfcTag(newTopUp.customerTagUid, null),
+            allowTipOnCardReader = false,
         )
     }
 
+    private fun topUpTypeCard(): String = context.getString(R.string.topup_payment_type_card)
+
+    private fun topUpTypeCash(): String = context.getString(R.string.topup_payment_type_cash)
+
     /** called from the card payment button */
     suspend fun topUpWithCard(context: Activity, tag: NfcTag) {
-        _status.update { "Card TopUp in progress..." }
+        _status.update { this.context.getString(R.string.topup_status_card_in_progress) }
         // wake the soon-needed reader :)
         // TODO: move this even before the chip scan
         // CashECPay could get a prepareEC callback function for that.
@@ -311,7 +335,7 @@ class PostPaymentViewModel @Inject constructor(
 
         val payment = getECPayment(newTopUp)
 
-        _status.update { "Remove the chip. Starting EC transaction..." }
+        _status.update { this.context.getString(R.string.topup_status_remove_chip_start_ec) }
 
         // workaround so the sumup activity is not in foreground too quickly.
         // when it's active, nfc intents are no longer captured by us, apparently,
@@ -322,22 +346,22 @@ class PostPaymentViewModel @Inject constructor(
         // perform ec transaction
         when (val paymentResult = ecPaymentRepository.pay(context, payment)) {
             is ECPaymentResult.Failure -> {
-                _status.update { "EC: ${paymentResult.msg}" }
+                _status.update { this.context.getString(R.string.topup_status_ec_result, paymentResult.msg) }
                 clearDraft()
                 return
             }
 
             is ECPaymentResult.Success -> {
-                _status.update { "EC: ${paymentResult.result.msg}" }
+                _status.update { this.context.getString(R.string.topup_status_ec_result, paymentResult.result.msg) }
             }
         }
 
         // when successful, book the transaction
-        bookTopUp("Card", newTopUp)
+        bookTopUp(topUpTypeCard(), newTopUp)
     }
 
     suspend fun topUpWithCash(tag: NfcTag) {
-        _status.update { "Cash TopUp in progress..." }
+        _status.update { context.getString(R.string.topup_status_cash_in_progress) }
 
         val newTopUp = NewTopUp(
             amount = _postPaymentState.value.currentAmount,
@@ -352,30 +376,32 @@ class PostPaymentViewModel @Inject constructor(
             return
         }
 
-        bookTopUp("Cash", newTopUp)
+        bookTopUp(topUpTypeCash(), newTopUp)
     }
 
     private suspend fun bookTopUp(topUpType: String, newTopUp: NewTopUp) {
-        _status.update { "Booking $topUpType TopUp..." }
+        _status.update { context.getString(R.string.topup_status_booking, topUpType) }
         when (val response = infallibleRepository.bookTopUp(newTopUp)) {
             is Response.OK -> {
                 clearDraft()
                 clearPayOutState()
                 _topUpCompleted.update { response.data }
-                _status.update { "$topUpType TopUp successful!" }
+                _successMessage.update { null }
+                _status.update { context.getString(R.string.topup_status_successful, topUpType) }
+                _navState.update { PostPaymentPage.Done }
             }
 
             is Response.Error.Service.AlreadyProcessed -> {
-                // TODO: get a CompletedTopUp here from response, and navigate to Done-Page
                 clearDraft()
-                _status.update { "$topUpType TopUp successful!" }
-                _actuallyOk.update { true }
-                _navState.update { PostPaymentPage.Failure }
+                clearPayOutState()
+                _status.update { context.getString(R.string.topup_status_successful, topUpType) }
+                _successMessage.update { context.getString(R.string.postpayment_status_already_processed, topUpType) }
+                _navState.update { PostPaymentPage.Done }
             }
 
             is Response.Error -> {
-                _status.update { "$topUpType TopUp failed! ${response.msg()}" }
-                _actuallyOk.update { false }
+                _status.update { context.getString(R.string.topup_status_failed, topUpType, response.msg()) }
+                _successMessage.update { null }
                 _navState.update { PostPaymentPage.Failure }
             }
         }
@@ -389,6 +415,7 @@ class PostPaymentViewModel @Inject constructor(
     /** when a topup was successful and the confirmation was dismissed */
     fun dismissSuccess() {
         // todo: some feedback during this refresh?
+        _successMessage.update { null }
         viewModelScope.launch {
             terminalConfigRepository.tokenRefresh()
         }

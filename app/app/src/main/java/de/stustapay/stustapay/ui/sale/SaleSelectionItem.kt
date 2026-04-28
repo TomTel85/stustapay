@@ -1,14 +1,36 @@
 package de.stustapay.stustapay.ui.sale
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import de.stustapay.stustapay.ui.common.pay.ProductSelectionItem
-import de.stustapay.libssp.ui.theme.ProductButtonBigStyle
-import de.stustapay.libssp.ui.theme.ProductButtonStyle
-import de.stustapay.libssp.ui.theme.errorButtonColors
-import de.stustapay.libssp.ui.theme.okButtonColors
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import de.stustapay.stustapay.R
+import de.stustapay.stustapay.ui.common.operator.OperatorPalette
+import kotlin.math.abs
 
 sealed interface SaleSelectionItemType {
     data class FixedPrice(
@@ -35,9 +57,13 @@ sealed interface SaleSelectionItemType {
         val onDecr: () -> Unit,
         val price: SaleItemPrice.Returnable,
         val amount: SaleItemAmount.FixedPrice?,
-        val incrementText: String,
     ) : SaleSelectionItemType
 }
+
+private data class SaleSelectionLabelParts(
+    val title: String,
+    val variantBadge: String?,
+)
 
 @Preview
 @Composable
@@ -45,16 +71,25 @@ fun PreviewSaleSelectionItem() {
     Column {
         SaleSelectionItem(
             caption = "Robbenfutter",
-            SaleSelectionItemType.FixedPrice(
+            type = SaleSelectionItemType.FixedPrice(
                 onIncr = {},
                 onDecr = {},
                 price = SaleItemPrice.FixedPrice(13.37),
                 amount = SaleItemAmount.FixedPrice(42),
-            )
+            ),
+        )
+        SaleSelectionItem(
+            caption = "Robbenfutter",
+            type = SaleSelectionItemType.FixedPrice(
+                onIncr = {},
+                onDecr = {},
+                price = SaleItemPrice.FixedPrice(13.37),
+                amount = null,
+            ),
         )
         SaleSelectionItem(
             caption = "Internetkanister",
-            SaleSelectionItemType.FreePrice(
+            type = SaleSelectionItemType.FreePrice(
                 onPriceEdit = {},
                 amount = SaleItemAmount.FreePrice(4200u),
             )
@@ -69,11 +104,19 @@ fun PreviewSaleSelectionItem() {
             )
         )
         SaleSelectionItem(
-            caption = "Pfand zurück",
+            caption = "Pfand Becher",
+            type = SaleSelectionItemType.Returnable(
+                price = SaleItemPrice.Returnable(2.0),
+                amount = SaleItemAmount.FixedPrice(-2),
+                onIncr = { },
+                onDecr = { },
+            )
+        )
+        SaleSelectionItem(
+            caption = "Pfand Becher",
             type = SaleSelectionItemType.Returnable(
                 price = SaleItemPrice.Returnable(2.0),
                 amount = SaleItemAmount.FixedPrice(2),
-                incrementText = "Extra Glas",
                 onIncr = { },
                 onDecr = { },
             )
@@ -87,111 +130,258 @@ fun PreviewSaleSelectionItem() {
 @Composable
 fun SaleSelectionItem(
     caption: String,
+    compactHandheld: Boolean = false,
     type: SaleSelectionItemType,
 ) {
-    var sameSizeButtons = false
-
+    val haptic = LocalHapticFeedback.current
+    val isReturnable = type is SaleSelectionItemType.Returnable
     val itemPrice: String
-    val itemAmount: String?
-    var itemAmountDelimiter: String = "×"
-
-    val rightButtonText: String
-    var rightButtonStyle = ProductButtonBigStyle
-
-    var leftButtonColors = ButtonDefaults.buttonColors()
-    var rightButtonColors = errorButtonColors()
+    val quantityLabel: String?
+    val primaryText: String
+    val secondaryText: String
+    val primaryAction: () -> Unit
+    val secondaryAction: () -> Unit
+    val secondaryEnabled: Boolean
+    val primaryButtonColor: Color
+    val primaryButtonTextColor: Color
+    val secondaryButtonColor: Color
+    val secondaryButtonTextColor: Color
+    val selectionLabel: String?
+    val primaryTriggersAddHaptic: Boolean
+    var primaryIsSymbol = false
+    val labelParts = caption.toSelectionLabelParts()
 
     when (type) {
         is SaleSelectionItemType.FixedPrice -> {
             val amount: Int = type.amount?.amount ?: 0
             itemPrice = "%.02f€".format(type.price.price)
-            itemAmount = "%d".format(amount)
-            rightButtonText = "‒"
+            quantityLabel = if (amount > 0) "×$amount" else null
+            primaryText = stringResource(R.string.sale_action_add_symbol)
+            secondaryText = "−"
+            primaryAction = type.onIncr
+            secondaryAction = type.onDecr
+            secondaryEnabled = amount > 0
+            primaryButtonColor = OperatorPalette.accent
+            primaryButtonTextColor = OperatorPalette.accentText
+            secondaryButtonColor = Color(0xFFB91C1C)
+            secondaryButtonTextColor = Color.White
+            selectionLabel = null
+            primaryTriggersAddHaptic = true
+            primaryIsSymbol = true
         }
 
         is SaleSelectionItemType.Returnable -> {
-
-            if (caption.contains("Pfand")) {
-                sameSizeButtons = true
-                val amount: Int = type.amount?.amount ?: 0
-                itemPrice = "%.02f€".format(type.price.price)
-                itemAmount = "%d".format(amount)
-                rightButtonText = type.incrementText
-                rightButtonStyle = ProductButtonStyle
-                leftButtonColors = errorButtonColors()
-                rightButtonColors = okButtonColors()
+            val amount: Int = type.amount?.amount ?: 0
+            itemPrice = "%.02f€".format(type.price.price ?: 0.0)
+            quantityLabel = when {
+                amount < 0 -> "−${abs(amount)}"
+                amount > 0 -> "+$amount"
+                else -> null
             }
-            else {
-                val amount: Int = type.amount?.amount ?: 0
-                itemPrice = "%.02f€".format(type.price.price)
-                itemAmount = "%d".format(amount)
-                leftButtonColors = errorButtonColors()
-                rightButtonText = "‒"
-            }
+            primaryText = stringResource(R.string.sale_deposit_return)
+            secondaryText = stringResource(R.string.sale_deposit_extra_issue)
+            primaryAction = type.onDecr
+            secondaryAction = type.onIncr
+            secondaryEnabled = true
+            primaryButtonColor = Color(0xFFB91C1C)
+            primaryButtonTextColor = Color.White
+            secondaryButtonColor = Color(0xFFEAB308)
+            secondaryButtonTextColor = Color(0xFF1A1200)
+            selectionLabel = null
+            primaryTriggersAddHaptic = false
         }
 
         is SaleSelectionItemType.FreePrice -> {
             val price: Double = (type.amount?.price?.toDouble() ?: 0.0) / 100
             itemPrice = "%.02f€".format(price)
-            itemAmount = null
-            rightButtonText = "⌫"
+            quantityLabel = null
+            primaryText = if (type.amount == null) {
+                stringResource(R.string.sale_set_price)
+            } else {
+                stringResource(R.string.sale_edit_price)
+            }
+            secondaryText = stringResource(R.string.sale_clear_price)
+            primaryAction = { type.onPriceEdit(false) }
+            secondaryAction = { type.onPriceEdit(true) }
+            secondaryEnabled = type.amount != null
+            primaryButtonColor = OperatorPalette.accent
+            primaryButtonTextColor = OperatorPalette.accentText
+            secondaryButtonColor = Color(0xFFB91C1C)
+            secondaryButtonTextColor = Color.White
+            selectionLabel = if (type.amount != null) stringResource(R.string.sale_item_price_set) else null
+            primaryTriggersAddHaptic = false
         }
 
         is SaleSelectionItemType.Vouchers -> {
-            itemPrice = "%d".format(type.amount)
-            itemAmount = "%d".format(type.maxAmount)
-            itemAmountDelimiter = "/"
-            rightButtonText = "‒"
+            itemPrice = "${type.amount}/${type.maxAmount}"
+            quantityLabel = null
+            primaryText = stringResource(R.string.sale_action_add_symbol)
+            secondaryText = "−"
+            primaryAction = type.onIncr
+            secondaryAction = type.onDecr
+            secondaryEnabled = type.amount > 0
+            primaryButtonColor = OperatorPalette.accent
+            primaryButtonTextColor = OperatorPalette.accentText
+            secondaryButtonColor = Color(0xFFB91C1C)
+            secondaryButtonTextColor = Color.White
+            selectionLabel = null
+            primaryTriggersAddHaptic = true
+            primaryIsSymbol = true
         }
     }
 
-    ProductSelectionItem(
-        itemPrice = itemPrice,
-        itemAmount = itemAmount,
-        itemAmountDelimiter = itemAmountDelimiter,
-        sameSizeButtons = sameSizeButtons,
-        leftButtonText = caption,
-        leftButtonColors = leftButtonColors,
-        rightButtonText = rightButtonText,
-        rightButtonStyle = rightButtonStyle,
-        rightButtonColors = rightButtonColors,
-        leftButtonPress = {
-            when (type) {
-                is SaleSelectionItemType.FixedPrice -> {
-                    type.onIncr()
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = OperatorPalette.interactivePanel,
+        border = BorderStroke(1.dp, OperatorPalette.panelBorder),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = labelParts.title,
+                            color = OperatorPalette.title,
+                            fontSize = 23.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+
+                        labelParts.variantBadge?.let { badge ->
+                            Box(
+                                modifier = Modifier
+                                    .background(OperatorPalette.pill, RoundedCornerShape(999.dp))
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                            ) {
+                                Text(
+                                    text = badge,
+                                    color = OperatorPalette.title,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
+
+                    selectionLabel?.let { detail ->
+                        Text(
+                            text = detail,
+                            color = OperatorPalette.subtitle,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
 
-                is SaleSelectionItemType.Returnable -> {
-                    type.onDecr()
-                }
+                Row(
+                    modifier = Modifier.wrapContentWidth(Alignment.End),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (quantityLabel != null) {
+                        Text(
+                            modifier = Modifier
+                                .background(OperatorPalette.panel, RoundedCornerShape(999.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            text = quantityLabel,
+                            color = OperatorPalette.title,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
 
-                is SaleSelectionItemType.FreePrice -> {
-                    type.onPriceEdit(false)
-                }
-
-                is SaleSelectionItemType.Vouchers -> {
-                    type.onIncr()
+                    Text(
+                        text = itemPrice,
+                        color = OperatorPalette.title,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
                 }
             }
-        },
-        rightButtonPress = {
-            when (type) {
-                is SaleSelectionItemType.FixedPrice -> {
-                    type.onDecr()
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    onClick = secondaryAction,
+                    enabled = secondaryEnabled,
+                    modifier = Modifier
+                        .height(46.dp)
+                        .widthIn(min = if (isReturnable) 132.dp else if (secondaryText.length > 1) 96.dp else 64.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = secondaryButtonColor,
+                        contentColor = secondaryButtonTextColor,
+                        disabledBackgroundColor = OperatorPalette.panel,
+                        disabledContentColor = OperatorPalette.subtitle,
+                    ),
+                ) {
+                    Text(
+                        text = secondaryText,
+                        fontSize = if (secondaryText.length > 1) 13.sp else 21.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
 
-                is SaleSelectionItemType.Returnable -> {
-                    type.onIncr()
-                }
-
-                is SaleSelectionItemType.FreePrice -> {
-                    type.onPriceEdit(true)
-                }
-
-                is SaleSelectionItemType.Vouchers -> {
-                    type.onDecr()
+                Button(
+                    onClick = {
+                        if (compactHandheld && primaryTriggersAddHaptic) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        primaryAction()
+                    },
+                    modifier = Modifier
+                        .height(46.dp)
+                        .weight(1f)
+                        .widthIn(min = if (primaryIsSymbol) 92.dp else if (isReturnable || primaryText.length > 4) 132.dp else 104.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = primaryButtonColor,
+                        contentColor = primaryButtonTextColor,
+                    ),
+                ) {
+                    Text(
+                        text = primaryText,
+                        fontSize = if (primaryIsSymbol) 28.sp else 16.sp,
+                        fontWeight = if (primaryIsSymbol) FontWeight.ExtraBold else FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
                 }
             }
         }
+    }
+}
+
+private fun String.toSelectionLabelParts(): SaleSelectionLabelParts {
+    val match = Regex("""^(.+?)\s+(\d+(?:[.,]\d+)?l)$""", RegexOption.IGNORE_CASE).matchEntire(trim())
+    if (match == null) {
+        return SaleSelectionLabelParts(
+            title = this,
+            variantBadge = null,
+        )
+    }
+
+    return SaleSelectionLabelParts(
+        title = match.groupValues[1],
+        variantBadge = match.groupValues[2],
     )
 }

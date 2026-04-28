@@ -9,16 +9,17 @@ import de.stustapay.api.models.OrderType
 import de.stustapay.api.models.PaymentMethod
 import de.stustapay.libssp.net.Response
 import de.stustapay.stustapay.model.Access
-import de.stustapay.stustapay.model.UserState
 import de.stustapay.stustapay.repository.CustomerRepository
 import de.stustapay.stustapay.repository.SaleRepository
 import de.stustapay.stustapay.repository.TerminalConfigRepository
 import de.stustapay.stustapay.repository.TerminalConfigState
 import de.stustapay.stustapay.repository.UserRepository
+import de.stustapay.stustapay.ui.common.TerminalLoginState
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -27,6 +28,12 @@ import javax.inject.Inject
 sealed interface SaleHistoryFilter {
     object RecentOrders : SaleHistoryFilter
     data class CustomerOrders(val customerTagUid: BigInteger) : SaleHistoryFilter
+}
+
+internal fun filterVisibleHistoryOrders(orders: List<Order>): List<Order> {
+    return orders.filterNot {
+        it.orderType == OrderType.money_transfer || it.orderType == OrderType.money_transfer_imbalance
+    }
 }
 
 @HiltViewModel
@@ -47,10 +54,19 @@ class SaleHistoryViewModel @Inject constructor(
     private val _historyFilter = MutableStateFlow<SaleHistoryFilter>(SaleHistoryFilter.RecentOrders)
     val historyFilter = _historyFilter.asStateFlow()
 
-    val canScanCustomerHistory: StateFlow<Boolean> = userRepository.userState
-        .map { userState ->
-            userState is UserState.LoggedIn && Access.canViewCustomerOrders(userState.user)
-        }
+    val terminalLoginState = combine(
+        userRepository.userState,
+        terminalConfigRepository.terminalConfigState
+    ) { user, terminal ->
+        TerminalLoginState(user, terminal)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = TerminalLoginState(),
+    )
+
+    val canScanCustomerHistory: StateFlow<Boolean> = terminalLoginState
+        .map { loginState -> loginState.checkUserAccess(Access::canFilterCustomerHistory) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(),
@@ -85,7 +101,7 @@ class SaleHistoryViewModel @Inject constructor(
         when (val sales = saleRepository.listSales()) {
             is Response.OK -> {
                 _sales.update {
-                    sortOrders(sales.data)
+                    sortOrders(filterVisibleHistoryOrders(sales.data))
                 }
                 _status.update { SaleHistoryStatus.Done }
             }
@@ -107,7 +123,7 @@ class SaleHistoryViewModel @Inject constructor(
                     } else {
                         sales.data
                     }
-                    sortOrders(filteredOrders)
+                    sortOrders(filterVisibleHistoryOrders(filteredOrders))
                 }
                 _historyFilter.update { SaleHistoryFilter.CustomerOrders(customerTagUid) }
                 _status.update { SaleHistoryStatus.Done }

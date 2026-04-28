@@ -1,10 +1,11 @@
 package de.stustapay.stustapay.ui.user
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.Text
-import androidx.compose.material.rememberScaffoldState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -14,8 +15,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import de.stustapay.stustapay.R
+import de.stustapay.stustapay.ui.common.operator.OperatorScaffold
 import de.stustapay.stustapay.ui.nav.NavDest
-import de.stustapay.stustapay.ui.nav.NavScaffold
 import de.stustapay.stustapay.ui.nav.navigateTo
 
 
@@ -36,7 +37,6 @@ fun UserView(
     leaveView: () -> Unit = {}, viewModel: UserViewModel = hiltViewModel()
 ) {
     val navController = rememberNavController()
-    val scaffoldState = rememberScaffoldState()
 
     NavHost(
         navController = navController,
@@ -44,62 +44,81 @@ fun UserView(
         modifier = Modifier.fillMaxSize()
     ) {
         composable(UserNavDest.info.route) {
-            NavScaffold(title = { Text(stringResource(R.string.user_title)) },
-                state = scaffoldState,
-                navigateBack = {
-                    if (navController.currentDestination?.route == UserNavDest.info.route) {
-                        viewModel.idleState()
-                        leaveView()
-                    } else {
-                        navController.popBackStack()
-                    }
-                }) {
-                Box(modifier = Modifier.padding(it)) {
-                    UserLoginView(viewModel, goToUserCreateView = {
-                        viewModel.idleState()
-                        navController.navigateTo(UserNavDest.create.route)
-                    }, goToUserDisplayView = {
-                        viewModel.idleState()
-                        navController.navigateTo(UserNavDest.display.route)
-                    })
-                }
+            OperatorScaffold(
+                title = stringResource(R.string.user_title),
+                subtitle = stringResource(R.string.user_view_info_subtitle),
+                icon = Icons.Filled.Person,
+                terminalLabel = stringResource(R.string.user_view_terminal_label),
+                footerHint = stringResource(R.string.user_view_footer_hint),
+                footerSection = stringResource(R.string.user_view_footer_section),
+                footerStatus = stringResource(R.string.user_view_footer_root),
+                onBack = {
+                    viewModel.idleState()
+                    leaveView()
+                },
+            ) {
+                UserLoginView(viewModel, goToUserCreateView = {
+                    viewModel.idleState()
+                    navController.navigateTo(UserNavDest.create.route)
+                }, goToUserDisplayView = {
+                    viewModel.idleState()
+                    navController.navigateTo(UserNavDest.display.route)
+                })
             }
         }
         composable(UserNavDest.create.route) {
-            NavScaffold(title = { Text(stringResource(R.string.user_create_title)) },
-                navigateBack = {
+            OperatorScaffold(
+                title = stringResource(R.string.user_create_title),
+                subtitle = stringResource(R.string.user_view_create_subtitle),
+                icon = Icons.Filled.PersonAdd,
+                terminalLabel = stringResource(R.string.user_view_create_terminal),
+                footerHint = stringResource(R.string.user_view_create_hint),
+                footerSection = stringResource(R.string.user_view_footer_section),
+                footerStatus = stringResource(R.string.user_view_create_terminal),
+                onBack = {
                     viewModel.idleState()
                     navController.navigateTo(UserNavDest.info.route)
-                }) {
-                Box(modifier = Modifier.padding(it)) {
-                    UserCreateView(viewModel = viewModel, goToUserDisplayView = {
-                        navController.navigateTo(UserNavDest.display.route)
-                    })
-                }
+                },
+            ) {
+                UserCreateView(viewModel = viewModel, goToUserDisplayView = {
+                    navController.navigateTo(UserNavDest.display.route)
+                })
             }
         }
         composable(UserNavDest.update.route) {
-            NavScaffold(title = { Text(stringResource(R.string.user_update_title)) },
-                navigateBack = {
+            OperatorScaffold(
+                title = stringResource(R.string.user_update_title),
+                subtitle = stringResource(R.string.user_view_update_subtitle),
+                icon = Icons.Filled.Edit,
+                terminalLabel = stringResource(R.string.user_view_update_terminal),
+                footerHint = stringResource(R.string.user_view_update_hint),
+                footerSection = stringResource(R.string.user_view_footer_section),
+                footerStatus = stringResource(R.string.user_view_update_terminal),
+                onBack = {
                     viewModel.idleState()
                     navController.navigateTo(UserNavDest.info.route)
-                }) {
-                Box(modifier = Modifier.padding(it)) {
-                    UserUpdateView(viewModel)
-                }
+                },
+            ) {
+                UserUpdateView(viewModel)
             }
         }
         composable(UserNavDest.display.route) {
-            NavScaffold(title = { Text(stringResource(R.string.user_display_title)) },
-                navigateBack = {
+            OperatorScaffold(
+                title = stringResource(R.string.user_display_title),
+                subtitle = stringResource(R.string.user_view_display_subtitle),
+                icon = Icons.Filled.Badge,
+                terminalLabel = stringResource(R.string.user_view_display_terminal),
+                footerHint = stringResource(R.string.user_view_display_hint),
+                footerSection = stringResource(R.string.user_view_footer_section),
+                footerStatus = stringResource(R.string.user_view_display_terminal),
+                onBack = {
                     viewModel.idleState()
                     navController.navigateTo(UserNavDest.info.route)
-                }) {
-                Box(modifier = Modifier.padding(it)) {
-                    UserDisplayView(viewModel = viewModel, goToUserUpdateView = {
-                        navController.navigateTo(UserNavDest.update.route)
-                    })
-                }
+                },
+            ) {
+                UserDisplayView(viewModel = viewModel, goToUserUpdateView = {
+                    navController.navigateTo(UserNavDest.update.route)
+                })
             }
         }
     }

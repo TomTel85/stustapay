@@ -48,10 +48,25 @@ def load_paths_from_git(staged: bool = False) -> list[str]:
     return sorted(paths)
 
 
+def add_path_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--files", nargs="*", help="Explicit files to analyze. When omitted, uses git changes.")
+    parser.add_argument("--staged", action="store_true", help="Read staged files with `git diff --cached --name-only`.")
+    parser.add_argument(
+        "--scope",
+        choices=("worktree", "staged"),
+        default="worktree",
+        help="Which git change set to inspect when --files is omitted.",
+    )
+
+
+def resolve_paths(files: list[str] | None = None, scope: str = "worktree") -> list[str]:
+    if files:
+        return [_normalize(path) for path in files]
+    return [_normalize(path) for path in load_paths_from_git(staged=scope == "staged")]
+
+
 def _load_paths(args: argparse.Namespace) -> list[str]:
-    if args.files:
-        return [_normalize(path) for path in args.files]
-    return [_normalize(path) for path in load_paths_from_git(staged=args.staged)]
+    return resolve_paths(files=args.files, scope="staged" if args.staged else args.scope)
 
 
 def analyze_paths(paths: Iterable[str]) -> SurfaceReport:
@@ -62,11 +77,15 @@ def analyze_paths(paths: Iterable[str]) -> SurfaceReport:
     requires_contract_sync = False
 
     for path in normalized:
-        if path.startswith("stustapay/") or path == "pyproject.toml":
+        if path.startswith("stustapay/") or path in {"pyproject.toml", "setup.py"}:
             surfaces.add("backend")
 
-        if path.startswith("stustapay/administration/") or path.startswith("stustapay/customer_portal/") or path.startswith(
-            "stustapay/terminalserver/"
+        if path.startswith(
+            (
+                "stustapay/administration/",
+                "stustapay/customer_portal/",
+                "stustapay/terminalserver/",
+            )
         ):
             requires_contract_sync = True
 
@@ -78,7 +97,14 @@ def analyze_paths(paths: Iterable[str]) -> SurfaceReport:
             surfaces.add("web")
             web_targets.add("customerportal")
 
-        if path.startswith("web/libs/") or path in {"web/package.json", "web/package-lock.json", "web/nx.json"}:
+        if path.startswith("web/libs/") or path in {
+            "web/eslint.config.mjs",
+            "web/jest.config.ts",
+            "web/nx.json",
+            "web/package-lock.json",
+            "web/package.json",
+            "web/tsconfig.base.json",
+        }:
             surfaces.add("web")
             web_targets.update({"administration", "customerportal"})
 
@@ -89,20 +115,36 @@ def analyze_paths(paths: Iterable[str]) -> SurfaceReport:
             surfaces.add("openapi")
             requires_contract_sync = True
 
-        if path.startswith("app/api/") or path == "app/build.gradle":
+        if path.startswith("app/api/") or path in {
+            "app/api/build.gradle",
+            "app/build.gradle",
+            "app/settings.gradle",
+        }:
             requires_contract_sync = True
 
-        if path.startswith(("etc/", "docker/", "debian/", "pretix/")) or path in {"server_local.yaml", "config.yaml"}:
+        if path.startswith(("deploy/", "docker/", "etc/", "debian/", "pretix/")) or path in {
+            "server_azure.yaml",
+            "server_azure_teamfestlich.yaml",
+            "server_local.yaml",
+        }:
             surfaces.add("config")
 
-        if path.startswith("tools/") or path.startswith(".agents/") or path in {"AGENTS.md", "Makefile"}:
+        if path.startswith((".agents/", ".github/", "tools/")) or path in {
+            "AGENTS.md",
+            "Makefile",
+            "flake.lock",
+            "flake.nix",
+        }:
             surfaces.add("tooling")
 
-        if path.startswith("docs/") or path == "README.md":
+        if path.startswith("docs/") or path in {"README.md", "authors.md", "CHANGELOG.md"}:
             surfaces.add("docs")
 
     if requires_contract_sync:
-        notes.append("Backend contract or generated client surface touched. Run `make sync-contract` and review generated diffs separately.")
+        notes.append(
+            "Backend contract or generated client surface touched. "
+            "Run `make sync-contract` and review generated diffs separately."
+        )
 
     if web_targets == {"administration", "customerportal"}:
         notes.append("Shared web code changed. Verify both web applications.")
@@ -121,8 +163,7 @@ def analyze_paths(paths: Iterable[str]) -> SurfaceReport:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Summarize impacted StuStaPay surfaces from changed files.")
-    parser.add_argument("--files", nargs="*", help="Explicit files to analyze. When omitted, uses `git diff --name-only`.")
-    parser.add_argument("--staged", action="store_true", help="Read staged files with `git diff --cached --name-only`.")
+    add_path_arguments(parser)
     parser.add_argument("--output", choices=("text", "json"), default="text")
     return parser.parse_args()
 

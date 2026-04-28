@@ -21,6 +21,7 @@ class NewTerminal(BaseModel):
     description: str | None = None
     mode: TerminalMode = TerminalMode.till
     entry_area_id: int | None = None
+    self_service: bool = False
 
 
 class Terminal(NewTerminal):
@@ -45,6 +46,7 @@ class TerminalUserTagSecrets(BaseModel):
 class TerminalSumupSecrets(BaseModel):
     sumup_affiliate_key: str
     sumup_api_key: str
+    sumup_merchant_code: str
     sumup_api_key_expires_at: datetime | None
 
 
@@ -102,6 +104,7 @@ class TerminalConfig(BaseModel):
     description: str | None
     mode: TerminalMode
     entry_area: EntryAreaConfig | None
+    self_service: bool
 
     event_name: str
     active_user_id: Optional[int]
@@ -127,6 +130,7 @@ class CurrentTerminal(BaseModel):
     description: str | None
     mode: TerminalMode
     entry_area_id: int | None
+    self_service: bool
     active_user_id: int | None
     active_user_role_id: int | None
     till: Till | None
@@ -145,6 +149,9 @@ class HeadwindDeviceMapping(BaseModel):
     last_token_pushed_at: datetime | None = None
     last_push_status: str | None = None
     last_push_error: str | None = None
+    last_wifi_pushed_at: datetime | None = None
+    last_wifi_push_status: str | None = None
+    last_wifi_push_error: str | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -4,206 +4,191 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.widget.ImageView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.Button
-import androidx.compose.material.Divider
-import androidx.compose.material.Scaffold
-import androidx.compose.material.Text
-import androidx.compose.material.TopAppBar
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import de.stustapay.api.models.PaymentMethod
+import de.stustapay.libssp.util.formatCurrencyValue
 import de.stustapay.stustapay.R
-import de.stustapay.stustapay.ui.common.SuccessIcon
-import de.stustapay.stustapay.ui.common.pay.ProductConfirmItem
+import de.stustapay.stustapay.ui.common.operator.OperatorActionButton
+import de.stustapay.stustapay.ui.common.operator.OperatorAdaptivePaymentLayout
+import de.stustapay.stustapay.ui.common.operator.OperatorMetricCard
+import de.stustapay.stustapay.ui.common.operator.OperatorPanel
+import de.stustapay.stustapay.ui.common.operator.OperatorPalette
+import de.stustapay.stustapay.ui.common.operator.OperatorRailSummaryRow
+import de.stustapay.stustapay.ui.common.operator.OperatorScaffold
+import de.stustapay.stustapay.ui.common.operator.OperatorStatePanel
 import kotlinx.coroutines.delay
 
-
 @Composable
-fun SaleSuccess(viewModel: SaleViewModel, onConfirm: () -> Unit) {
+fun SaleSuccess(
+    viewModel: SaleViewModel,
+    onConfirm: () -> Unit,
+) {
     val saleCompleted by viewModel.saleCompleted.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
     val saleConfig by viewModel.saleConfig.collectAsStateWithLifecycle()
     val config = saleConfig
-
     val vibrator = LocalContext.current.getSystemService(Vibrator::class.java)
 
-    // so we have a regular variable..
-    val saleCompletedV = saleCompleted
-    if (saleCompletedV == null) {
-        Text(
-            text = "no completed sale information present",
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(10.dp),
-            fontSize = 20.sp
-        )
-        return
-    }
-
-    val haptic = LocalHapticFeedback.current
-
-    val returnableCount = saleCompletedV.lineItems.sumOf { i ->
-        if (i.product.isReturnable) {
-            i.quantity.intValue()
-        } else {
-            0
-        }
+    val completedSale = saleCompleted ?: return
+    val returnableCount = completedSale.lineItems.sumOf { lineItem ->
+        if (lineItem.product.isReturnable) lineItem.quantity.intValue() else 0
     }
 
     LaunchedEffect(Unit) {
         vibrator.vibrate(VibrationEffect.createOneShot(600, 200))
     }
-    
-    // Auto-close the success page after 5 seconds
-    LaunchedEffect(saleCompletedV) {
-        delay(5000) // 5 seconds
+
+    LaunchedEffect(completedSale) {
+        delay(5000)
         onConfirm()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(title = {
-                if (config is SaleConfig.Ready) {
-                    Text(config.tillName)
-                } else {
-                    Text("No Till")
-                }
-            })
-        },
-        content = { padding ->
-            Box(
-                modifier = Modifier
-                    .padding(padding)
-                    .fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+    OperatorScaffold(
+        title = if (config is SaleConfig.Ready) config.tillName else stringResource(R.string.sale_no_till),
+        subtitle = stringResource(R.string.sale_success_subtitle),
+        icon = Icons.Filled.CheckCircle,
+        terminalLabel = stringResource(R.string.sale_terminal_complete),
+        footerHint = status,
+        footerSection = stringResource(R.string.sale_compact_title),
+        footerStatus = stringResource(R.string.sale_footer_done),
+        showFooter = false,
+        onBack = onConfirm,
+        headerFlowTitle = stringResource(R.string.sale_compact_title),
+        headerTillLabel = if (config is SaleConfig.Ready) config.tillName else null,
+    ) {
+        OperatorAdaptivePaymentLayout(
+            mainContent = { profile ->
+                OperatorStatePanel(
+                    title = stringResource(R.string.ticket_order_booked),
+                    message = stringResource(R.string.sale_success_message),
+                    success = true,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(profile.gap),
                 ) {
-                    SuccessIcon(modifier = Modifier.size(120.dp))
-
-                    ProductConfirmItem(
-                        name = stringResource(R.string.price),
-                        price = saleCompletedV.totalPrice,
-                        bigStyle = true,
+                    OperatorMetricCard(
+                        label = stringResource(R.string.price),
+                        value = formatCurrencyValue(completedSale.totalPrice),
+                        accent = true,
+                        modifier = Modifier.weight(1f),
                     )
-
-                    if (saleCompletedV.paymentMethod == PaymentMethod.tag) {
-                        ProductConfirmItem(
-                            name = stringResource(R.string.new_balance),
-                            price = saleCompletedV.newBalance,
-                            bigStyle = true,
+                    if (completedSale.paymentMethod == PaymentMethod.tag) {
+                        OperatorMetricCard(
+                            label = stringResource(R.string.new_balance),
+                            value = formatCurrencyValue(completedSale.newBalance),
+                            modifier = Modifier.weight(1f),
                         )
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
                     }
-
-                    if (saleCompletedV.usedVouchers > 0 || saleCompletedV.newVoucherBalance > 0) {
-                        Divider(modifier = Modifier.padding(bottom = 10.dp))
-
-                        if (saleCompletedV.usedVouchers > 0) {
-                            ProductConfirmItem(
-                                name = stringResource(R.string.used_vouchers),
-                                quantity = saleCompletedV.usedVouchers.intValue(),
-                            )
-                        }
-
-                        ProductConfirmItem(
-                            name = stringResource(R.string.remaining_vouchers),
-                            quantity = saleCompletedV.newVoucherBalance.intValue(),
-                        )
-                    }
-
-                    if (returnableCount != 0) {
-                        Divider(modifier = Modifier.padding(bottom = 10.dp))
-
-                        if (returnableCount > 0) {
-                            ProductConfirmItem(
-                                name = stringResource(R.string.deposit_handout),
-                                quantity = returnableCount,
-                            )
-                        } else {
-                            ProductConfirmItem(
-                                name = stringResource(R.string.deposit_returned),
-                                quantity = -returnableCount,
-                            )
-                        }
-                    }
-
-                    if (saleCompletedV.paymentMethod != PaymentMethod.tag) {
-                        val hints =
-                            hashMapOf<EncodeHintType, Int>().also { it[EncodeHintType.MARGIN] = 1 }
-                        val qrCodeRaw = QRCodeWriter().encode(
-                            saleCompletedV.bonUrl,
-                            BarcodeFormat.QR_CODE,
-                            512,
-                            512,
-                            hints
-                        )
-                        val qrCodeBitmap = Bitmap.createBitmap(512, 512, Bitmap.Config.RGB_565).also {
-                            for (x in 0 until 512) {
-                                for (y in 0 until 512) {
-                                    it.setPixel(x, y, if (qrCodeRaw[x, y]) Color.BLACK else Color.WHITE)
-                                }
+                }
+                if (completedSale.usedVouchers > 0 || completedSale.newVoucherBalance > 0 || returnableCount != 0) {
+                    OperatorPanel(backgroundColor = OperatorPalette.panelMuted) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (completedSale.usedVouchers > 0) {
+                                OperatorRailSummaryRow(
+                                    label = stringResource(R.string.used_vouchers),
+                                    value = completedSale.usedVouchers.intValue().toString(),
+                                )
+                            }
+                            if (completedSale.newVoucherBalance > 0) {
+                                OperatorRailSummaryRow(
+                                    label = stringResource(R.string.remaining_vouchers),
+                                    value = completedSale.newVoucherBalance.intValue().toString(),
+                                )
+                            }
+                            if (returnableCount != 0) {
+                                OperatorRailSummaryRow(
+                                    label = if (returnableCount > 0) {
+                                        stringResource(R.string.deposit_handout)
+                                    } else {
+                                        stringResource(R.string.deposit_returned)
+                                    },
+                                    value = kotlin.math.abs(returnableCount).toString(),
+                                )
                             }
                         }
-                        Image(qrCodeBitmap.asImageBitmap(), "Bon QR Code")
                     }
                 }
-            }
-        },
-        bottomBar = {
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = 10.dp)
-                    .padding(bottom = 5.dp)
-                    .fillMaxWidth()
-            ) {
-                Divider(modifier = Modifier.padding(top = 10.dp))
-                Text(
-                    text = status,
-                    modifier = Modifier.fillMaxWidth(),
-                    fontSize = 18.sp,
-                    fontFamily = FontFamily.Monospace,
-                )
-
-                Button(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onConfirm()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(70.dp)
-                ) {
-                    Text(text = "Done")
+            },
+            railContent = {
+                OperatorPanel(backgroundColor = OperatorPalette.panelMuted) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (completedSale.paymentMethod == PaymentMethod.tag) {
+                            OperatorMetricCard(
+                                label = stringResource(R.string.new_balance),
+                                value = formatCurrencyValue(completedSale.newBalance),
+                                accent = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        OperatorActionButton(
+                            text = stringResource(R.string.sale_next_basket),
+                            onClick = onConfirm,
+                        )
+                        if (completedSale.paymentMethod != PaymentMethod.tag && completedSale.bonUrl.isNotBlank()) {
+                            ReceiptQrCard(receiptUrl = completedSale.bonUrl)
+                        }
+                    }
                 }
+            },
+        )
+    }
+}
+
+@Composable
+private fun ReceiptQrCard(receiptUrl: String) {
+    val hints = hashMapOf<EncodeHintType, Int>().also { it[EncodeHintType.MARGIN] = 1 }
+    val qrCodeRaw = QRCodeWriter().encode(
+        receiptUrl,
+        BarcodeFormat.QR_CODE,
+        320,
+        320,
+        hints,
+    )
+    val qrCodeBitmap = Bitmap.createBitmap(320, 320, Bitmap.Config.RGB_565).also { bitmap ->
+        for (x in 0 until 320) {
+            for (y in 0 until 320) {
+                bitmap.setPixel(x, y, if (qrCodeRaw[x, y]) Color.BLACK else Color.WHITE)
             }
         }
-    )
+    }
+
+    OperatorPanel(backgroundColor = OperatorPalette.panel) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.material.Text(
+                text = stringResource(R.string.sale_receipt_qr),
+                color = OperatorPalette.title,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Image(
+                bitmap = qrCodeBitmap.asImageBitmap(),
+                contentDescription = stringResource(R.string.content_desc_receipt_qr),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
 }

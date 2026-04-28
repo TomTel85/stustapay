@@ -3,7 +3,8 @@
   "info": {
     "title": "TeamFestlichPay Administration API",
     "license": {
-      "name": "AGPL-3.0"
+      "name": "AGPL-3.0",
+      "url": "https://www.gnu.org/licenses/agpl-3.0.html"
     },
     "version": "0.1.0"
   },
@@ -421,6 +422,54 @@
         }
       }
     },
+    "/users/accept-invitation": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Accept Invitation",
+        "operationId": "accept_invitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Accept Invitation Users Accept Invitation Post"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/users/{user_id}": {
       "get": {
         "tags": [
@@ -710,54 +759,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserInvitation"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/users/accept-invitation": {
-      "post": {
-        "tags": [
-          "users"
-        ],
-        "summary": "Accept Invitation",
-        "operationId": "accept_invitation",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AcceptInvitationPayload"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": "object",
-                  "title": "Response Accept Invitation Users Accept Invitation Post"
                 }
               }
             }
@@ -3846,6 +3847,82 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GlobalEmailConfig"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/config/sumup": {
+      "get": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Get Global Sumup Config",
+        "operationId": "get_global_sumup_config",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalSumUpConfig"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Update Global Sumup Config",
+        "operationId": "update_global_sumup_config",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GlobalSumUpConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalSumUpConfig"
                 }
               }
             }
@@ -8546,6 +8623,56 @@
         }
       }
     },
+    "/tree/events/{node_id}/clear-legacy-sumup-settings": {
+      "post": {
+        "tags": [
+          "tree"
+        ],
+        "summary": "Clear Legacy Sumup Settings",
+        "operationId": "clear_legacy_sumup_settings",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestrictedEventSettings"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/tree/nodes/{node_id}": {
       "delete": {
         "tags": [
@@ -8742,6 +8869,104 @@
         }
       }
     },
+    "/tree/nodes/{node_id}/sumup-link": {
+      "get": {
+        "tags": [
+          "tree"
+        ],
+        "summary": "Get Node Sumup Link Status",
+        "operationId": "get_node_sumup_link_status",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeSumUpConnectionStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tree"
+        ],
+        "summary": "Delete Node Sumup Link",
+        "operationId": "delete_node_sumup_link",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeSumUpConnectionStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/tree/nodes/{node_id}/configure-sumup-token": {
       "post": {
         "tags": [
@@ -8780,7 +9005,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NodeSumUpConnectionStatus"
+                }
               }
             }
           },
@@ -10464,6 +10691,123 @@
         }
       }
     },
+    "/llm/nodes": {
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "List Nodes Llm",
+        "operationId": "list_nodes_llm",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "parent_node_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Parent Node Id"
+            }
+          },
+          {
+            "name": "name_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Name Query"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NodeSeenByUser"
+                  },
+                  "title": "Response List Nodes Llm Llm Nodes Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "Create Node Llm",
+        "operationId": "create_node_llm",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNodePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/llm/products": {
       "post": {
         "tags": [
@@ -10471,15 +10815,20 @@
         ],
         "summary": "Create Product Llm",
         "operationId": "create_product_llm",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateProductPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -10505,12 +10854,69 @@
               }
             }
           }
-        },
+        }
+      },
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "List Products Llm",
+        "operationId": "list_products_llm",
         "security": [
           {
             "OAuth2PasswordBearer": []
           }
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          },
+          {
+            "name": "include_subtree",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Subtree"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Product"
+                  },
+                  "title": "Response List Products Llm Llm Products Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/llm/cash-registers": {
@@ -10520,15 +10926,20 @@
         ],
         "summary": "Create Cash Register Llm",
         "operationId": "create_cash_register_llm",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateCashRegisterPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -10554,12 +10965,69 @@
               }
             }
           }
-        },
+        }
+      },
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "List Cash Registers Llm",
+        "operationId": "list_cash_registers_llm",
         "security": [
           {
             "OAuth2PasswordBearer": []
           }
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          },
+          {
+            "name": "include_subtree",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Subtree"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CashRegister"
+                  },
+                  "title": "Response List Cash Registers Llm Llm Cash Registers Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/llm/tills": {
@@ -10569,15 +11037,20 @@
         ],
         "summary": "Create Till Llm",
         "operationId": "create_till_llm",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateTillPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -10603,12 +11076,59 @@
               }
             }
           }
-        },
+        }
+      },
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "List Tills Llm",
+        "operationId": "list_tills_llm",
         "security": [
           {
             "OAuth2PasswordBearer": []
           }
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Till"
+                  },
+                  "title": "Response List Tills Llm Llm Tills Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/llm/till-buttons": {
@@ -10813,6 +11333,107 @@
         }
       }
     },
+    "/llm/till-profiles": {
+      "post": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "Create Till Profile Llm",
+        "operationId": "create_till_profile_llm",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTillProfilePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TillProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "List Till Profiles Llm",
+        "operationId": "list_till_profiles_llm",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TillProfile"
+                  },
+                  "title": "Response List Till Profiles Llm Llm Till Profiles Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/llm/terminals": {
       "post": {
         "tags": [
@@ -10820,15 +11441,20 @@
         ],
         "summary": "Create Terminal Llm",
         "operationId": "create_terminal_llm",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateTerminalPayload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -10854,15 +11480,109 @@
               }
             }
           }
-        },
+        }
+      },
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "List Terminals Llm",
+        "operationId": "list_terminals_llm",
         "security": [
           {
             "OAuth2PasswordBearer": []
           }
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Terminal"
+                  },
+                  "title": "Response List Terminals Llm Llm Terminals Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/llm/tax-rates": {
+      "post": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "Create Tax Rate Llm",
+        "operationId": "create_tax_rate_llm",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaxRatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxRate"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "tags": [
           "llm"
@@ -10957,60 +11677,6 @@
                     "$ref": "#/components/schemas/EventSummary"
                   },
                   "title": "Response List Events Llm Llm Events Get"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/llm/till-profiles": {
-      "get": {
-        "tags": [
-          "llm"
-        ],
-        "summary": "List Till Profiles Llm",
-        "operationId": "list_till_profiles_llm",
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "node_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Node Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/TillProfile"
-                  },
-                  "title": "Response List Till Profiles Llm Llm Till Profiles Get"
                 }
               }
             }
@@ -13901,6 +14567,24 @@
         ],
         "title": "CreateHeadwindMappingPayload"
       },
+      "CreateNodePayload": {
+        "properties": {
+          "parent_node_id": {
+            "type": "integer",
+            "title": "Parent Node Id",
+            "description": "ID of the parent node below which the child node will be created."
+          },
+          "node": {
+            "$ref": "#/components/schemas/NewNode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parent_node_id",
+          "node"
+        ],
+        "title": "CreateNodePayload"
+      },
       "CreateProductPayload": {
         "properties": {
           "node_id": {
@@ -13932,6 +14616,24 @@
           "execution_date"
         ],
         "title": "CreateSepaXMLPayload"
+      },
+      "CreateTaxRatePayload": {
+        "properties": {
+          "node_id": {
+            "type": "integer",
+            "title": "Node Id",
+            "description": "ID of the node/event the tax rate belongs to."
+          },
+          "tax_rate": {
+            "$ref": "#/components/schemas/NewTaxRate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "node_id",
+          "tax_rate"
+        ],
+        "title": "CreateTaxRatePayload"
       },
       "CreateTerminalPayload": {
         "properties": {
@@ -14004,6 +14706,24 @@
           "till"
         ],
         "title": "CreateTillPayload"
+      },
+      "CreateTillProfilePayload": {
+        "properties": {
+          "node_id": {
+            "type": "integer",
+            "title": "Node Id",
+            "description": "ID of the node/event the till profile belongs to."
+          },
+          "till_profile": {
+            "$ref": "#/components/schemas/NewTillProfile"
+          }
+        },
+        "type": "object",
+        "required": [
+          "node_id",
+          "till_profile"
+        ],
+        "title": "CreateTillProfilePayload"
       },
       "CreateUserPayload": {
         "properties": {
@@ -15058,38 +15778,19 @@
             ],
             "title": "Email Smtp Password"
           },
-          "invitation_subject": {
-            "anyOf": [
-              {
+          "invitation_texts": {
+            "additionalProperties": {
+              "additionalProperties": {
                 "type": "string"
               },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Invitation Subject"
-          },
-          "invitation_text_body": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Invitation Text Body"
-          },
-          "invitation_html_body": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Invitation Html Body"
+              "type": "object"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/Language"
+            },
+            "type": "object",
+            "title": "Invitation Texts",
+            "default": {}
           }
         },
         "type": "object",
@@ -15097,6 +15798,27 @@
           "email_enabled"
         ],
         "title": "GlobalEmailConfig"
+      },
+      "GlobalSumUpConfig": {
+        "properties": {
+          "sumup_affiliate_key": {
+            "type": "string",
+            "title": "Sumup Affiliate Key",
+            "default": ""
+          },
+          "sumup_oauth_client_id": {
+            "type": "string",
+            "title": "Sumup Oauth Client Id",
+            "default": ""
+          },
+          "sumup_oauth_client_secret": {
+            "type": "string",
+            "title": "Sumup Oauth Client Secret",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "GlobalSumUpConfig"
       },
       "HTTPValidationError": {
         "properties": {
@@ -15342,6 +16064,40 @@
               }
             ],
             "title": "Last Push Error"
+          },
+          "last_wifi_pushed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Wifi Pushed At"
+          },
+          "last_wifi_push_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Wifi Push Status"
+          },
+          "last_wifi_push_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Wifi Push Error"
           },
           "created_at": {
             "type": "string",
@@ -15775,6 +16531,28 @@
               }
             ],
             "title": "Email Smtp Password"
+          },
+          "wifi_ssid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wifi Ssid"
+          },
+          "wifi_passphrase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wifi Passphrase"
           },
           "currency_identifier": {
             "type": "string",
@@ -16370,6 +17148,11 @@
               }
             ],
             "title": "Entry Area Id"
+          },
+          "self_service": {
+            "type": "boolean",
+            "title": "Self Service",
+            "default": false
           }
         },
         "type": "object",
@@ -17065,6 +17848,71 @@
           "privileges_at_node"
         ],
         "title": "NodeSeenByUser"
+      },
+      "NodeSumUpConnectionStatus": {
+        "properties": {
+          "node_id": {
+            "type": "integer",
+            "title": "Node Id"
+          },
+          "node_name": {
+            "type": "string",
+            "title": "Node Name"
+          },
+          "connected": {
+            "type": "boolean",
+            "title": "Connected"
+          },
+          "merchant_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant Code"
+          },
+          "merchant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant Name"
+          },
+          "linked_event_count": {
+            "type": "integer",
+            "title": "Linked Event Count",
+            "default": 0
+          },
+          "oauth_client_id": {
+            "type": "string",
+            "title": "Oauth Client Id",
+            "default": ""
+          },
+          "oauth_configured": {
+            "type": "boolean",
+            "title": "Oauth Configured",
+            "default": false
+          },
+          "affiliate_key_configured": {
+            "type": "boolean",
+            "title": "Affiliate Key Configured",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "node_id",
+          "node_name",
+          "connected"
+        ],
+        "title": "NodeSumUpConnectionStatus"
       },
       "NormalizedList_Account__int_": {
         "properties": {
@@ -19062,6 +19910,49 @@
         ],
         "title": "PublicEventSettings"
       },
+      "ResolvedSumUpLink": {
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/SumUpConnectionSource"
+          },
+          "source_node_id": {
+            "type": "integer",
+            "title": "Source Node Id"
+          },
+          "source_node_name": {
+            "type": "string",
+            "title": "Source Node Name"
+          },
+          "merchant_code": {
+            "type": "string",
+            "title": "Merchant Code"
+          },
+          "merchant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant Name"
+          },
+          "inherited": {
+            "type": "boolean",
+            "title": "Inherited",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "source_node_id",
+          "source_node_name",
+          "merchant_code"
+        ],
+        "title": "ResolvedSumUpLink"
+      },
       "RestrictedEventSettings": {
         "properties": {
           "sumup_api_key": {
@@ -19110,6 +20001,28 @@
               }
             ],
             "title": "Email Smtp Password"
+          },
+          "wifi_ssid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wifi Ssid"
+          },
+          "wifi_passphrase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wifi Passphrase"
           },
           "currency_identifier": {
             "type": "string",
@@ -19475,6 +20388,36 @@
           "sumup_oauth_refresh_token": {
             "type": "string",
             "title": "Sumup Oauth Refresh Token"
+          },
+          "resolved_sumup_link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResolvedSumUpLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sumup_global_oauth_configured": {
+            "type": "boolean",
+            "title": "Sumup Global Oauth Configured",
+            "default": false
+          },
+          "sumup_global_affiliate_key_configured": {
+            "type": "boolean",
+            "title": "Sumup Global Affiliate Key Configured",
+            "default": false
+          },
+          "sumup_legacy_api_key_configured": {
+            "type": "boolean",
+            "title": "Sumup Legacy Api Key Configured",
+            "default": false
+          },
+          "sumup_legacy_oauth_configured": {
+            "type": "boolean",
+            "title": "Sumup Legacy Oauth Configured",
+            "default": false
           }
         },
         "type": "object",
@@ -19768,16 +20711,30 @@
         ],
         "title": "SumUpCheckoutStatus"
       },
+      "SumUpConnectionSource": {
+        "type": "string",
+        "enum": [
+          "node_link",
+          "legacy_event_oauth",
+          "legacy_event_api_key"
+        ],
+        "title": "SumUpConnectionSource"
+      },
       "SumUpTokenPayload": {
         "properties": {
           "authorization_code": {
             "type": "string",
             "title": "Authorization Code"
+          },
+          "redirect_uri": {
+            "type": "string",
+            "title": "Redirect Uri"
           }
         },
         "type": "object",
         "required": [
-          "authorization_code"
+          "authorization_code",
+          "redirect_uri"
         ],
         "title": "SumUpTokenPayload"
       },
@@ -20033,6 +20990,11 @@
               }
             ],
             "title": "Entry Area Id"
+          },
+          "self_service": {
+            "type": "boolean",
+            "title": "Self Service",
+            "default": false
           },
           "id": {
             "type": "integer",
@@ -20939,6 +21901,28 @@
               }
             ],
             "title": "Email Smtp Password"
+          },
+          "wifi_ssid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wifi Ssid"
+          },
+          "wifi_passphrase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wifi Passphrase"
           },
           "currency_identifier": {
             "type": "string",

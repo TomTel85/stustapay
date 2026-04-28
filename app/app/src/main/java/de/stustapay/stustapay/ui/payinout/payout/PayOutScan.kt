@@ -1,83 +1,104 @@
 package de.stustapay.stustapay.ui.payinout.payout
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.Scaffold
-import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import dagger.hilt.android.EntryPointAccessors
-import de.stustapay.api.models.UserTag
 import de.stustapay.libssp.model.NfcTag
-import de.stustapay.stustapay.ui.chipscan.EnhancedNfcScanContent
-import de.stustapay.stustapay.ui.chipscan.NfcScanCard
+import de.stustapay.stustapay.R
+import de.stustapay.stustapay.ui.chipscan.NfcScanDialog
+import de.stustapay.stustapay.ui.chipscan.NfcScanDialogVariant
+import de.stustapay.stustapay.ui.chipscan.rememberNfcScanDialogState
 import de.stustapay.stustapay.ui.common.StatusText
-import de.stustapay.stustapay.ui.device.DeviceConfigProvider
-import de.stustapay.stustapay.ui.hilt.DeviceConfigEntryPoint
-import de.stustapay.libssp.ui.theme.NfcScanStyle
+import de.stustapay.stustapay.ui.common.operator.OperatorActionButton
+import de.stustapay.stustapay.ui.common.operator.OperatorStatePanel
 
-
+/**
+ * Shown when a chip was scanned but the server rejected payout (e.g. no balance).
+ * Without this, [PayOutScan] would show a blank area because the NFC dialog already closed.
+ */
+@Composable
+fun PayOutBlockedAfterScan(
+    status: String,
+    onClearTag: () -> Unit,
+) {
+    val message = status.ifBlank { stringResource(R.string.no_balance_for_payout) }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(12.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        OperatorStatePanel(
+            title = stringResource(R.string.common_status_failed),
+            message = message,
+            success = false,
+        )
+        OperatorActionButton(
+            text = stringResource(R.string.common_action_scan),
+            onClick = onClearTag,
+            primary = false,
+        )
+    }
+}
 @Composable
 fun PayOutScan(
     onScan: (NfcTag) -> Unit,
-    status: String
+    status: String,
 ) {
-    // Get DeviceConfigProvider using Hilt EntryPoint
-    val context = LocalContext.current
-    val deviceConfigProvider = remember {
-        EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            DeviceConfigEntryPoint::class.java
-        ).deviceConfigProvider()
-    }
-    
-    // Get device-specific configuration
-    val deviceConfig = deviceConfigProvider.getDeviceConfig()
+    val scanState = rememberNfcScanDialogState()
+    var dismissedWithoutScan by remember { mutableStateOf(false) }
 
-    Scaffold(
-        bottomBar = {
-            StatusText(
-                status,
-                modifier = Modifier.padding(horizontal = 20.dp)
+    LaunchedEffect(Unit) {
+        scanState.open()
+        dismissedWithoutScan = false
+    }
+
+    NfcScanDialog(
+        state = scanState,
+        variant = NfcScanDialogVariant.Operator,
+        showClarification = false,
+        onDismiss = {
+            dismissedWithoutScan = true
+        },
+        onScan = { tag ->
+            dismissedWithoutScan = false
+            onScan(tag)
+        },
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 12.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        if (dismissedWithoutScan && !scanState.isOpen()) {
+            OperatorActionButton(
+                text = stringResource(R.string.common_action_scan),
+                onClick = {
+                    dismissedWithoutScan = false
+                    scanState.open()
+                },
+                modifier = Modifier.padding(top = 8.dp),
+                primary = false,
             )
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
         }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .padding(paddingValues)
-                .fillMaxWidth(),
-            contentAlignment = Alignment.Center
-        ) {
-            // Use a centered approach similar to NfcScanDialog
-            NfcScanCard(
-                modifier = Modifier
-                    .size((350 * deviceConfig.nfcScanDialogScale).dp, (350 * deviceConfig.nfcScanDialogScale).dp)
-                    .offset(
-                        x = deviceConfig.nfcScanDialogOffset.x,
-                        y = deviceConfig.nfcScanDialogOffset.y
-                    ),
-                onScan = onScan,
-                showStatus = false,
-                content = { scanStatus ->
-                    // Use the enhanced NFC scan content
-                    EnhancedNfcScanContent(
-                        isIminFalcons2 = deviceConfig.isIminFalcons2,
-                        isSmallScreen = deviceConfig.isSmallScreen,
-                        scanStatus = scanStatus
-                    )
-                }
-            )
-        }
+        StatusText(
+            status,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
     }
 }
