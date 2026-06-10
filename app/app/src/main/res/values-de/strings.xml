@@ -28,7 +28,7 @@
     <string name="selfservice_title">Guthaben prüfen oder aufladen</string>
     <string name="selfservice_description">Bitte wählen Sie eine Option.</string>
     <string name="selfservice_check_balance">Guthaben prüfen</string>
-    <string name="selfservice_check_balance_hint">Aktuellen Bändchen-Stand anzeigen.</string>
+    <string name="selfservice_check_balance_hint">Aktuelles Guthaben anzeigen.</string>
     <string name="selfservice_topup">Guthaben aufladen</string>
     <string name="selfservice_topup_hint">Guthaben hinzufügen und am Kartenterminal zahlen.</string>
     <string name="selfservice_hint_scan">Bändchen bei Aufforderung auf den Leser halten.</string>
@@ -36,7 +36,7 @@
     <string name="selfservice_action_open">Öffnen</string>
     <string name="selfservice_action_start">Starten</string>
     <string name="selfservice_action_terminal_info">Terminalinfo</string>
-    <string name="selfservice_scan_balance_title">Bändchen hier vorhalten</string>
+    <string name="selfservice_scan_balance_title">Chip hier vorhalten</string>
     <string name="selfservice_scan_balance_title_compact">Chip hier vorhalten</string>
     <string name="selfservice_scan_balance_subtitle">Scannen, um Ihr Guthaben anzuzeigen</string>
     <string name="selfservice_scan_topup_subtitle">Scannen, um Ihr Guthaben aufzuladen</string>
@@ -441,6 +441,19 @@
     <string name="settings_core_connection_desc">Terminal registrieren oder abmelden und die Backend-Zuordnung aktualisieren.</string>
     <string name="settings_ec_reader">EC-Kartenleser</string>
     <string name="settings_ec_reader_desc">Wartung und Login-Einstellungen für SumUp öffnen.</string>
+    <string name="settings_selfservice_display">Self-Service-Anzeige</string>
+    <string name="settings_selfservice_display_desc">Wählen, ob Self-Service-Bildschirme den hellen Tagmodus oder den Standard-Nachtmodus verwenden.</string>
+    <string name="settings_selfservice_display_title">Self-Service-Anzeige</string>
+    <string name="settings_selfservice_display_subtitle">Lokaler Anzeigemodus nur für dieses Terminal.</string>
+    <string name="settings_selfservice_display_terminal_label">Anzeigemodus</string>
+    <string name="settings_selfservice_display_footer_hint">Tagmodus in hellen Umgebungen verwenden und Nachtmodus für das bisherige dunkle Self-Service-Design.</string>
+    <string name="settings_selfservice_display_footer_section">Anzeige</string>
+    <string name="settings_selfservice_display_footer_status">Nur lokal</string>
+    <string name="settings_selfservice_display_current">Aktueller Modus: %1$s</string>
+    <string name="settings_selfservice_display_day">Tagmodus</string>
+    <string name="settings_selfservice_display_day_desc">Heller Hintergrund mit dunklem Text für maximale Lesbarkeit bei direkter Sonne.</string>
+    <string name="settings_selfservice_display_night">Nachtmodus</string>
+    <string name="settings_selfservice_display_night_desc">Behält das bestehende dunkle Self-Service-Theme für Umgebungen mit weniger Licht.</string>
     <string name="settings_about_app">Über diese App</string>
     <string name="settings_about_app_desc">Versionsname und Build-Code dieser Installation anzeigen.</string>
     <string name="about_title">Über</string>

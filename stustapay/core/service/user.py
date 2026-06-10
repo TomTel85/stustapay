@@ -2,18 +2,21 @@
 import hashlib
 import secrets
 from datetime import datetime, timedelta
+from email.utils import formataddr
 from typing import Optional
 
 import asyncpg
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from sftkit.database import Connection
+from sftkit.error import AccessDenied, InvalidArgument, NotFound
 from sftkit.service import Service, with_db_transaction
 
 from stustapay.core.config import Config
 from stustapay.core.schema.tree import ROOT_NODE_ID, Node, ObjectType
 from stustapay.core.schema.user import (
     AcceptInvitationPayload,
+    AcceptInvitationResult,
     CurrentUser,
     NewUser,
     NewUserRole,
@@ -29,23 +32,22 @@ from stustapay.core.schema.user import (
     format_user_tag_uid,
 )
 from stustapay.core.service.auth import AuthService, UserTokenMetadata
+from stustapay.core.service.common.decorators import (
+    requires_node,
+    requires_terminal,
+    requires_user,
+)
 from stustapay.core.service.config import (
     fetch_global_email_config,
     render_bilingual_invitation_html,
     render_bilingual_invitation_subject,
     render_bilingual_invitation_text,
 )
-from stustapay.core.service.common.decorators import (
-    requires_node,
-    requires_terminal,
-    requires_user,
-)
 from stustapay.core.service.email_templates import (
     derive_invitation_base_url,
 )
 from stustapay.core.service.mail import MailService
-from sftkit.error import AccessDenied, InvalidArgument, NotFound
-from stustapay.core.service.tree.common import fetch_node
+from stustapay.core.service.tree.common import fetch_node, fetch_visible_node_ids_for_user
 from stustapay.core.service.user_tag import ensure_private_account_creation_allowed, get_or_assign_user_tag
 
 
@@ -468,11 +470,30 @@ class UserService(Service[Config]):
     @requires_node()
     @requires_user()
     async def list_users(
-        self, *, conn: Connection, node: Node, filter_privilege: Privilege | None = None
+        self, *, conn: Connection, node: Node, current_user: CurrentUser, filter_privilege: Privilege | None = None
     ) -> list[User]:
+        visible_node_ids = await fetch_visible_node_ids_for_user(
+            conn=conn,
+            user_id=current_user.id,
+            scope_node=node,
+            include_ancestor_context=False,
+            include_assignment_ancestors=False,
+        )
+        visible_node_ids_list = list(visible_node_ids)
+        if len(visible_node_ids_list) == 0:
+            return []
+        ancestor_and_visible_node_ids = list(set(visible_node_ids_list).union(node.parent_ids))
+
         if filter_privilege is None:
             return await conn.fetch_many(
-                User, "select * from user_with_tag where node_id = any($1) order by login", node.ids_to_root
+                User,
+                "select distinct u.* "
+                "from user_with_tag u "
+                "left join user_to_role utr on utr.user_id = u.id "
+                "where u.node_id = any($1) or utr.node_id = any($2) "
+                "order by u.login",
+                ancestor_and_visible_node_ids,
+                visible_node_ids_list,
             )
 
         return await conn.fetch_many(
@@ -481,12 +502,14 @@ class UserService(Service[Config]):
             "   select "
             "       u.*, "
             "       (select exists(select from user_privileges_at_node(u.id) up "
-            "       where $2 = any(up.privileges_at_node) and up.node_id = any($1))) as has_privilege "
+            "       where $3 = any(up.privileges_at_node) and up.node_id = any($2))) as has_privilege "
             "   from user_with_tag u "
-            "   where u.node_id = any($1)"
+            "   left join user_to_role utr on utr.user_id = u.id "
+            "   where u.node_id = any($1) or utr.node_id = any($2) "
             ")"
             "select * from users_by_privilege where has_privilege",
-            node.ids_to_root,
+            ancestor_and_visible_node_ids,
+            visible_node_ids_list,
             filter_privilege.name if filter_privilege is not None else None,
         )
 
@@ -752,6 +775,11 @@ class UserService(Service[Config]):
             subject=subject,
             text_message=message,
             html_message=html_message,
+            from_addr=(
+                formataddr(("teamfestlichPay Invite", email_config.email_default_sender))
+                if email_config.email_default_sender
+                else None
+            ),
             to_addr=user.email,
         )
 
@@ -776,7 +804,7 @@ class UserService(Service[Config]):
     @with_db_transaction
     async def accept_invitation(
         self, *, conn: Connection, payload: AcceptInvitationPayload
-    ) -> dict[str, str]:
+    ) -> AcceptInvitationResult:
         if payload.token.startswith(self.INVITATION_TOKEN_HASH_PREFIX):
             # Do not allow using already-hashed tokens directly; the raw token must be provided.
             raise AccessDenied("Invalid invitation token")
@@ -808,6 +836,8 @@ class UserService(Service[Config]):
             raise InvalidArgument("This invitation has expired")
 
         user_id = invitation["user_id"]
+        user_login = await conn.fetchval("select login from usr where id = $1", user_id)
+        assert user_login is not None
 
         # Set user password
         hashed_password = self._hash_password(payload.password)
@@ -820,4 +850,8 @@ class UserService(Service[Config]):
             invitation["id"],
         )
 
-        return {"status": "success", "message": "Password set successfully. You can now log in."}
+        return AcceptInvitationResult(
+            status="success",
+            message="Password set successfully. You can now sign in with your username.",
+            login=user_login,
+        )

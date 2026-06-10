@@ -74,6 +74,7 @@ import de.stustapay.stustapay.ui.common.operator.OperatorInfoCard
 import de.stustapay.stustapay.ui.common.operator.OperatorPalette
 import de.stustapay.stustapay.ui.common.operator.OperatorPanel
 import de.stustapay.stustapay.ui.common.operator.OperatorScaffold
+import de.stustapay.stustapay.ui.common.selfservice.SelfServiceDisplayModeToggle
 import de.stustapay.stustapay.ui.common.selfservice.SelfServicePalette
 import de.stustapay.stustapay.ui.common.selfservice.SelfServiceSectionHeader
 import de.stustapay.stustapay.ui.common.selfservice.rememberSelfServiceDeviceProfile
@@ -91,6 +92,7 @@ fun StartpageView(
 ) {
     val activity = LocalActivity.current!!
     val selfServiceAccess = loginState.selfServiceAccess()
+    val canOpenSelfServiceSettings = loginState.checkTerminalAccess(Access::canChangeConfig)
     val isSelfServiceMode = loginState.isSelfServiceTerminal() && loginState.hasConfig() && !configLoading
     val isEntryMode = loginState.isEntryMode() && loginState.hasConfig() && !configLoading
     val gradientColors = if (isSelfServiceMode) {
@@ -138,6 +140,7 @@ fun StartpageView(
                 SelfServiceLanding(
                     canCheckBalance = selfServiceAccess.canSelfServiceBalance,
                     canTopUp = selfServiceAccess.canSelfServiceTopUp,
+                    canOpenSettings = canOpenSelfServiceSettings,
                     configLoading = configLoading,
                     onCheckBalance = { navigateToHook(RootNavDests.status) },
                     onTopUp = { navigateToHook(RootNavDests.topup) },
@@ -200,7 +203,13 @@ fun StartpageView(
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
                             modifier = Modifier.align(Alignment.End),
-                            onClick = { showInfoDialog = false }
+                            onClick = { showInfoDialog = false },
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = SelfServicePalette.panelMuted,
+                                contentColor = SelfServicePalette.title,
+                                disabledBackgroundColor = SelfServicePalette.panelBorder,
+                                disabledContentColor = SelfServicePalette.subtitle,
+                            ),
                         ) {
                             Text(text = stringResource(R.string.done))
                         }
@@ -666,6 +675,7 @@ private fun rememberOperatorMenuStrings(): OperatorMenuStrings {
 private fun SelfServiceLanding(
     canCheckBalance: Boolean,
     canTopUp: Boolean,
+    canOpenSettings: Boolean,
     configLoading: Boolean,
     onCheckBalance: () -> Unit,
     onTopUp: () -> Unit,
@@ -677,6 +687,8 @@ private fun SelfServiceLanding(
 ) {
     val profile = rememberSelfServiceDeviceProfile()
     val refreshState = remember { TopOverscrollRefreshState(TOP_OVERSCROLL_REFRESH_THRESHOLD_PX) }
+    val title = stringResource(R.string.selfservice_title)
+    val description = stringResource(R.string.selfservice_description)
     val checkBalanceTitle = stringResource(R.string.selfservice_check_balance)
     val checkBalanceDescription = stringResource(R.string.selfservice_check_balance_hint)
     val topUpTitle = stringResource(R.string.selfservice_topup)
@@ -752,6 +764,16 @@ private fun SelfServiceLanding(
                 ),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            SelfServiceSectionHeader(
+                title = title,
+                subtitle = description,
+                titleFontSize = profile.headlineTitleSize,
+                subtitleFontSize = profile.headlineSubtitleSize,
+                headerAction = {
+                    SelfServiceDisplayModeToggle()
+                },
+            )
+
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -836,17 +858,22 @@ private fun SelfServiceLanding(
                             text = stringResource(R.string.selfservice_action_terminal_info),
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        SelfServiceFooterActionButton(
-                            onClick = onOpenSettings,
-                            icon = Icons.Filled.Edit,
-                            text = stringResource(R.string.root_item_settings),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        if (canOpenSettings) {
+                            SelfServiceFooterActionButton(
+                                onClick = onOpenSettings,
+                                icon = Icons.Filled.Edit,
+                                text = stringResource(R.string.root_item_settings),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
                 } else {
                     Row(
                         modifier = footerModifier,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                        horizontalArrangement = Arrangement.spacedBy(
+                            10.dp,
+                            if (canOpenSettings) Alignment.End else Alignment.Start
+                        ),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         SelfServiceFooterActionButton(
@@ -855,12 +882,14 @@ private fun SelfServiceLanding(
                             text = stringResource(R.string.selfservice_action_terminal_info),
                             modifier = Modifier.widthIn(min = 170.dp)
                         )
-                        SelfServiceFooterActionButton(
-                            onClick = onOpenSettings,
-                            icon = Icons.Filled.Edit,
-                            text = stringResource(R.string.root_item_settings),
-                            modifier = Modifier.widthIn(min = 140.dp)
-                        )
+                        if (canOpenSettings) {
+                            SelfServiceFooterActionButton(
+                                onClick = onOpenSettings,
+                                icon = Icons.Filled.Edit,
+                                text = stringResource(R.string.root_item_settings),
+                                modifier = Modifier.widthIn(min = 140.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -1017,7 +1046,7 @@ private fun SelfServiceActionCard(
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         elevation = 0.dp,
-        backgroundColor = if (highlighted) Color(0xFF243A63) else SelfServicePalette.panel,
+        backgroundColor = if (highlighted) SelfServicePalette.highlightedPanel else SelfServicePalette.panel,
     ) {
         Row(
             modifier = Modifier
@@ -1040,7 +1069,7 @@ private fun SelfServiceActionCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = title,
-                    tint = SelfServicePalette.backgroundTop,
+                    tint = SelfServicePalette.accentText,
                     modifier = Modifier.size(if (cardHeight >= 220.dp) 34.dp else 26.dp)
                 )
             }

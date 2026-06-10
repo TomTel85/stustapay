@@ -31,10 +31,13 @@ import de.stustapay.stustapay.ui.swap.SwapView
 import de.stustapay.stustapay.ui.ticket.TicketView
 import de.stustapay.stustapay.ui.user.UserView
 import de.stustapay.stustapay.ui.vault.VaultView
+import de.stustapay.stustapay.ui.common.selfservice.ObserveSelfServiceDisplayMode
 
 
 @Composable
 fun RootView(uictrl: SysUiController? = null) {
+    ObserveSelfServiceDisplayMode()
+
     val navController = rememberNavController()
     val activity = LocalActivity.current
     val startDestination = remember(activity?.intent) {
@@ -65,8 +68,7 @@ fun RootView(uictrl: SysUiController? = null) {
             val terminalStatusMessage by viewModel.terminalStatusMessage.collectAsStateWithLifecycle()
             DynamicSystemUiEffect(
                 uictrl = uictrl,
-                hidden = loginState.isSelfServiceTerminal() &&
-                    loginState.hasConfig() &&
+                hidden = loginState.hasConfig() &&
                     !configLoading,
             )
 

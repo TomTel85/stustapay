@@ -2,12 +2,14 @@
 # pylint: disable=unused-argument
 import logging
 import re
+from email.utils import formataddr
 from typing import Optional
 
 import asyncpg
 from pydantic import BaseModel, EmailStr, Field
 from schwifty import IBAN
 from sftkit.database import Connection
+from sftkit.error import AccessDenied, InvalidArgument
 from sftkit.service import Service, with_db_transaction
 
 from stustapay.core.banner_image import http_response_for_stored_banner
@@ -21,10 +23,10 @@ from stustapay.core.schema.customer import (
 from stustapay.core.schema.language import Language
 from stustapay.core.service.auth import AuthService, CustomerTokenMetadata
 from stustapay.core.service.common.decorators import requires_customer
-from sftkit.error import AccessDenied, InvalidArgument
 from stustapay.core.service.config import ConfigService
 from stustapay.core.service.customer.common import fetch_customer_portal_event_node_id
 from stustapay.core.service.customer.payout import PayoutService
+from stustapay.core.service.email_templates import render_plain_text_payout_html
 from stustapay.core.service.mail import MailService
 from stustapay.core.service.order.sumup import SumupService
 from stustapay.core.service.tree.common import (
@@ -175,11 +177,15 @@ class CustomerService(Service[Config]):
         return await conn.fetch_one(
             PayoutInfo,
             "select "
-            "   exists(select from payout where customer_account_id = $1) as in_payout_run, "
+            "   exists(select from payout p join payout_run pr on pr.id = p.payout_run_id "
+            "       where p.customer_account_id = $1 and not pr.done and not pr.revoked) as in_payout_run, "
             "   ( "
             "       select pr.set_done_at "
-            "       from payout_run pr left join payout p on pr.id = p.payout_run_id left join customer c on p.customer_account_id = c.id"
-            "       where c.id = $1 "
+            "       from payout_run pr "
+            "       join payout p on pr.id = p.payout_run_id "
+            "       where p.customer_account_id = $1 and pr.done and not pr.revoked "
+            "       order by pr.set_done_at desc, pr.created_at desc, p.id desc "
+            "       limit 1 "
             "    ) as payout_date",
             current_customer.id,
         )
@@ -320,20 +326,27 @@ class CustomerService(Service[Config]):
             "select * from customer where id = $1",
             current_customer.id,
         )
-        
+
         # Store email-related information to be used outside the transaction
         email_to_send = None
         if updated_customer.email is not None:
             res_config = await fetch_restricted_event_settings_for_node(conn, updated_customer.node_id)
             if res_config.email_enabled and res_config.payout_registered_message is not None:
+                message = res_config.payout_registered_message.format(**updated_customer.model_dump())
+                payout_sender = res_config.payout_sender or res_config.email_default_sender
                 email_to_send = {
                     "subject": res_config.payout_registered_subject,
-                    "message": res_config.payout_registered_message.format(**updated_customer.model_dump()),
-                    "from_addr": res_config.payout_sender,
+                    "message": message,
+                    "html_message": render_plain_text_payout_html(message, res_config.payout_registered_subject),
+                    "from_addr": (
+                        formataddr((f"{event_node.name} Auszahlung", payout_sender))
+                        if payout_sender
+                        else None
+                    ),
                     "to_addr": updated_customer.email,
-                    "node_id": updated_customer.node_id
+                    "node_id": updated_customer.node_id,
                 }
-                
+
         return email_to_send
 
     # New method to send email outside transaction
@@ -343,6 +356,7 @@ class CustomerService(Service[Config]):
                 await mail_service.send_mail(
                     subject=email_info["subject"],
                     text_message=email_info["message"],
+                    html_message=email_info["html_message"],
                     from_addr=email_info["from_addr"],
                     to_addr=email_info["to_addr"],
                     node_id=email_info["node_id"],
@@ -354,7 +368,11 @@ class CustomerService(Service[Config]):
     async def check_payout_run(self, conn: Connection, current_customer: Customer) -> None:
         # if a payout is assigned, disallow updates.
         is_in_payout = await conn.fetchval(
-            "select exists(select from payout where customer_account_id = $1)",
+            "select exists("
+            "   select from payout p "
+            "   join payout_run pr on pr.id = p.payout_run_id "
+            "   where p.customer_account_id = $1 and not pr.done and not pr.revoked"
+            ")",
             current_customer.id,
         )
         if is_in_payout:

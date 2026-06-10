@@ -2,6 +2,7 @@ import csv
 import datetime
 import io
 import re
+from email.utils import formataddr
 
 import asyncpg
 from schwifty import IBAN
@@ -27,6 +28,7 @@ from stustapay.core.service.auth import AuthService
 from stustapay.core.service.common.decorators import requires_node, requires_user
 from stustapay.core.service.config import ConfigService
 from stustapay.core.service.customer.common import fetch_customer
+from stustapay.core.service.email_templates import render_plain_text_payout_html
 from stustapay.core.service.mail import MailService
 from stustapay.core.service.tree.common import (
     fetch_event_node_for_node,
@@ -329,10 +331,17 @@ class PayoutService(Service[Config]):
             if payout.email is None:
                 continue
             assert res_config.payout_done_message is not None
+            message = res_config.payout_done_message.format(**payout.model_dump())
+            payout_sender = res_config.payout_sender or res_config.email_default_sender
             await mail_service.send_mail(
                 subject=res_config.payout_done_subject,
-                text_message=res_config.payout_done_message.format(**payout.model_dump()),
-                from_addr=res_config.payout_sender,
+                text_message=message,
+                html_message=render_plain_text_payout_html(message, res_config.payout_done_subject),
+                from_addr=(
+                    formataddr((f"{node.name} Auszahlung", payout_sender))
+                    if payout_sender
+                    else None
+                ),
                 to_addr=payout.email,
                 node_id=node.id,
             )

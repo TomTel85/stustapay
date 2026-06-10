@@ -107,7 +107,14 @@ create or replace view customer as
     select
         a.*,
         customer_info.*,
-        (select row_to_json(p.*) from payout_view p where p.customer_account_id = a.id) as payout
+        (
+            select row_to_json(p.*)
+            from payout_view p
+            join payout_run pr on pr.id = p.payout_run_id
+            where p.customer_account_id = a.id and not pr.done and not pr.revoked
+            order by pr.created_at desc, p.id desc
+            limit 1
+        ) as payout
     from
         account_with_history a
         left join customer_info on (a.id = customer_info.customer_account_id)
@@ -118,8 +125,16 @@ create or replace view customers_without_payout_run as
     select
         c.*
     from customer c
-    left join payout p on c.id = p.customer_account_id
-    where p.id is null and c.has_entered_info and c.payout_export != false and round(c.balance, 2) > 0;
+    where
+        c.has_entered_info
+        and c.payout_export != false
+        and round(c.balance, 2) > 0
+        and not exists(
+            select 1
+            from payout p
+            join payout_run pr on pr.id = p.payout_run_id
+            where p.customer_account_id = c.id and not pr.done and not pr.revoked
+        );
 
 create or replace view payout_run_with_stats as
     select
@@ -246,7 +261,7 @@ create or replace view till_button_with_products as
 
                 bool_and(p.fixed_price)               as fixed_price,   -- a constraint assures us that for variable priced products a button can only refer to one product
                 bool_and(p.is_returnable)             as is_returnable, -- a constraint assures us that for returnable products a button can only refer to one product
-                array_agg(tlb.product_id)             as product_ids
+                array_agg(tlb.product_id order by tlb.product_id) as product_ids
             from
                 till_button_product tlb
                 join product_with_tax_and_restrictions p on tlb.product_id = p.id

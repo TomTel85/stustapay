@@ -9,12 +9,6 @@ from stustapay.bon.pdflatex import PdfRenderResult, pdflatex, render_template
 from stustapay.core.currency import get_currency_symbol
 from stustapay.core.schema.order import LineItem, Order
 from stustapay.core.schema.tree import Node, PublicEventSettings, RestrictedEventSettings
-from stustapay.core.service.order.stats import (
-    Timeseries,
-    TimeseriesStatsQuery,
-    get_daily_stats,
-    get_hourly_sales_stats,
-)
 from stustapay.core.service.tree.common import fetch_event_for_node, fetch_node
 
 REPORT_TIMEZONE = pytz.timezone("Europe/Berlin")
@@ -156,11 +150,8 @@ async def generate_dummy_report(node_id: int, event: RestrictedEventSettings) ->
     return await render_report(context=ctx)
 
 
-def _check_order_revenue_consistency(hourly_sales_stats: Timeseries, orders: list[OrderWithFees], total: float):
-    stats_sum = 0.0
-    for interval in hourly_sales_stats.intervals:
-        stats_sum += interval.revenue
-
+def _check_order_revenue_consistency(daily_revenue: list[DailyRevenue], orders: list[OrderWithFees], total: float):
+    stats_sum = sum(day.revenue for day in daily_revenue)
     orders_sum = sum([o.total_price for o in orders])
     if abs(orders_sum - stats_sum) > 1e-09:
         raise RuntimeError(
@@ -187,6 +178,22 @@ def _format_day_label(dt: datetime) -> str:
     return f"{GERMAN_WEEKDAYS[dt.weekday()]} {dt:%Y-%m-%d}"
 
 
+def _extend_report_end_time(end_time: datetime, daily_end_time: time | None) -> datetime:
+    normalized_end_time = _normalize_datetime(end_time)
+    if daily_end_time is None:
+        return normalized_end_time
+
+    boundary = normalized_end_time.replace(
+        hour=daily_end_time.hour,
+        minute=daily_end_time.minute,
+        second=daily_end_time.second,
+        microsecond=0,
+    )
+    if boundary < normalized_end_time:
+        boundary += timedelta(days=1)
+    return boundary
+
+
 def _resolve_report_time_bounds(event: PublicEventSettings, orders: list[OrderWithFees]) -> tuple[datetime, datetime]:
     if orders:
         fallback_from = _normalize_datetime(orders[0].booked_at)
@@ -195,7 +202,10 @@ def _resolve_report_time_bounds(event: PublicEventSettings, orders: list[OrderWi
         fallback_from = event.start_date or event.end_date or datetime.now(tz=timezone.utc)
         fallback_to = event.end_date or event.start_date or fallback_from
 
-    return _normalize_datetime(event.start_date or fallback_from), _normalize_datetime(event.end_date or fallback_to)
+    from_time = _normalize_datetime(event.start_date or fallback_from)
+    raw_to_time = _normalize_datetime(event.end_date or fallback_to)
+    to_time = _extend_report_end_time(raw_to_time, event.daily_end_time) if event.end_date is not None else raw_to_time
+    return from_time, to_time
 
 
 def _report_day_start(local_dt: datetime, daily_end_time: time | None) -> datetime:
@@ -267,6 +277,33 @@ def _build_summary(daily_revenue: list[DailyRevenue], orders: list[OrderWithFees
     )
 
 
+def _build_daily_revenue(
+    orders: list[OrderWithFees], *, fees: float, daily_end_time: time | None
+) -> tuple[list[DailyRevenue], float]:
+    day_totals: dict[datetime, float] = {}
+    for order in orders:
+        local_booked_at = _to_report_timezone(order.booked_at)
+        day_start = _report_day_start(local_booked_at, daily_end_time)
+        day_totals[day_start] = day_totals.get(day_start, 0.0) + order.total_price
+
+    daily_revenue: list[DailyRevenue] = []
+    total = 0.0
+    for day_start in sorted(day_totals):
+        revenue = day_totals[day_start]
+        daily_fees = revenue * fees
+        daily_revenue.append(
+            DailyRevenue(
+                day=_format_day_label(day_start),
+                revenue=revenue,
+                fees=daily_fees,
+                revenue_minus_fees=revenue - daily_fees,
+            )
+        )
+        total += revenue
+
+    return daily_revenue, total
+
+
 def _build_report_context(
     *,
     node: Node,
@@ -302,12 +339,53 @@ async def generate_report(conn: Connection, node_id: int, fees=0.0) -> PdfRender
     node = await fetch_node(conn=conn, node_id=node_id)
     assert node is not None
     event = await fetch_event_for_node(conn=conn, node=node)
+    event_node = await fetch_node(conn=conn, node_id=node.event_node_id)
+    assert event_node is not None
 
     all_orders = await conn.fetch_many(
         OrderWithFees,
-        "select o.*, o.total_price * $2 as fees, o.total_price - o.total_price * $2 as total_price_minus_fees "
-        "from orders_at_node_and_children($1) o "
-        "where o.payment_method = 'tag' and o.order_type = 'sale' "
+        "with scope_orders as materialized ("
+        "   select o.id "
+        "   from ordr o "
+        "   join till t on o.till_id = t.id "
+        "   join node n on n.id = t.node_id "
+        "   where ($1 = any(n.parent_ids) or n.id = $1) "
+        "     and o.payment_method = 'tag' "
+        "     and o.order_type in ('sale', 'cancel_sale') "
+        "     and not exists (select 1 from ordr c where c.cancels_order = o.id)"
+        "), user_defined_line_item_json as materialized ("
+        "   select "
+        "       l.*, "
+        "       row_to_json(p) as product "
+        "   from line_item l "
+        "   join product_with_tax_and_restrictions p on l.product_id = p.id "
+        "   join scope_orders so on so.id = l.order_id "
+        "   where p.type = 'user_defined'"
+        "), user_defined_line_items as materialized ("
+        "   select "
+        "       order_id, "
+        "       sum(total_price) as total_price, "
+        "       sum(total_tax) as total_tax, "
+        "       sum(total_price - total_tax) as total_no_tax, "
+        "       coalesce(json_agg(user_defined_line_item_json), json_build_array()) as line_items "
+        "   from user_defined_line_item_json "
+        "   group by order_id"
+        ") "
+        "select "
+        "   o.*, "
+        "   ut.uid as customer_tag_uid, "
+        "   ut.id as customer_tag_id, "
+        "   li.total_price, "
+        "   li.total_tax, "
+        "   li.total_no_tax, "
+        "   li.line_items, "
+        "   li.total_price * $2 as fees, "
+        "   li.total_price - li.total_price * $2 as total_price_minus_fees "
+        "from ordr o "
+        "join scope_orders so on so.id = o.id "
+        "join user_defined_line_items li on li.order_id = o.id "
+        "left join account a on o.customer_account_id = a.id "
+        "left join user_tag ut on a.user_tag_id = ut.id "
         "order by o.booked_at",
         node_id,
         fees,
@@ -318,35 +396,9 @@ async def generate_report(conn: Connection, node_id: int, fees=0.0) -> PdfRender
 
     orders = [order for order in all_orders if from_time <= _normalize_datetime(order.booked_at) <= to_time]
 
-    config = BonConfig(ust_id=event.ust_id, address=event.bon_address, issuer=event.bon_issuer, title=event.bon_title)
-    query = TimeseriesStatsQuery(from_time=from_time, to_time=to_time)
-    hourly_revenue_stats = await get_hourly_sales_stats(
-        conn=conn, node=node, query=query, from_time=from_time, to_time=to_time
-    )
-    revenue_stats = await get_daily_stats(hourly_stats=hourly_revenue_stats, event=event)
-
-    daily_revenue = []
-    total = 0.0
-    for stats in revenue_stats.intervals:
-        interval_from = _normalize_datetime(stats.from_time)
-        interval_to = _normalize_datetime(stats.to_time)
-        if interval_to <= from_time or interval_from >= to_time:
-            continue
-
-        interval_local = interval_from.astimezone(REPORT_TIMEZONE)
-        daily_fees = stats.revenue * fees
-        day_name = _format_day_label(interval_local)
-        daily_revenue.append(
-            DailyRevenue(
-                day=day_name,
-                revenue=stats.revenue,
-                fees=daily_fees,
-                revenue_minus_fees=stats.revenue - daily_fees,
-            )
-        )
-        total += stats.revenue
-
-    _check_order_revenue_consistency(hourly_revenue_stats, orders, total)
+    config = BonConfig(ust_id=event.ust_id, address=event.bon_address, issuer=event.bon_issuer, title=event_node.name)
+    daily_revenue, total = _build_daily_revenue(orders, fees=fees, daily_end_time=event.daily_end_time)
+    _check_order_revenue_consistency(daily_revenue, orders, total)
 
     context = _build_report_context(
         node=node,

@@ -12,7 +12,7 @@ import { toast } from "react-toastify";
 import { OrderList } from "./OrderList";
 
 export const Index: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const config = usePublicConfig();
 
@@ -21,19 +21,29 @@ export const Index: React.FC = () => {
   const { data: customer, error: customerError, isLoading: isCustomerLoading } = useGetCustomerQuery();
   const { data: payoutInfo, error: payoutInfoError, isLoading: isPayoutInfoLoading } = usePayoutInfoQuery();
 
-  if (
-    isCustomerLoading ||
-    (!customer && !customerError) ||
-    isPayoutInfoLoading ||
-    (!payoutInfo && !payoutInfoError)
-  ) {
+  const showLoading =
+    isCustomerLoading || (!customer && !customerError) || isPayoutInfoLoading || (!payoutInfo && !payoutInfoError);
+  // Don't show an error toast during the initial loading phase.
+  // During that phase RTK Query typically has `data === undefined` while `isLoading === true`.
+  const showError = !showLoading && (customerError || !customer || payoutInfoError || !payoutInfo);
+
+  React.useEffect(() => {
+    if (showError) {
+      toast.error(t("errorLoadingCustomer"));
+    }
+  }, [showError, t]);
+
+  if (showLoading) {
     return <Loading />;
   }
 
-  if (customerError || !customer || payoutInfoError || !payoutInfo) {
-    React.useEffect(() => {
-      toast.error(t("errorLoadingCustomer"));
-    }, []);
+  if (showError) {
+    return null;
+  }
+
+  // TypeScript can't reliably narrow RTK Query `data` based on our derived booleans,
+  // even though at runtime we already returned above for the error/loading states.
+  if (!customer || !payoutInfo) {
     return null;
   }
 
@@ -41,10 +51,10 @@ export const Index: React.FC = () => {
   // we also might want to show the balance of the account after each order
 
   let payout_info;
-  if (payoutInfo.in_payout_run && !payoutInfo.payout_date) {
-    payout_info = t("payout.infoPayoutScheduled");
-  } else if (payoutInfo.in_payout_run && payoutInfo.payout_date) {
+  if (payoutInfo.payout_date) {
     payout_info = t("payout.infoPayoutCompleted", { payout_date: new Date(payoutInfo.payout_date).toLocaleString() });
+  } else if (payoutInfo.in_payout_run) {
+    payout_info = t("payout.infoPayoutScheduled");
   } else if (customer.has_entered_info) {
     payout_info = t("payout.infoPayoutInitiated");
   } else {
@@ -57,6 +67,9 @@ export const Index: React.FC = () => {
       </Trans>
     );
   }
+
+  const payoutDisabledNotice =
+    config.translation_texts[i18n.language]?.["payout_disabled_notice"] ?? t("payout.onlyDuringEvent");
 
   return (
     <Grid container justifyItems="center" justifyContent="center" spacing={2}>
@@ -157,7 +170,7 @@ export const Index: React.FC = () => {
       {!config.payout_enabled && (
         <Grid size={{ xs: 12, sm: 8 }}>
           <Alert severity="warning" variant="outlined" className="glass-alert" style={{ marginBottom: "1em", width: "100%" }}>
-            <b>{t("payout.onlyDuringEvent")}</b>
+            <b>{payoutDisabledNotice}</b>
           </Alert>
         </Grid>
       )}

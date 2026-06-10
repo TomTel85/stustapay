@@ -1,7 +1,7 @@
 from urllib.parse import urlsplit, urlunsplit
 
 from jinja2.sandbox import SandboxedEnvironment
-from markupsafe import Markup
+from markupsafe import Markup, escape
 
 from stustapay.core.schema.language import Language
 
@@ -14,8 +14,8 @@ INVITATION_SECTION_LABELS = {
 }
 
 DEFAULT_INVITATION_SUBJECTS = {
-    Language.de_DE: "Einladung zur Verwaltung von {{ node_name }}",
-    Language.en_US: "Invitation to manage {{ node_name }}",
+    Language.de_DE: "teamfestlichPay Invite: {{ node_name }}",
+    Language.en_US: "teamfestlichPay Invite: {{ node_name }}",
 }
 
 DEFAULT_INVITATION_TEXT_BODIES = {
@@ -27,6 +27,10 @@ Ihr Benutzername ist: {{ username }}
 
 Um Ihr Konto zu aktivieren, klicken Sie bitte auf den folgenden Link und setzen Sie Ihr Passwort:
 {{ invitation_url }}
+
+Bitte vergeben Sie ein Passwort mit mindestens 8 Zeichen.
+
+Nun koennen Sie sich mit Ihrem Benutzernamen {{ username }} und Ihrem Passwort im Portal anmelden.
 
 Diese Einladung ist gueltig bis {{ expires_at }}.
 
@@ -43,6 +47,8 @@ Your username is: {{ username }}
 
 To activate your account, please click the following link and set your password:
 {{ invitation_url }}
+
+After setting your password, return to the login page and sign in with your username and the password you just created.
 
 This invitation will expire on {{ expires_at }}.
 
@@ -65,6 +71,8 @@ DEFAULT_INVITATION_HTML_BODIES = {
       text-decoration:none;font-weight:700;border-radius:999px;"
   >Einladung annehmen</a>
 </p>
+<p>Bitte vergeben Sie ein Passwort mit mindestens 8 Zeichen.</p>
+<p>Nun koennen Sie sich mit Ihrem Benutzernamen <strong>{{ username }}</strong> und Ihrem Passwort im Portal anmelden.</p>
 <p>Diese Einladung ist gueltig bis {{ expires_at }}.</p>
 <p>Falls Sie diese Einladung nicht erwartet haben, ignorieren Sie bitte diese E-Mail.</p>
 <p>Viele Gruesse<br />Ihr teamfestlichPay-Team</p>
@@ -80,6 +88,7 @@ DEFAULT_INVITATION_HTML_BODIES = {
       text-decoration:none;font-weight:700;border-radius:999px;"
   >Accept invitation</a>
 </p>
+<p>After setting your password, sign in to the portal with your username and the password you just created.</p>
 <p>This invitation will expire on {{ expires_at }}.</p>
 <p>If you did not expect this invitation, please ignore this email.</p>
 <p>Best regards,<br />The teamfestlichPay Team</p>
@@ -139,7 +148,11 @@ BASE_EMAIL_HTML_TEMPLATE = """<!DOCTYPE html>
                 bgcolor="#F5FFFE"
                 style="padding:24px 32px;background:#F5FFFE;color:#000000;font-size:12px;
                 line-height:1.6;border-top:2px solid #2AD2C9;">
-                This invitation email was sent by teamfestlichPay.
+                teamfestlichPay<br />
+                Diese Nachricht wurde automatisch versendet. Bitte antworten Sie nicht direkt auf diese E-Mail.<br />
+                This message was sent automatically. Please do not reply directly to this email.<br />
+                <a href="https://www.teamfestlichpay.de/"
+                  style="color:#176B67;text-decoration:underline;">www.teamfestlichpay.de</a>
               </td>
             </tr>
           </table>
@@ -168,6 +181,18 @@ def render_template_string(template: str, context: dict[str, object], *, autoesc
 def render_email_html(content: str, subject: str) -> str:
     shell = _sandbox(True).from_string(BASE_EMAIL_HTML_TEMPLATE)
     return shell.render(subject=subject, content=Markup(content), logo_url=TEAMFESTLICHPAY_LOGO_URL)
+
+
+def render_plain_text_payout_html(message: str, subject: str) -> str:
+    paragraphs = []
+    for block in message.strip().split("\n\n"):
+        normalized = block.strip()
+        if not normalized:
+            continue
+        paragraphs.append(f"<p>{escape(normalized).replace(chr(10), Markup('<br />'))}</p>")
+
+    content = "\n".join(paragraphs) if paragraphs else "<p></p>"
+    return render_email_html(content, subject)
 
 
 def render_invitation_html(template: str, context: dict[str, object], subject: str) -> str:

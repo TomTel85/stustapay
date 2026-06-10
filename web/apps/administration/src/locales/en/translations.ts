@@ -197,6 +197,8 @@ export const translations = {
     password: "Password",
     login: "Login",
     loginFailed: "Login failed: {{reason}}.",
+    invitationLoginHint:
+      "Your password has been set. Sign in with username {{username}} and the password you just created.",
     profile: "Profile",
     selectNode: "Select node for login",
     changePassword: "Change Password",
@@ -372,6 +374,9 @@ export const translations = {
     noDataAvailable: "No data available for the selected time range.",
     noProductDataAvailable: "No product data available for the selected time range.",
     noOrdersFound: "No orders found for the selected filters",
+    scopedOverviewUnavailable:
+      "This event overview is only available on nodes where you have direct access. Open one of your visible subnodes instead.",
+    openAccessibleSubnode: "Open an accessible subnode",
     date: "Date",
     orderNumber: "Order No.",
     orderType: "Order Type",
@@ -664,6 +669,9 @@ export const translations = {
     },
     payout: {
       tabLabel: "Payout",
+      payout_disabled_notice_de: "Notice when payout is disabled (DE)",
+      payout_disabled_notice_en: "Notice when payout is disabled (EN)",
+      payout_disabled_notice_help: "Optional notice shown in the customer portal while payouts are disabled for this event.",
       sepa_enabled: "Payout enabled",
       ibanNotValid: "IBAN is not valid",
       sepa_sender_name: "SEPA sender name",
@@ -861,6 +869,8 @@ export const translations = {
     noEmail: "No email",
     invite: "Invite",
     acceptInvitation: "Accept invitation",
+    acceptInvitationHelp:
+      "Set a password for your administration account. After that, you will sign in with your username on the next screen.",
     invitationInvalid: "Invitation link is invalid",
     invitationAccepted: "Invitation accepted successfully",
     invitationAcceptFailed: "Failed to accept invitation",

@@ -202,6 +202,8 @@ export const translations: NestedPartialAsStrings<Translations> = {
     password: "Passwort",
     login: "Anmelden",
     loginFailed: "Anmeldung fehlgeschlagen: {{reason}}.",
+    invitationLoginHint:
+      "Ihr Passwort wurde gesetzt. Melden Sie sich jetzt mit dem Benutzernamen {{username}} und Ihrem neuen Passwort an.",
     profile: "Profil",
     selectNode: "Knoten für die Anmeldung auswählen",
     changePassword: "Passwort ändern",
@@ -364,6 +366,9 @@ export const translations: NestedPartialAsStrings<Translations> = {
     noDataAvailable: "Keine Daten für den gewählten Zeitraum verfügbar.",
     noProductDataAvailable: "Keine Produktdaten für den gewählten Zeitraum verfügbar.",
     noOrdersFound: "Keine Bestellungen für die gewählten Filter gefunden",
+    scopedOverviewUnavailable:
+      "Diese Ereignisübersicht ist nur auf Knoten mit direktem Zugriff verfügbar. Öffnen Sie stattdessen einen Ihrer sichtbaren Unterknoten.",
+    openAccessibleSubnode: "Zugänglichen Unterknoten öffnen",
     date: "Datum",
     orderNumber: "Bestell-Nr.",
     orderType: "Bestelltyp",
@@ -648,6 +653,10 @@ export const translations: NestedPartialAsStrings<Translations> = {
     },
     payout: {
       tabLabel: "Auszahlung",
+      payout_disabled_notice_de: "Hinweis bei deaktivierter Auszahlung (DE)",
+      payout_disabled_notice_en: "Hinweis bei deaktivierter Auszahlung (EN)",
+      payout_disabled_notice_help:
+        "Optionaler Hinweistext im Kundenportal, solange Auszahlungen für dieses Event deaktiviert sind.",
       sepa_enabled: "Auszahlung aktiviert",
       ibanNotValid: "IBAN ist nicht gültig",
       sepa_sender_name: "SEPA-Absendername",
@@ -832,6 +841,8 @@ export const translations: NestedPartialAsStrings<Translations> = {
     noEmail: "Keine E-Mail",
     invite: "Einladen",
     acceptInvitation: "Einladung annehmen",
+    acceptInvitationHelp:
+      "Setzen Sie ein Passwort für Ihr Administrationskonto. Danach melden Sie sich im nächsten Schritt mit Ihrem Benutzernamen an.",
     invitationInvalid: "Der Einladungslink ist ungueltig",
     invitationAccepted: "Einladung erfolgreich angenommen",
     invitationAcceptFailed: "Einladung konnte nicht angenommen werden",

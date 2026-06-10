@@ -1,6 +1,7 @@
 package de.stustapay.stustapay.ui.payinout.topup
 
 import android.app.Activity
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,10 +24,16 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.activity.compose.LocalActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import de.stustapay.libssp.ui.common.DialogDisplayState
 import de.stustapay.libssp.ui.common.rememberDialogDisplayState
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ui.chipscan.NfcScanDialog
@@ -52,6 +60,9 @@ import de.stustapay.stustapay.ui.chipscan.rememberNfcScanDialogState
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.delay
+
+private const val SELF_SERVICE_TOPUP_IDLE_TIMEOUT_MS = 30_000L
 
 @Composable
 fun TopUpSelection(
@@ -65,6 +76,10 @@ fun TopUpSelection(
     val uiLocked by viewModel.uiLocked.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val isSelfServiceTopUp = topUpConfig.hasOnlyTopUpPrivilege()
+    val (lastActivityTimestamp, setLastActivityTimestamp) = remember {
+        mutableLongStateOf(SystemClock.elapsedRealtime())
+    }
     val maxAmount = (topUpConfig.maxAccountBalance * 100).toUInt()
 
     val currentStep = when {
@@ -74,7 +89,7 @@ fun TopUpSelection(
     }
 
     if (errorMessage != null) {
-        if (topUpConfig.hasOnlyTopUpPrivilege()) {
+        if (isSelfServiceTopUp) {
             SelfServiceTopUpErrorDialog(
                 message = errorMessage.orEmpty(),
                 onDismiss = {
@@ -90,19 +105,47 @@ fun TopUpSelection(
         }
     }
 
-    if (topUpConfig.hasOnlyTopUpPrivilege()) {
+    if (isSelfServiceTopUp) {
         val activity = LocalActivity.current as? Activity
         val paymentSelectionViewModel: CashECSelectionViewModel = hiltViewModel()
         val scanState = rememberNfcScanDialogState()
+        val customAmountDialog = rememberDialogDisplayState()
+        val resetIdleTimer = {
+            setLastActivityTimestamp(SystemClock.elapsedRealtime())
+        }
+        val leaveSelfService = {
+            paymentSelectionViewModel.resetCustomerDisplay()
+            scanState.close()
+            customAmountDialog.close()
+            onBack?.invoke()
+        }
+
+        LaunchedEffect(requestActive, onBack, lastActivityTimestamp) {
+            if (onBack == null || requestActive) {
+                return@LaunchedEffect
+            }
+
+            val elapsed = SystemClock.elapsedRealtime() - lastActivityTimestamp
+            val remaining = SELF_SERVICE_TOPUP_IDLE_TIMEOUT_MS - elapsed
+            if (remaining <= 0L) {
+                leaveSelfService()
+                return@LaunchedEffect
+            }
+
+            delay(remaining)
+            leaveSelfService()
+        }
 
         NfcScanDialog(
             state = scanState,
             showClarification = true,
             onDismiss = {
                 paymentSelectionViewModel.resetCustomerDisplay()
+                resetIdleTimer()
             },
             onScan = { tag ->
                 paymentSelectionViewModel.resetCustomerDisplay()
+                resetIdleTimer()
                 activity?.let { currentActivity ->
                     scope.launch {
                         viewModel.topUpWithCard(currentActivity, tag)
@@ -124,6 +167,8 @@ fun TopUpSelection(
             currentStep = currentStep,
             amount = topUpState.currentAmount,
             maxAmount = maxAmount,
+            customAmountDialog = customAmountDialog,
+            onCustomAmountDialogClose = resetIdleTimer,
             requestActive = requestActive,
             uiLocked = uiLocked,
             onAmountUpdate = { viewModel.setAmount(it) },
@@ -134,11 +179,15 @@ fun TopUpSelection(
                         return@let
                     }
                     paymentSelectionViewModel.showScanChipOnCustomerDisplay()
+                    resetIdleTimer()
                     scanState.open()
                 }
             },
             onBack = onBack,
             bottomPadding = 0.dp,
+            onUserActivity = {
+                setLastActivityTimestamp(SystemClock.elapsedRealtime())
+            },
         )
     } else {
         OperatorTopUpSelection(
@@ -212,16 +261,18 @@ private fun SelfServiceTopUpContent(
     currentStep: Int,
     amount: UInt,
     maxAmount: UInt,
+    customAmountDialog: DialogDisplayState,
+    onCustomAmountDialogClose: () -> Unit,
     requestActive: Boolean,
     uiLocked: Boolean,
     onAmountUpdate: (UInt) -> Unit,
     onClear: () -> Unit,
     onScanPay: () -> Unit,
     onBack: (() -> Unit)?,
-    bottomPadding: androidx.compose.ui.unit.Dp
+    bottomPadding: androidx.compose.ui.unit.Dp,
+    onUserActivity: () -> Unit,
 ) {
     val profile = rememberSelfServiceDeviceProfile()
-    val customAmountDialog = rememberDialogDisplayState()
 
     TopUpAmountDialog(
         state = customAmountDialog,
@@ -229,12 +280,23 @@ private fun SelfServiceTopUpContent(
         amount = amount,
         onAmountUpdate = onAmountUpdate,
         onClear = onClear,
+        onClose = onCustomAmountDialogClose,
     )
 
     SelfServiceBackground(
         modifier = Modifier
             .fillMaxSize()
             .padding(bottom = bottomPadding)
+            .pointerInput(onUserActivity) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                        if (event.changes.any { it.pressed || it.positionChanged() }) {
+                            onUserActivity()
+                        }
+                    }
+                }
+            }
     ) {
         Column(
             modifier = Modifier
@@ -312,6 +374,9 @@ private fun SelfServiceAmountEditor(
     onAmountUpdate: (UInt) -> Unit,
     onCustomAmount: () -> Unit,
 ) {
+    val presetAmounts = setOf(10u, 20u, 30u, 50u, 100u).map { it * 100u }.toSet()
+    val customAmountSelected = amount > 0u && amount !in presetAmounts
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(if (isSmallScreen) 6.dp else 8.dp)
@@ -410,13 +475,12 @@ private fun SelfServiceAmountEditor(
             }
         }
 
-        SelfServiceActionButton(
-            text = stringResource(R.string.selfservice_custom_amount),
+        SelfServiceCustomAmountChip(
+            selected = customAmountSelected,
+            amount = amount.takeIf { customAmountSelected },
             onClick = onCustomAmount,
             modifier = Modifier.fillMaxWidth(),
-            primary = false,
-            fontSize = if (isSmallScreen) 16.sp else 18.sp,
-            height = if (isSmallScreen) 60.dp else 64.dp
+            isSmallScreen = isSmallScreen
         )
     }
 }
@@ -461,8 +525,8 @@ private fun SelfServiceTopUpStepper(currentStep: Int, isSmallScreen: Boolean) {
             val isDone = stepNumber < currentStep
             val isActive = stepNumber == currentStep
             val background = when {
-                isDone -> Color(0xFF16342A)
-                isActive -> Color(0xFF243A63)
+                isDone -> SelfServicePalette.successPanel
+                isActive -> SelfServicePalette.highlightedPanel
                 else -> SelfServicePalette.panelMuted
             }
             val border = when {
@@ -506,13 +570,13 @@ private fun SelfServiceTopUpStepper(currentStep: Int, isSmallScreen: Boolean) {
                             androidx.compose.material.Icon(
                                 imageVector = Icons.Filled.Check,
                                 contentDescription = null,
-                                tint = SelfServicePalette.backgroundTop,
+                                tint = SelfServicePalette.accentText,
                                 modifier = Modifier.size(14.dp)
                             )
                         } else {
                             Text(
                                 text = stepNumber.toString(),
-                                color = SelfServicePalette.backgroundTop,
+                                color = SelfServicePalette.accentText,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp
                             )
@@ -563,7 +627,7 @@ private fun SelfServiceQuickAmountChip(
         ) {
             Text(
                 text = "€$amountEuro",
-                color = if (selected) SelfServicePalette.backgroundTop else SelfServicePalette.title,
+                color = if (selected) SelfServicePalette.accentText else SelfServicePalette.title,
                 fontWeight = FontWeight.Bold,
                 fontSize = if (isSmallScreen) 20.sp else 24.sp,
                 textAlign = TextAlign.Center,
@@ -572,6 +636,62 @@ private fun SelfServiceQuickAmountChip(
         }
     }
 }
+
+@Composable
+private fun SelfServiceCustomAmountChip(
+    selected: Boolean,
+    amount: UInt?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isSmallScreen: Boolean
+) {
+    val chipHeight = if (isSmallScreen) 72.dp else 88.dp
+    val borderColor = if (selected) SelfServicePalette.accent else SelfServicePalette.title.copy(alpha = 0.32f)
+    Card(
+        modifier = modifier.height(chipHeight),
+        backgroundColor = if (selected) SelfServicePalette.accent else SelfServicePalette.interactivePanel,
+        shape = RoundedCornerShape(24.dp),
+        elevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .border(
+                    if (selected) 2.dp else 1.5.dp,
+                    borderColor,
+                    RoundedCornerShape(24.dp)
+                )
+                .clickable { onClick() }
+                .padding(horizontal = if (isSmallScreen) 14.dp else 18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = stringResource(R.string.selfservice_custom_amount),
+                    color = if (selected) SelfServicePalette.accentText else SelfServicePalette.title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = if (isSmallScreen) 18.sp else 20.sp,
+                )
+                Text(
+                    text = stringResource(R.string.topup_operator_custom_amount_hint),
+                    color = if (selected) SelfServicePalette.accentText.copy(alpha = 0.82f) else SelfServicePalette.subtitle,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = if (isSmallScreen) 12.sp else 13.sp,
+                )
+            }
+            Text(
+                text = amount?.let(::formatSelfServiceEuroAmount) ?: "…",
+                color = if (selected) SelfServicePalette.accentText else SelfServicePalette.title,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = if (isSmallScreen) 22.sp else 26.sp,
+                textAlign = TextAlign.End,
+            )
+        }
+    }
+}
+
+private fun formatSelfServiceEuroAmount(cents: UInt): String = "%.2f€".format(cents.toDouble() / 100.0)
 
 @Composable
 private fun SelfServiceProcessingPanel(

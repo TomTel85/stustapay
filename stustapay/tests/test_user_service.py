@@ -121,7 +121,13 @@ async def test_invitation_token_is_stored_hashed_and_raw_token_is_required_for_a
     accepted = await user_service.accept_invitation(
         payload=AcceptInvitationPayload(token=invitation.token, password="safe-password")
     )
-    assert accepted["status"] == "success"
+    assert accepted.status == "success"
+    assert accepted.login == user.login
+    assert "sign in with your username" in accepted.message
+
+    logged_in = await user_service.login_user(username=user.login, password="safe-password")
+    assert logged_in.success is not None
+    assert logged_in.success.user.login == user.login
 
 
 @pytest.mark.parametrize(
@@ -196,7 +202,7 @@ async def test_invitation_uses_global_email_templates(
     )
     assert mail is not None
     assert mail["node_id"] == ROOT_NODE_ID
-    assert mail["from_addr"] == "noreply@example.test"
+    assert mail["from_addr"] == "teamfestlichPay Invite <noreply@example.test>"
     assert "Templated User" in mail["subject"]
     assert "Einladung fuer Templated User" in mail["subject"]
     assert "Invitation for Templated User" in mail["subject"]
@@ -258,19 +264,24 @@ async def test_invitation_falls_back_to_builtin_text_when_template_is_missing(
     )
     assert mail is not None
     assert mail["node_id"] == ROOT_NODE_ID
-    assert mail["from_addr"] == "noreply@example.test"
-    assert f"Einladung zur Verwaltung von {event_node.name}" in mail["subject"]
-    assert f"Invitation to manage {event_node.name}" in mail["subject"]
+    assert mail["from_addr"] == "teamfestlichPay Invite <noreply@example.test>"
+    assert f"teamfestlichPay Invite: {event_node.name}" in mail["subject"]
     assert "Deutsch" in mail["text_message"]
     assert "English" in mail["text_message"]
     assert "Fallback User" in mail["text_message"]
     assert user.login in mail["text_message"]
     assert "teamfestlichPay administration portal" in mail["text_message"]
+    assert "Passwort mit mindestens 8 Zeichen" in mail["text_message"]
+    assert f"mit Ihrem Benutzernamen {user.login} und Ihrem Passwort" in mail["text_message"]
+    assert "After setting your password" in mail["text_message"]
     assert "Hallo Fallback User" in mail["html_message"]
     assert "Hello Fallback User" in mail["html_message"]
     assert user.login in mail["html_message"]
     assert "teamfestlichPay" in mail["html_message"]
     assert "Accept invitation" in mail["html_message"]
+    assert "Passwort mit mindestens 8 Zeichen" in mail["html_message"]
+    assert f"mit Ihrem Benutzernamen <strong>{user.login}</strong> und Ihrem Passwort" in mail["html_message"]
+    assert "sign in to the portal with your username" in mail["html_message"]
 
 
 async def test_invitation_uses_partial_template_overrides(
@@ -323,9 +334,9 @@ async def test_invitation_uses_partial_template_overrides(
     )
     assert mail is not None
     assert mail["node_id"] == ROOT_NODE_ID
-    assert mail["from_addr"] == "noreply@example.test"
+    assert mail["from_addr"] == "teamfestlichPay Invite <noreply@example.test>"
     assert "Benutzerdefinierter Betreff fuer Partial Template User" in mail["subject"]
-    assert "Invitation to manage" in mail["subject"]
+    assert "teamfestlichPay Invite:" in mail["subject"]
     assert "accept-invitation?token=" in mail["text_message"]
     assert "Benutzerdefiniertes HTML fuer Partial Template User" in mail["html_message"]
     assert "Hello Partial Template User" in mail["html_message"]

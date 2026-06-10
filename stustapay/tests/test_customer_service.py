@@ -8,20 +8,19 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from dateutil.parser import parse
 from sftkit.database import Connection
-
-from stustapay.core.schema.customer import Customer, OrderWithBon
-from stustapay.core.schema.order import Order, OrderType, PaymentMethod, PendingOrderStatus
-from stustapay.core.schema.product import NewProduct, Product
-from stustapay.core.schema.tax_rate import TaxRate
-from stustapay.core.schema.till import Till
-from stustapay.core.schema.tree import ROOT_NODE_ID, NewEvent, Node
-from stustapay.payment.sumup.api import SumUpCheckout, SumUpCheckoutStatus
-from stustapay.payment.sumup.api import SumUpError
 from sftkit.error import (
     AccessDenied,
     InvalidArgument,
     Unauthorized,
 )
+
+from stustapay.core.schema.customer import Customer, OrderWithBon
+from stustapay.core.schema.order import Order, OrderType, PaymentMethod, PendingOrderStatus
+from stustapay.core.schema.payout import NewPayoutRun
+from stustapay.core.schema.product import NewProduct, Product
+from stustapay.core.schema.tax_rate import TaxRate
+from stustapay.core.schema.till import Till
+from stustapay.core.schema.tree import ROOT_NODE_ID, NewEvent, Node
 from stustapay.core.service.customer.common import fetch_customer
 from stustapay.core.service.customer.customer import CustomerBank, CustomerService
 from stustapay.core.service.mail import MailService
@@ -29,6 +28,7 @@ from stustapay.core.service.order.booking import NewLineItem, book_order
 from stustapay.core.service.order.order import fetch_order
 from stustapay.core.service.product import ProductService
 from stustapay.core.service.tree.service import create_event
+from stustapay.payment.sumup.api import SumUpCheckout, SumUpCheckoutStatus, SumUpError
 from stustapay.tests.conftest import Cashier, CreateRandomUserTag
 
 
@@ -472,6 +472,7 @@ async def test_create_online_topup_checkout_replaces_timed_out_pending_checkout(
         timed_out_at,
         old_order_uuid,
     )
+    del sumup_api.checkouts[old_order_uuid]
 
     _, new_order_uuid = await customer_service.sumup.create_online_topup_checkout(
         token=auth.token,
@@ -484,6 +485,128 @@ async def test_create_online_topup_checkout_replaces_timed_out_pending_checkout(
         "select status from pending_sumup_order where uuid = $1",
         old_order_uuid,
     ) == PendingOrderStatus.cancelled.value
+
+
+async def test_create_online_topup_checkout_reuses_timed_out_pending_checkout_when_sumup_is_still_pending(
+    customer_service: CustomerService, db_connection: Connection, test_customer: Customer, event_node: Node
+):
+    customer_service.sumup.config.core.sumup_enabled = True
+    auth = await customer_service.login_customer(
+        uid=test_customer.user_tag_uid, pin=test_customer.user_tag_pin, node_id=event_node.id
+    )
+    assert auth is not None
+
+    sumup_api = OnlineTopUpSumUpApiMock(api_key="test", merchant_code="merchant")
+    customer_service.sumup._create_sumup_api = lambda merchant_code, api_key: sumup_api  # type: ignore
+
+    first_checkout, first_order_uuid = await customer_service.sumup.create_online_topup_checkout(
+        token=auth.token,
+        amount=20,
+    )
+
+    timed_out_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    await db_connection.execute(
+        "update pending_sumup_order set created_at = $1 where uuid = $2",
+        timed_out_at,
+        first_order_uuid,
+    )
+
+    second_checkout, second_order_uuid = await customer_service.sumup.create_online_topup_checkout(
+        token=auth.token,
+        amount=20,
+    )
+
+    assert second_order_uuid == first_order_uuid
+    assert second_checkout.id == first_checkout.id
+    assert sumup_api.create_calls == 1
+    assert await db_connection.fetchval(
+        "select status from pending_sumup_order where uuid = $1",
+        first_order_uuid,
+    ) == PendingOrderStatus.pending.value
+
+
+async def test_create_online_topup_checkout_books_timed_out_paid_checkout_instead_of_creating_a_new_one(
+    customer_service: CustomerService, db_connection: Connection, test_customer: Customer, event_node: Node
+):
+    customer_service.sumup.config.core.sumup_enabled = True
+    auth = await customer_service.login_customer(
+        uid=test_customer.user_tag_uid, pin=test_customer.user_tag_pin, node_id=event_node.id
+    )
+    assert auth is not None
+
+    sumup_api = OnlineTopUpSumUpApiMock(api_key="test", merchant_code="merchant")
+    customer_service.sumup._create_sumup_api = lambda merchant_code, api_key: sumup_api  # type: ignore
+
+    _, old_order_uuid = await customer_service.sumup.create_online_topup_checkout(
+        token=auth.token,
+        amount=20,
+    )
+
+    timed_out_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    await db_connection.execute(
+        "update pending_sumup_order set created_at = $1 where uuid = $2",
+        timed_out_at,
+        old_order_uuid,
+    )
+    sumup_api.checkouts[old_order_uuid].status = SumUpCheckoutStatus.PAID
+
+    reused_checkout, reused_order_uuid = await customer_service.sumup.create_online_topup_checkout(
+        token=auth.token,
+        amount=20,
+    )
+
+    assert reused_order_uuid == old_order_uuid
+    assert reused_checkout.id == sumup_api.checkouts[old_order_uuid].id
+    assert sumup_api.create_calls == 1
+    assert await db_connection.fetchval(
+        "select status from pending_sumup_order where uuid = $1",
+        old_order_uuid,
+    ) == PendingOrderStatus.booked.value
+    assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", old_order_uuid) == 1
+    assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 140
+
+
+async def test_create_online_topup_checkout_rejects_paid_checkout_when_booking_fails(
+    customer_service: CustomerService,
+    db_connection: Connection,
+    test_customer: Customer,
+    event_node: Node,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    customer_service.sumup.config.core.sumup_enabled = True
+    auth = await customer_service.login_customer(
+        uid=test_customer.user_tag_uid, pin=test_customer.user_tag_pin, node_id=event_node.id
+    )
+    assert auth is not None
+
+    sumup_api = OnlineTopUpSumUpApiMock(api_key="test", merchant_code="merchant")
+    customer_service.sumup._create_sumup_api = lambda merchant_code, api_key: sumup_api  # type: ignore
+
+    _, order_uuid = await customer_service.sumup.create_online_topup_checkout(
+        token=auth.token,
+        amount=20,
+    )
+    sumup_api.checkouts[order_uuid].status = SumUpCheckoutStatus.PAID
+
+    async def fail_booking(**kwargs):
+        del kwargs
+        raise RuntimeError("forced booking failure")
+
+    monkeypatch.setattr(customer_service.sumup, "_book_paid_pending_order", fail_booking)
+
+    with pytest.raises(InvalidArgument, match="Payment was received but could not be booked yet"):
+        await customer_service.sumup.create_online_topup_checkout(
+            token=auth.token,
+            amount=20,
+        )
+
+    assert sumup_api.create_calls == 1
+    assert await db_connection.fetchval(
+        "select status from pending_sumup_order where uuid = $1",
+        order_uuid,
+    ) == PendingOrderStatus.pending.value
+    assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", order_uuid) == 0
+    assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 120
 
 
 async def test_check_online_topup_checkout_books_paid_checkout_before_returning_paid(
@@ -580,6 +703,44 @@ async def test_check_online_topup_checkout_keeps_paid_checkout_pending_when_book
     assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 120
 
 
+async def test_check_online_topup_checkout_books_late_paid_checkout_after_local_cancellation(
+    customer_service: CustomerService, db_connection: Connection, test_customer: Customer, event_node: Node
+):
+    customer_service.sumup.config.core.sumup_enabled = True
+    auth = await customer_service.login_customer(
+        uid=test_customer.user_tag_uid, pin=test_customer.user_tag_pin, node_id=event_node.id
+    )
+    assert auth is not None
+
+    sumup_api = OnlineTopUpSumUpApiMock(api_key="test", merchant_code="merchant")
+    customer_service.sumup._create_sumup_api = lambda merchant_code, api_key: sumup_api  # type: ignore
+
+    _, order_uuid = await customer_service.sumup.create_online_topup_checkout(
+        token=auth.token,
+        amount=20,
+    )
+    await db_connection.execute(
+        "update pending_sumup_order set status = $1 where uuid = $2",
+        PendingOrderStatus.cancelled.value,
+        order_uuid,
+    )
+    sumup_api.checkouts[order_uuid].status = SumUpCheckoutStatus.PAID
+
+    assert (
+        await customer_service.sumup.check_online_topup_checkout(
+            token=auth.token,
+            order_uuid=order_uuid,
+        )
+        == SumUpCheckoutStatus.PAID
+    )
+    assert await db_connection.fetchval(
+        "select status from pending_sumup_order where uuid = $1",
+        order_uuid,
+    ) == PendingOrderStatus.booked.value
+    assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", order_uuid) == 1
+    assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 140
+
+
 async def test_concurrent_check_online_topup_checkout_books_paid_checkout_once(
     customer_service: CustomerService, db_connection: Connection, test_customer: Customer, event_node: Node
 ):
@@ -613,6 +774,53 @@ async def test_concurrent_check_online_topup_checkout_books_paid_checkout_once(
     assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 140
 
 
+async def test_pending_order_processor_books_timed_out_paid_online_topup(
+    customer_service: CustomerService,
+    db_connection: Connection,
+    test_customer: Customer,
+    event_node: Node,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    customer_service.sumup.config.core.sumup_enabled = True
+    auth = await customer_service.login_customer(
+        uid=test_customer.user_tag_uid, pin=test_customer.user_tag_pin, node_id=event_node.id
+    )
+    assert auth is not None
+
+    sumup_api = OnlineTopUpSumUpApiMock(api_key="test", merchant_code="merchant")
+    customer_service.sumup._create_sumup_api = lambda merchant_code, api_key: sumup_api  # type: ignore
+
+    _, order_uuid = await customer_service.sumup.create_online_topup_checkout(
+        token=auth.token,
+        amount=20,
+    )
+    await db_connection.execute(
+        "update pending_sumup_order set created_at = $1 where uuid = $2",
+        datetime.now(timezone.utc) - timedelta(minutes=10),
+        order_uuid,
+    )
+    sumup_api.checkouts[order_uuid].status = SumUpCheckoutStatus.PAID
+
+    class StopProcessing(Exception):
+        pass
+
+    async def stop_after_first_sleep(*args, **kwargs):
+        del args, kwargs
+        raise StopProcessing()
+
+    monkeypatch.setattr(asyncio, "sleep", stop_after_first_sleep)
+
+    with pytest.raises(StopProcessing):
+        await customer_service.sumup.run_sumup_pending_order_processing()
+
+    assert await db_connection.fetchval(
+        "select status from pending_sumup_order where uuid = $1",
+        order_uuid,
+    ) == PendingOrderStatus.booked.value
+    assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", order_uuid) == 1
+    assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 140
+
+
 async def test_get_orders_with_bon(
     customer_service: CustomerService, order_with_bon: Order, test_customer: Customer, event_node: Node
 ):
@@ -638,8 +846,20 @@ async def test_get_orders_with_bon(
 
 
 async def test_update_customer_info(
-    test_customer: Customer, customer_service: CustomerService, mail_service: MailService, event_node: Node
+    test_customer: Customer,
+    customer_service: CustomerService,
+    mail_service: MailService,
+    event_node: Node,
+    db_connection: Connection,
 ):
+    await db_connection.execute("delete from mails")
+    assert event_node.event is not None
+    await db_connection.execute(
+        "update event set email_enabled = true, email_default_sender = $2 where id = $1",
+        event_node.event.id,
+        "noreply@test.invalid",
+    )
+
     auth = await customer_service.login_customer(
         uid=test_customer.user_tag_uid, pin=test_customer.user_tag_pin, node_id=event_node.id
     )
@@ -654,11 +874,12 @@ async def test_update_customer_info(
 
     customer_bank = CustomerBank(iban=valid_IBAN, account_name=account_name, email=email, donation=0)
 
-    await customer_service.update_customer_info(
+    email_info = await customer_service.update_customer_info(
         token=auth.token,
         customer_bank=customer_bank,
         mail_service=mail_service,
     )
+    await customer_service.send_payout_registered_email(mail_service=mail_service, email_info=email_info)
 
     # test if get_customer returns the updated data
     result = await customer_service.get_customer(token=auth.token)
@@ -668,6 +889,20 @@ async def test_update_customer_info(
     assert result.iban == valid_IBAN
     assert result.account_name == account_name
     assert result.email == email
+
+    mail = await db_connection.fetchrow(
+        "select subject, text_message, html_message, to_addr, from_addr from mails order by id desc limit 1"
+    )
+    assert mail is not None
+    assert mail["subject"] == "[StuStaPay] Registered for Payout"
+    assert mail["to_addr"] == email
+    assert mail["from_addr"] == f"{event_node.name} Auszahlung <noreply@test.invalid>"
+    assert "remaining funds are registered for payout" in mail["text_message"]
+    assert mail["html_message"] is not None
+    assert "<html" in mail["html_message"]
+    assert "teamfestlichPay" in mail["html_message"]
+    assert "#2AD2C9" in mail["html_message"]
+    assert "remaining funds are registered for payout" in mail["html_message"]
 
     # test invalid IBAN
     customer_bank = CustomerBank(iban=invalid_IBAN, account_name=account_name, email=email, donation=0)
@@ -722,3 +957,76 @@ async def test_update_customer_info(
         await customer_service.update_customer_info(
             token="wrong", customer_bank=customer_bank, mail_service=mail_service
         )
+
+
+async def test_update_customer_info_blocked_only_for_active_payout_runs(
+    test_customer: Customer,
+    customer_service: CustomerService,
+    mail_service: MailService,
+    event_node: Node,
+    event_admin_token: str,
+    db_connection: Connection,
+):
+    auth = await customer_service.login_customer(
+        uid=test_customer.user_tag_uid, pin=test_customer.user_tag_pin, node_id=event_node.id
+    )
+    assert auth is not None
+
+    initial_bank_data = CustomerBank(
+        iban="DE89370400440532013000",
+        account_name="Der Tester",
+        email="test@testermensch.de",
+        donation=0,
+    )
+    await customer_service.update_customer_info(
+        token=auth.token,
+        customer_bank=initial_bank_data,
+        mail_service=mail_service,
+    )
+
+    payout_run = await customer_service.payout.create_payout_run(
+        token=event_admin_token,
+        node_id=event_node.id,
+        new_payout_run=NewPayoutRun(max_num_payouts=10, max_payout_sum=10000),
+    )
+
+    updated_bank_data = CustomerBank(
+        iban="DE44500105175407324931",
+        account_name="Tester Updated",
+        email="updated@testermensch.de",
+        donation=0,
+    )
+
+    with pytest.raises(InvalidArgument):
+        await customer_service.update_customer_info(
+            token=auth.token,
+            customer_bank=updated_bank_data,
+            mail_service=mail_service,
+        )
+    active_payout_info = await customer_service.payout_info(token=auth.token)
+    assert active_payout_info.in_payout_run
+    assert active_payout_info.payout_date is None
+
+    await customer_service.payout.set_payout_run_as_done(
+        token=event_admin_token,
+        node_id=event_node.id,
+        payout_run_id=payout_run.id,
+        mail_service=mail_service,
+    )
+    completed_payout_info = await customer_service.payout_info(token=auth.token)
+    assert not completed_payout_info.in_payout_run
+    assert completed_payout_info.payout_date is not None
+
+    await db_connection.execute("update account set balance = 30 where id = $1", test_customer.id)
+
+    await customer_service.update_customer_info(
+        token=auth.token,
+        customer_bank=updated_bank_data,
+        mail_service=mail_service,
+    )
+
+    result = await customer_service.get_customer(token=auth.token)
+    assert result is not None
+    assert result.iban == updated_bank_data.iban
+    assert result.account_name == updated_bank_data.account_name
+    assert result.email == updated_bank_data.email
