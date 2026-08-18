@@ -71,6 +71,11 @@ export const translations: NestedPartialAsStrings<Translations> = {
     actions: "Aktionen",
     delete: "Löschen",
   },
+  errorPage: {
+    brand: "TeamFestlichPay",
+    maintenance: "Wartung",
+    currentlyUnavailable: "Die TeamFestlichPay Administration ist aktuell nicht verfügbar. Bitte versuche es später erneut.",
+  },
   nodes: {
     overview: "Übersicht",
     statistics: "Statistiken",
@@ -344,6 +349,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
     warningEventDatesNeedConfiguration:
       "Bitte konfigurieren Sie die Start- / Endzeiten für dieses Ereignis sowie die tägliche Endzeit in den Ereigniseinstellungen",
     generateRevenueReport: "Umsatzbericht generieren",
+    generateRevenueReportError: "Umsatzbericht konnte nicht generiert werden",
     filterDate: "Datum",
     filterSubnode: "Nach Unterknoten filtern",
     allSubnodes: "Alle Unterknoten",
@@ -560,6 +566,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
       uploadBanner: "Banner hochladen",
       primaryColor: "Hauptfarbe",
       secondaryColor: "Sekundärfarbe",
+      fontColor: "Schriftfarbe",
       appearance: "Aussehen des Portals",
     },
     agb: {
@@ -596,6 +603,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
       globalTabLabel: "Globale App",
       sumup_payment_enabled: "SumUp-Zahlung aktiviert",
       sumup_topup_enabled: "SumUp-Aufladung aktiviert",
+      group_topup_enabled: "Gruppen-Aufladung aktiviert",
       sumup_api_key: "SumUp-API-Schlüssel",
       sumup_merchant_code: "SumUp-Händlercode",
       sumup_affiliate_key: "SumUp-Affiliate-Schlüssel",
@@ -1072,6 +1080,12 @@ export const translations: NestedPartialAsStrings<Translations> = {
       exit: "Auslass",
     },
     selfService: "Self-Service-Terminal",
+    appDisplayMode: {
+      label: "Anzeigemodus",
+      localDefault: "Lokaler Standard",
+      day: "Tagmodus",
+      night: "Nachtmodus",
+    },
     till: "Kasse",
     switchTill: "Kasse wechseln",
     removeTill: "Kasse entfernen",

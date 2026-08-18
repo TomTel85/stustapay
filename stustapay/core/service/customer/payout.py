@@ -27,7 +27,7 @@ from stustapay.core.service.account import get_system_account_for_node
 from stustapay.core.service.auth import AuthService
 from stustapay.core.service.common.decorators import requires_node, requires_user
 from stustapay.core.service.config import ConfigService
-from stustapay.core.service.customer.common import fetch_customer
+from stustapay.core.service.customer.common import fetch_customer, reset_customer_payout_info
 from stustapay.core.service.email_templates import render_plain_text_payout_html
 from stustapay.core.service.mail import MailService
 from stustapay.core.service.tree.common import (
@@ -332,11 +332,12 @@ class PayoutService(Service[Config]):
                 continue
             assert res_config.payout_done_message is not None
             message = res_config.payout_done_message.format(**payout.model_dump())
+            subject = res_config.payout_done_subject or ""
             payout_sender = res_config.payout_sender or res_config.email_default_sender
             await mail_service.send_mail(
-                subject=res_config.payout_done_subject,
+                subject=subject,
                 text_message=message,
-                html_message=render_plain_text_payout_html(message, res_config.payout_done_subject),
+                html_message=render_plain_text_payout_html(message, subject),
                 from_addr=(
                     formataddr((f"{node.name} Auszahlung", payout_sender))
                     if payout_sender
@@ -345,6 +346,11 @@ class PayoutService(Service[Config]):
                 to_addr=payout.email,
                 node_id=node.id,
             )
+
+        await reset_customer_payout_info(
+            conn=conn,
+            customer_account_ids=[payout.customer_account_id for payout in payouts],
+        )
 
     @with_db_transaction
     @requires_node(event_only=True)

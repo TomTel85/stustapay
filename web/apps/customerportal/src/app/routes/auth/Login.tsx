@@ -88,7 +88,7 @@ export const Login: React.FC = () => {
           <Avatar sx={{
             margin: 1,
             backgroundColor: isDarkMode ? "rgba(255, 255, 255, 0.12)" : "var(--primary-main, #1976d2)",
-            color: isDarkMode ? "white" : "white",
+            color: isDarkMode ? "white" : "var(--portal-font-color)",
             opacity: 0.9
           }}>
             <LockOutlinedIcon color="inherit" />
@@ -152,15 +152,27 @@ export const Login: React.FC = () => {
             {t("wristbandTagExampleDescription")}
           </Typography>
           <Box
-            component="img"
-            src={PinUidHowToImg}
-            alt={t("wristbandTagExampleTitle")}
             sx={{
               width: "100%",
-              height: "auto",
               marginTop: "1em",
+              p: 1.5,
+              borderRadius: 3,
+              backgroundColor: isDarkMode ? "rgba(255, 255, 255, 0.92)" : "rgba(255, 255, 255, 0.88)",
+              border: isDarkMode ? "1px solid rgba(255, 255, 255, 0.16)" : "1px solid rgba(15, 23, 42, 0.08)",
+              boxShadow: isDarkMode ? "0 12px 32px rgba(0, 0, 0, 0.3)" : "0 12px 32px rgba(15, 23, 42, 0.08)",
             }}
-          />
+          >
+            <Box
+              component="img"
+              src={PinUidHowToImg}
+              alt={t("wristbandTagExampleTitle")}
+              sx={{
+                display: "block",
+                width: "100%",
+                height: "auto",
+              }}
+            />
+          </Box>
         </Stack>
       </Paper>
     </Container>

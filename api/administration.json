@@ -13627,6 +13627,14 @@
         ],
         "title": "AccountType"
       },
+      "AppDisplayMode": {
+        "type": "string",
+        "enum": [
+          "day",
+          "night"
+        ],
+        "title": "AppDisplayMode"
+      },
       "AssignRegisterPayload": {
         "properties": {
           "cashier_id": {
@@ -16642,6 +16650,11 @@
             "type": "boolean",
             "title": "Sumup Topup Enabled"
           },
+          "group_topup_enabled": {
+            "type": "boolean",
+            "title": "Group Topup Enabled",
+            "default": false
+          },
           "sumup_payment_enabled": {
             "type": "boolean",
             "title": "Sumup Payment Enabled"
@@ -16916,6 +16929,17 @@
             ],
             "title": "Customer Portal Background Color"
           },
+          "customer_portal_font_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Portal Font Color"
+          },
           "translation_texts": {
             "additionalProperties": {
               "additionalProperties": {
@@ -17172,6 +17196,16 @@
             "type": "boolean",
             "title": "Self Service",
             "default": false
+          },
+          "app_display_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppDisplayMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -18614,6 +18648,17 @@
             ],
             "title": "Customer Tag Id"
           },
+          "shared_topup_contributor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shared Topup Contributor Name"
+          },
           "line_items": {
             "items": {
               "$ref": "#/components/schemas/LineItem"
@@ -18782,6 +18827,17 @@
               }
             ],
             "title": "Customer Tag Id"
+          },
+          "shared_topup_contributor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shared Topup Contributor Name"
           },
           "line_items": {
             "items": {
@@ -19605,6 +19661,11 @@
             "type": "boolean",
             "title": "Sumup Topup Enabled"
           },
+          "group_topup_enabled": {
+            "type": "boolean",
+            "title": "Group Topup Enabled",
+            "default": false
+          },
           "sumup_payment_enabled": {
             "type": "boolean",
             "title": "Sumup Payment Enabled"
@@ -19871,6 +19932,17 @@
               }
             ],
             "title": "Customer Portal Background Color"
+          },
+          "customer_portal_font_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Portal Font Color"
           },
           "translation_texts": {
             "additionalProperties": {
@@ -20112,6 +20184,11 @@
             "type": "boolean",
             "title": "Sumup Topup Enabled"
           },
+          "group_topup_enabled": {
+            "type": "boolean",
+            "title": "Group Topup Enabled",
+            "default": false
+          },
           "sumup_payment_enabled": {
             "type": "boolean",
             "title": "Sumup Payment Enabled"
@@ -20378,6 +20455,17 @@
               }
             ],
             "title": "Customer Portal Background Color"
+          },
+          "customer_portal_font_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Portal Font Color"
           },
           "translation_texts": {
             "additionalProperties": {
@@ -21014,6 +21102,16 @@
             "type": "boolean",
             "title": "Self Service",
             "default": false
+          },
+          "app_display_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppDisplayMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "id": {
             "type": "integer",
@@ -22012,6 +22110,11 @@
             "type": "boolean",
             "title": "Sumup Topup Enabled"
           },
+          "group_topup_enabled": {
+            "type": "boolean",
+            "title": "Group Topup Enabled",
+            "default": false
+          },
           "sumup_payment_enabled": {
             "type": "boolean",
             "title": "Sumup Payment Enabled"
@@ -22285,6 +22388,17 @@
               }
             ],
             "title": "Customer Portal Background Color"
+          },
+          "customer_portal_font_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Portal Font Color"
           },
           "translation_texts": {
             "additionalProperties": {
@@ -23091,6 +23205,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

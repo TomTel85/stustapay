@@ -3204,6 +3204,8 @@ export type ValidationError = {
   loc: (string | number)[];
   msg: string;
   type: string;
+  input?: any;
+  ctx?: object;
 };
 export type HttpValidationError = {
   detail?: ValidationError[];
@@ -3626,6 +3628,7 @@ export type Order = {
   customer_account_id: number | null;
   customer_tag_uid: number | null;
   customer_tag_id: number | null;
+  shared_topup_contributor_name?: string | null;
   line_items: LineItem[];
 };
 export type OrderRead = {
@@ -3644,6 +3647,7 @@ export type OrderRead = {
   customer_account_id: number | null;
   customer_tag_uid: number | null;
   customer_tag_id: number | null;
+  shared_topup_contributor_name?: string | null;
   line_items: LineItemRead[];
   customer_tag_uid_hex: string | null;
 };
@@ -3831,6 +3835,7 @@ export type OrderWithTse = {
   customer_account_id: number | null;
   customer_tag_uid: number | null;
   customer_tag_id: number | null;
+  shared_topup_contributor_name?: string | null;
   line_items: LineItem[];
   signature_status: string;
   transaction_process_type?: string | null;
@@ -3861,6 +3866,7 @@ export type OrderWithTseRead = {
   customer_account_id: number | null;
   customer_tag_uid: number | null;
   customer_tag_id: number | null;
+  shared_topup_contributor_name?: string | null;
   line_items: LineItemRead[];
   signature_status: string;
   transaction_process_type?: string | null;
@@ -4303,6 +4309,7 @@ export type PublicEventSettings = {
   expected_visitors_per_day?: number | null;
   post_payment_allowed?: boolean;
   sumup_topup_enabled: boolean;
+  group_topup_enabled?: boolean;
   sumup_payment_enabled: boolean;
   customer_portal_url: string;
   customer_portal_about_page_url: string;
@@ -4338,6 +4345,7 @@ export type PublicEventSettings = {
   customer_portal_primary_color?: string | null;
   customer_portal_secondary_color?: string | null;
   customer_portal_background_color?: string | null;
+  customer_portal_font_color?: string | null;
   translation_texts?: {
     [key: string]: {
       [key: string]: string;
@@ -4419,6 +4427,7 @@ export type NewEvent = {
   expected_visitors_per_day?: number | null;
   post_payment_allowed?: boolean;
   sumup_topup_enabled: boolean;
+  group_topup_enabled?: boolean;
   sumup_payment_enabled: boolean;
   customer_portal_url: string;
   customer_portal_about_page_url: string;
@@ -4454,6 +4463,7 @@ export type NewEvent = {
   customer_portal_primary_color?: string | null;
   customer_portal_secondary_color?: string | null;
   customer_portal_background_color?: string | null;
+  customer_portal_font_color?: string | null;
   translation_texts?: {
     [key: string]: {
       [key: string]: string;
@@ -4499,6 +4509,7 @@ export type UpdateEvent = {
   expected_visitors_per_day?: number | null;
   post_payment_allowed?: boolean;
   sumup_topup_enabled: boolean;
+  group_topup_enabled?: boolean;
   sumup_payment_enabled: boolean;
   customer_portal_url: string;
   customer_portal_about_page_url: string;
@@ -4534,6 +4545,7 @@ export type UpdateEvent = {
   customer_portal_primary_color?: string | null;
   customer_portal_secondary_color?: string | null;
   customer_portal_background_color?: string | null;
+  customer_portal_font_color?: string | null;
   translation_texts?: {
     [key: string]: {
       [key: string]: string;
@@ -4568,6 +4580,7 @@ export type RestrictedEventSettings = {
   expected_visitors_per_day?: number | null;
   post_payment_allowed?: boolean;
   sumup_topup_enabled: boolean;
+  group_topup_enabled?: boolean;
   sumup_payment_enabled: boolean;
   customer_portal_url: string;
   customer_portal_about_page_url: string;
@@ -4603,6 +4616,7 @@ export type RestrictedEventSettings = {
   customer_portal_primary_color?: string | null;
   customer_portal_secondary_color?: string | null;
   customer_portal_background_color?: string | null;
+  customer_portal_font_color?: string | null;
   translation_texts?: {
     [key: string]: {
       [key: string]: string;
@@ -4633,7 +4647,7 @@ export type SumUpTokenPayload = {
   redirect_uri: string;
 };
 export type BodyUploadEventBannerTreeEventsNodeIdBannerPost = {
-  file: Blob;
+  file: string;
 };
 export type SumUpCheckoutStatus = "PENDING" | "FAILED" | "PAID";
 export type SumUpTransaction = {
@@ -4742,12 +4756,14 @@ export type SwapCustomerTagPayload = {
   block_source_tag?: boolean;
 };
 export type TerminalMode = "till" | "entry" | "exit";
+export type AppDisplayMode = "day" | "night";
 export type Terminal = {
   name: string;
   description?: string | null;
   mode?: TerminalMode;
   entry_area_id?: number | null;
   self_service?: boolean;
+  app_display_mode?: AppDisplayMode | null;
   id: number;
   node_id: number;
   till_id: number | null;
@@ -4768,6 +4784,7 @@ export type NewTerminal = {
   mode?: TerminalMode;
   entry_area_id?: number | null;
   self_service?: boolean;
+  app_display_mode?: AppDisplayMode | null;
 };
 export type SwitchTillPayload = {
   new_till_id: number;

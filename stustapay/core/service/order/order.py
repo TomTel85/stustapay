@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime, timezone
-from types import SimpleNamespace
 from typing import Dict, Optional, Set
 from uuid import UUID
 
@@ -43,12 +42,6 @@ from stustapay.core.schema.order import (
     PendingTopUp,
     Transaction,
 )
-from stustapay.core.schema.order import (
-    get_source_account as get_source_account,
-)
-from stustapay.core.schema.order import (
-    get_target_account as get_target_account,
-)
 from stustapay.core.schema.product import Product, ProductRestriction, ProductType
 from stustapay.core.schema.terminal import CurrentTerminal
 from stustapay.core.schema.ticket import (
@@ -72,6 +65,7 @@ from stustapay.core.service.common.decorators import (
     requires_user,
 )
 from stustapay.core.service.common.error import InvalidArgument, ServiceException
+from stustapay.core.service.customer.common import reset_customer_payout_info
 from stustapay.core.service.order.pending_order import (
     fetch_pending_order,
     load_pending_ticket_sale,
@@ -83,7 +77,11 @@ from stustapay.core.service.order.pending_order import (
     save_pending_ticket_sale,
     save_pending_topup,
 )
-from stustapay.core.service.order.stats import build_selected_date_condition, get_selected_date_ranges
+from stustapay.core.service.order.stats import (
+    TimeseriesStatsQuery,
+    build_selected_date_condition,
+    get_selected_date_ranges,
+)
 from stustapay.core.service.order.sumup import SumupService
 from stustapay.core.service.product import (
     fetch_discount_product,
@@ -315,6 +313,7 @@ class OrderService(Service[Config]):
                     button.id,
                     till_profile_id,
                 )
+                assert node.ids_to_event_node is not None
                 if any(product.node_id not in node.ids_to_event_node for product in products):
                     raise InvalidArgument("this till profile is not allowed to use these buttons")
             else:
@@ -1390,6 +1389,11 @@ class OrderService(Service[Config]):
             line_items=line_items,
             bookings=prepared_bookings,
         )
+
+        await reset_customer_payout_info(
+            conn=conn,
+            customer_account_ids=[pending_pay_out.customer_account_id],
+        )
         
         # Fetch the current account balance after the transaction
         updated_account = await conn.fetchrow(
@@ -1798,7 +1802,7 @@ class OrderService(Service[Config]):
             field_name="o.booked_at",
             start_param_index=len(params) + 1,
             selected_date_ranges=get_selected_date_ranges(
-                SimpleNamespace(selected_dates=selected_dates),
+                TimeseriesStatsQuery(from_time=None, to_time=None, selected_dates=selected_dates),
                 event,
             ),
         )

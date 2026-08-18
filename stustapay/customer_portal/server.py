@@ -9,15 +9,15 @@ from stustapay.core import database
 from stustapay.core.config import Config
 from stustapay.core.database import get_database
 from stustapay.core.healthcheck import run_healthcheck
-from stustapay.core.http.openapi import ensure_agpl_license_url
 from stustapay.core.http.context import Context
+from stustapay.core.http.openapi import ensure_agpl_license_url
 from stustapay.core.service.config import ConfigService
 from stustapay.core.service.customer.customer import CustomerService
 from stustapay.core.service.mail import MailService
 from stustapay.core.service.order import OrderService
 from stustapay.core.service.user import AuthService
 
-from .routers import auth, base, sumup
+from .routers import auth, base, shared_topup, sumup
 
 
 def get_server(config: Config):
@@ -31,6 +31,7 @@ def get_server(config: Config):
 
     server.add_router(auth.router)
     server.add_router(base.router)
+    server.add_router(shared_topup.router)
     server.add_router(sumup.router)
     return server
 

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -25,10 +26,12 @@ from stustapay.core.schema.till import Till
 from stustapay.core.schema.tree import Node
 from stustapay.core.service.auth import AuthService
 from stustapay.core.service.common.decorators import requires_customer
+from stustapay.core.service.customer.common import fetch_shared_topup_link
 from stustapay.core.service.order.pending_order import (
     fetch_order_by_uuid_for_update,
     fetch_pending_online_topup_for_customer,
     fetch_pending_orders,
+    is_shared_topup_order,
     load_pending_sale,
     load_pending_ticket_sale,
     load_pending_topup,
@@ -55,10 +58,23 @@ from stustapay.payment.sumup.api import (
 SUMUP_CHECKOUT_POLL_INTERVAL = timedelta(seconds=5)
 SUMUP_INITIAL_CHECK_TIMEOUT = timedelta(seconds=20)
 SUMUP_PENDING_ORDER_TIMEOUT = timedelta(minutes=5)  # Time after which pending orders are considered failed
+MAX_PENDING_SHARED_TOPUP_CHECKOUTS_PER_LINK = 50
+GROUP_TOPUP_DISABLED_MESSAGE = "Group top-up is currently disabled"
 
 
 class CreateCheckout(BaseModel):
     amount: float
+
+
+def validate_shared_topup_contributor_name(contributor_name: str) -> str:
+    contributor_name = contributor_name.strip()
+    if not contributor_name:
+        raise InvalidArgument("Contributor name is required")
+    if len(contributor_name) > 80:
+        raise InvalidArgument("Contributor name is too long")
+    if re.search(r"[\x00-\x1f\x7f]", contributor_name):
+        raise InvalidArgument("Contributor name contains invalid characters")
+    return contributor_name
 
 
 def requires_sumup_online_topup_enabled(func):
@@ -133,9 +149,14 @@ class SumupService(Service[Config]):
         self.logger.error(f"Could not confirm local booking for paid order {pending_order.uuid}")
         return SumUpCheckoutStatus.PENDING
 
-    async def get_available_payment_methods_for_node(self, conn: Connection, node_id: int) -> list[str]:
+    async def get_available_payment_methods_for_node(
+        self, conn: Connection, node_id: int, *, allow_group_topup: bool = False
+    ) -> list[str]:
         event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=node_id)
-        if not event_settings.is_sumup_topup_enabled(self.config.core):
+        if not (
+            event_settings.is_sumup_topup_enabled(self.config.core)
+            or (allow_group_topup and event_settings.is_group_topup_enabled(self.config.core))
+        ):
             return []
 
         resolved = await create_sumup_api_for_node(conn=conn, node_id=node_id, api_factory=self._create_sumup_api)
@@ -226,6 +247,7 @@ class SumupService(Service[Config]):
             self.logger.error(f"Found a pending order without a matching till: {pending_order.uuid}")
             raise InvalidArgument("Found a pending order without a matching till")
 
+        result: CompletedSale | CompletedTicketSale | CompletedTopUp
         if pending_order.order_type == PendingOrderType.topup:
             topup = load_pending_topup(pending_order)
             result = await self._process_topup(
@@ -328,6 +350,8 @@ class SumupService(Service[Config]):
             topup = load_pending_topup(pending_order)
             if topup.customer_account_id != current_customer.id:
                 raise InvalidArgument("Invalid order uuid")
+            if await is_shared_topup_order(conn=conn, order_uuid=order_uuid):
+                return SumUpCheckoutStatus.FAILED
             if pending_order.status == PendingOrderStatus.booked:
                 return SumUpCheckoutStatus.PAID
             if pending_order.status == PendingOrderStatus.cancelled:
@@ -495,6 +519,188 @@ class SumupService(Service[Config]):
         )
 
         return checkout_response, order_uuid
+
+    @with_db_transaction
+    async def create_shared_topup_checkout(
+        self,
+        *,
+        conn: Connection,
+        token: str,
+        amount: float,
+        contributor_name: str,
+        customer_portal_base_url: str | None = None,
+    ) -> tuple[SumUpCheckout, uuid.UUID]:
+        contributor_name = validate_shared_topup_contributor_name(contributor_name)
+        link = await fetch_shared_topup_link(
+            conn=conn,
+            token=token,
+            customer_portal_base_url=customer_portal_base_url,
+        )
+        event_node = await fetch_event_node_for_node(conn=conn, node_id=link["node_id"])
+        assert event_node is not None
+        event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=link["node_id"])
+        if not event_settings.is_group_topup_enabled(self.config.core):
+            raise InvalidArgument(GROUP_TOPUP_DISABLED_MESSAGE)
+
+        resolved = await create_sumup_api_for_node(
+            conn=conn, node_id=event_node.id, api_factory=self._create_sumup_api
+        )
+        if resolved is None:
+            raise InvalidArgument("SumUp is enabled but no merchant connection is configured")
+        api, access = resolved
+
+        if amount <= 0:
+            raise InvalidArgument("Must top up more than 0€")
+        if amount != int(amount):
+            raise InvalidArgument("Cent amounts are not allowed")
+
+        await conn.fetchval("select id from account where id = $1 for update", link["customer_account_id"])
+        pending_checkout_count = await conn.fetchval(
+            "select count(*) "
+            "from shared_topup_order sto "
+            "join pending_sumup_order pso on pso.uuid = sto.order_uuid "
+            "where sto.link_id = $1 and pso.status = $2",
+            link["id"],
+            PendingOrderStatus.pending.value,
+        )
+        if pending_checkout_count >= MAX_PENDING_SHARED_TOPUP_CHECKOUTS_PER_LINK:
+            raise InvalidArgument("Too many pending shared topup checkouts")
+
+        customer = await conn.fetch_one(
+            Customer,
+            "select c.* from customer c where c.id = $1",
+            link["customer_account_id"],
+        )
+        max_limit = event_settings.vip_max_account_balance if customer.is_vip else event_settings.max_account_balance
+        new_balance = customer.balance + amount
+        if new_balance > max_limit:
+            raise InvalidArgument(f"Resulting balance would be more than {max_limit}€")
+
+        order_uuid = uuid.uuid4()
+        create_checkout = SumUpCreateCheckout(
+            checkout_reference=order_uuid,
+            amount=amount,
+            currency=event_settings.currency_identifier,
+            merchant_code=access.merchant_code,
+            description=f"{event_node.name} Shared Online TopUp {contributor_name} {order_uuid}",
+            redirect_url=f"{event_settings.customer_portal_url}/shared-topup/{token}?order_uuid={order_uuid}",
+        )
+        checkout_response = await api.create_sumup_checkout(create_checkout)
+        virtual_till = await fetch_virtual_till(conn=conn, node=event_node)
+        completed_top_up = CompletedTopUp(
+            amount=amount,
+            customer_tag_uid=customer.user_tag_uid,
+            customer_account_id=customer.id,
+            payment_method=PaymentMethod.sumup_online,
+            old_balance=customer.balance,
+            new_balance=customer.balance + amount,
+            uuid=order_uuid,
+            booked_at=datetime.now(),
+            cashier_id=None,
+            till_id=virtual_till.id,
+        )
+        await save_pending_topup(
+            conn=conn,
+            node_id=event_node.id,
+            till_id=virtual_till.id,
+            cashier_id=None,
+            topup=completed_top_up,
+        )
+        await conn.execute(
+            "insert into shared_topup_order (order_uuid, link_id, customer_account_id, contributor_name) "
+            "values ($1, $2, $3, $4)",
+            order_uuid,
+            link["id"],
+            customer.id,
+            contributor_name,
+        )
+        return checkout_response, order_uuid
+
+    @with_db_transaction
+    async def check_shared_topup_checkout(
+        self,
+        *,
+        conn: Connection,
+        token: str,
+        order_uuid: uuid.UUID,
+        customer_portal_base_url: str | None = None,
+    ) -> SumUpCheckoutStatus:
+        link = await fetch_shared_topup_link(
+            conn=conn,
+            token=token,
+            order_uuid=order_uuid,
+            customer_portal_base_url=customer_portal_base_url,
+        )
+
+        pending_order = await fetch_order_by_uuid_for_update(conn=conn, uuid=order_uuid)
+        if not pending_order:
+            return SumUpCheckoutStatus.FAILED
+        if pending_order.order_type != PendingOrderType.topup:
+            raise InvalidArgument("Invalid order uuid")
+
+        topup = load_pending_topup(pending_order)
+        if topup.customer_account_id != link["customer_account_id"]:
+            raise InvalidArgument("Invalid order uuid")
+        if pending_order.status == PendingOrderStatus.booked:
+            return SumUpCheckoutStatus.PAID
+        if pending_order.status == PendingOrderStatus.cancelled:
+            try:
+                sumup_checkout = await self._fetch_checkout_for_pending_order(conn=conn, pending_order=pending_order)
+            except SumUpError:
+                self.logger.exception("SumUp API error while checking cancelled shared topup order %s", order_uuid)
+                return SumUpCheckoutStatus.FAILED
+            except Exception:
+                self.logger.exception("Unexpected error checking cancelled shared topup order %s", order_uuid)
+                return SumUpCheckoutStatus.FAILED
+
+            if sumup_checkout and sumup_checkout.status == SumUpCheckoutStatus.PAID:
+                return await self._book_paid_online_topup_for_checkout(conn=conn, pending_order=pending_order)
+            return SumUpCheckoutStatus.FAILED
+
+        current_time = datetime.now(timezone.utc)
+        order_creation_time = pending_order.created_at
+        if order_creation_time is not None and (current_time - order_creation_time) > SUMUP_PENDING_ORDER_TIMEOUT:
+            await conn.execute(
+                "UPDATE pending_sumup_order SET status = $1 WHERE uuid = $2",
+                PendingOrderStatus.cancelled.value,
+                order_uuid,
+            )
+            return SumUpCheckoutStatus.FAILED
+
+        resolved = await create_sumup_api_for_node(
+            conn=conn,
+            node_id=pending_order.node_id,
+            api_factory=self._create_sumup_api,
+        )
+        if resolved is None:
+            return SumUpCheckoutStatus.FAILED
+        sumup_api, _ = resolved
+        try:
+            sumup_checkout = await sumup_api.find_checkout(order_uuid)
+        except SumUpError:
+            self.logger.exception("SumUp API error while checking shared topup order %s", order_uuid)
+            return SumUpCheckoutStatus.FAILED
+        if sumup_checkout is None:
+            return SumUpCheckoutStatus.FAILED
+        if sumup_checkout.status == SumUpCheckoutStatus.PAID:
+            try:
+                await self._book_paid_pending_order(conn=conn, pending_order=pending_order)
+            except asyncpg.exceptions.SerializationError:
+                raise
+            except Exception:
+                self.logger.exception("Failed to book paid shared topup order %s", order_uuid)
+                return SumUpCheckoutStatus.PENDING
+            local_status = await conn.fetchval("SELECT status FROM pending_sumup_order WHERE uuid = $1", order_uuid)
+            if local_status == PendingOrderStatus.booked.value:
+                return SumUpCheckoutStatus.PAID
+            return SumUpCheckoutStatus.PENDING
+        if sumup_checkout.status == SumUpCheckoutStatus.FAILED:
+            await conn.execute(
+                "UPDATE pending_sumup_order SET status = $1 WHERE uuid = $2",
+                PendingOrderStatus.cancelled.value,
+                order_uuid,
+            )
+        return sumup_checkout.status
 
     async def run_sumup_pending_order_processing(self):
         sumup_enabled = self.config.core.sumup_enabled

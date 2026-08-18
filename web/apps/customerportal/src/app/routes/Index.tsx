@@ -75,7 +75,12 @@ export const Index: React.FC = () => {
     <Grid container justifyItems="center" justifyContent="center" spacing={2}>
       {config.sumup_topup_enabled && (
         <Grid size={{ xs: 12, sm: 8 }}>
-          <Alert severity="info" onClick={() => navigate("/topup")} className="glass-alert" sx={{ cursor: "pointer" }}>
+          <Alert
+            severity="info"
+            onClick={() => navigate("/topup")}
+            className="glass-alert portal-alert-info"
+            sx={{ cursor: "pointer" }}
+          >
             <AlertTitle>{t("topup.onlineTopUp")}</AlertTitle>
             <SumupPaymentMethods paymentMethods={config.sumup_topup_payment_methods} />
           </Alert>
@@ -92,7 +97,7 @@ export const Index: React.FC = () => {
               textAlign: "center",
               width: "100%",
               background: "var(--primary-gradient, linear-gradient(135deg, #1976d2 0%, #1565c0 50%, #0d47a1 100%))",
-              color: "white",
+              color: "var(--portal-font-color)",
               borderRadius: 4,
               position: "relative",
               overflow: "hidden",
@@ -123,7 +128,7 @@ export const Index: React.FC = () => {
                   <Typography component="div" variant="body1" sx={{ opacity: 0.85 }}>
                     {t("payout.payoutAmount")}
                   </Typography>
-                  <Typography component="div" variant="h5" fontWeight="bold" sx={{ color: "#90caf9" }}>
+                  <Typography component="div" variant="h5" fontWeight="bold" sx={{ color: "inherit" }}>
                     {formatCurrency(customer.balance - (customer.donation || 0))}
                   </Typography>
                 </div>
@@ -159,9 +164,34 @@ export const Index: React.FC = () => {
         </Grid>
       </Grid>
 
+      {config.group_topup_enabled && (
+        <Grid size={{ xs: 12, sm: 8 }}>
+          <Alert
+            severity="info"
+            variant="outlined"
+            className="glass-alert portal-alert-info"
+            onClick={() => navigate("/topup/shared")}
+            sx={{ cursor: "pointer" }}
+          >
+            <AlertTitle>{t("topup.shared.ownerTitle")}</AlertTitle>
+            <Typography variant="body2" color="text.secondary">
+              <Trans
+                i18nKey="index.sharedTopupHint"
+                components={{ 1: <Link component={RouterLink} to="/topup/shared" color="inherit" fontWeight="medium" /> }}
+              />
+            </Typography>
+          </Alert>
+        </Grid>
+      )}
+
       {config.payout_enabled && (
         <Grid size={{ xs: 12, sm: 8 }}>
-          <Alert severity="info" variant="outlined" className="glass-alert" style={{ marginBottom: "1em", width: "100%" }}>
+          <Alert
+            severity="info"
+            variant="outlined"
+            className="glass-alert portal-alert-info"
+            style={{ marginBottom: "1em", width: "100%" }}
+          >
             {payout_info}
           </Alert>
         </Grid>
@@ -169,7 +199,12 @@ export const Index: React.FC = () => {
 
       {!config.payout_enabled && (
         <Grid size={{ xs: 12, sm: 8 }}>
-          <Alert severity="warning" variant="outlined" className="glass-alert" style={{ marginBottom: "1em", width: "100%" }}>
+          <Alert
+            severity="warning"
+            variant="outlined"
+            className="glass-alert portal-alert-warning"
+            style={{ marginBottom: "1em", width: "100%" }}
+          >
             <b>{payoutDisabledNotice}</b>
           </Alert>
         </Grid>

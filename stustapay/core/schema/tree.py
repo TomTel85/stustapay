@@ -26,6 +26,7 @@ class _BaseEvent(BaseModel):
     post_payment_allowed: bool = False
 
     sumup_topup_enabled: bool
+    group_topup_enabled: bool = False
     sumup_payment_enabled: bool
 
     customer_portal_url: str
@@ -73,12 +74,16 @@ class _BaseEvent(BaseModel):
     customer_portal_primary_color: str | None = None
     customer_portal_secondary_color: str | None = None
     customer_portal_background_color: str | None = None
+    customer_portal_font_color: str | None = None
 
     # map of lang_code -> [text type -> text content]
     translation_texts: dict[Language, dict[str, str]] = {}
 
     def is_sumup_topup_enabled(self, cfg: CoreConfig):
         return self.sumup_topup_enabled and cfg.sumup_enabled
+
+    def is_group_topup_enabled(self, cfg: CoreConfig):
+        return self.group_topup_enabled and cfg.sumup_enabled
 
     def is_sumup_payment_enabled(self, cfg: CoreConfig):
         return self.sumup_payment_enabled and cfg.sumup_enabled

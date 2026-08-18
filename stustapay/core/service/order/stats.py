@@ -4,6 +4,7 @@ from typing import Optional
 import asyncpg
 from pydantic import BaseModel
 from sftkit.database import Connection
+from sftkit.error import InvalidArgument
 from sftkit.service import Service, with_db_transaction
 
 from stustapay.core.config import Config
@@ -16,7 +17,6 @@ from stustapay.core.service.common.decorators import (
     requires_terminal,
     requires_user,
 )
-from sftkit.error import InvalidArgument
 from stustapay.core.service.product import fetch_pay_out_product, fetch_top_up_product
 from stustapay.core.service.tree.common import fetch_event_for_node, fetch_node
 
@@ -126,6 +126,28 @@ class PaymentMethodStats(BaseModel):
 class PaymentMethodBreakdown(BaseModel):
     methods: list[PaymentMethodStats]
     total_revenue: float
+
+
+def merge_stat_intervals(*interval_groups: list[StatInterval]) -> list[StatInterval]:
+    merged: dict[tuple[datetime, datetime], StatInterval] = {}
+
+    for interval_group in interval_groups:
+        for interval in interval_group:
+            key = (interval.from_time, interval.to_time)
+            existing = merged.get(key)
+            if existing is None:
+                merged[key] = StatInterval(
+                    from_time=interval.from_time,
+                    to_time=interval.to_time,
+                    count=interval.count,
+                    revenue=interval.revenue,
+                )
+                continue
+
+            existing.count += interval.count  # pylint: disable=no-member
+            existing.revenue += interval.revenue  # pylint: disable=no-member
+
+    return [merged[key] for key in sorted(merged)]
 
 
 class HourlyPredictionPoint(BaseModel):
@@ -511,6 +533,7 @@ async def get_hourly_product_stats(
             "join line_item li on o.id = li.order_id "
             "join product p on li.product_id = p.id "
             "where o.booked_at >= $1 and o.booked_at <= $2 "
+            "   and o.order_type = 'sale' "
             "   and not exists (select 1 from ordr c where c.cancels_order = o.id) "
             "   and p.type = 'user_defined' "
             "   and p.is_returnable = $4 "
@@ -578,6 +601,7 @@ async def get_product_breakdown_stats(
             "   join line_item li on o.id = li.order_id "
             "   join product p on li.product_id = p.id "
             "   where o.booked_at >= $1 and o.booked_at <= $2 "
+            "       and o.order_type = 'sale' "
             "       and not exists (select 1 from ordr c where c.cancels_order = o.id) "
             "       and p.type = 'user_defined' "
             "       and ($4::int is null or o.till_id = $4) "
@@ -868,16 +892,6 @@ class OrderStatsService(Service[Config]):
         event = await fetch_event_for_node(conn=conn, node=scope_node)
         from_time, to_time = get_event_time_bounds(query, event)
         selected_date_ranges = get_selected_date_ranges(query, event)
-        hourly_stats = await get_hourly_sales_stats(
-            conn=conn,
-            node=scope_node,
-            query=query,
-            from_time=from_time,
-            to_time=to_time,
-            selected_date_ranges=selected_date_ranges,
-        )
-        daily_stats = await get_daily_stats(hourly_stats=hourly_stats, event=event)
-
         hourly_product_stats, product_overall_stats, hourly_deposit_stats, deposit_overall_stats = (
             await get_product_breakdown_stats(
                 conn=conn,
@@ -888,6 +902,15 @@ class OrderStatsService(Service[Config]):
                 selected_date_ranges=selected_date_ranges,
             )
         )
+        hourly_stats = Timeseries(
+            from_time=from_time,
+            to_time=to_time,
+            intervals=merge_stat_intervals(
+                *[product.intervals for product in hourly_product_stats],
+                *[deposit.intervals for deposit in hourly_deposit_stats],
+            ),
+        )
+        daily_stats = await get_daily_stats(hourly_stats=hourly_stats, event=event)
 
         return ProductStats(
             from_time=hourly_stats.from_time,
@@ -1211,10 +1234,8 @@ class OrderStatsService(Service[Config]):
                 )
             else:
                 today_start = now.replace(hour=daily_end_hour, minute=daily_end_minute, second=0, microsecond=0)
-            today_end = today_start + timedelta(days=1) - timedelta(seconds=1)
         else:
             today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            today_end = today_start + timedelta(days=1) - timedelta(seconds=1)
 
         # Find customer node (first node after root)
         # parent_ids[0] is root (id=0), parent_ids[1] is customer node

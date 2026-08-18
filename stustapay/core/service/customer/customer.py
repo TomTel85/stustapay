@@ -2,6 +2,7 @@
 # pylint: disable=unused-argument
 import logging
 import re
+import secrets
 from email.utils import formataddr
 from typing import Optional
 
@@ -19,12 +20,19 @@ from stustapay.core.schema.customer import (
     OrderWithBon,
     PayoutInfo,
     PayoutTransaction,
+    SharedTopupContribution,
+    SharedTopupLink,
+    SharedTopupPublicInfo,
 )
 from stustapay.core.schema.language import Language
 from stustapay.core.service.auth import AuthService, CustomerTokenMetadata
 from stustapay.core.service.common.decorators import requires_customer
 from stustapay.core.service.config import ConfigService
-from stustapay.core.service.customer.common import fetch_customer_portal_event_node_id
+from stustapay.core.service.customer.common import (
+    fetch_customer_portal_event_node_id,
+    fetch_shared_topup_link,
+    hash_shared_topup_token,
+)
 from stustapay.core.service.customer.payout import PayoutService
 from stustapay.core.service.email_templates import render_plain_text_payout_html
 from stustapay.core.service.mail import MailService
@@ -33,6 +41,8 @@ from stustapay.core.service.tree.common import (
     fetch_event_node_for_node,
     fetch_restricted_event_settings_for_node,
 )
+
+MAX_ACTIVE_SHARED_TOPUP_LINKS_PER_CUSTOMER = 10
 
 
 def validate_name(name: str) -> bool:
@@ -50,6 +60,7 @@ class CustomerPortalApiConfig(BaseModel):
     donation_enabled: bool
     currency_identifier: str
     sumup_topup_enabled: bool
+    group_topup_enabled: bool
     sumup_topup_payment_methods: list[str] = Field(default_factory=list)
     allowed_country_codes: Optional[list[str]]
     translation_texts: dict[Language, dict[str, str]]
@@ -59,6 +70,7 @@ class CustomerPortalApiConfig(BaseModel):
     primary_color: Optional[str] = None
     secondary_color: Optional[str] = None
     background_color: Optional[str] = None
+    font_color: Optional[str] = None
 
 
 
@@ -84,6 +96,163 @@ class CustomerService(Service[Config]):
         self.sumup = SumupService(db_pool=db_pool, config=config, auth_service=auth_service)
         self.payout = PayoutService(
             db_pool=db_pool, config=config, auth_service=auth_service, config_service=config_service
+        )
+
+    @staticmethod
+    def hash_shared_topup_token(token: str) -> str:
+        return hash_shared_topup_token(token)
+
+    @staticmethod
+    def _raise_group_topup_disabled() -> None:
+        raise InvalidArgument("Group top-up is currently disabled")
+
+    def _require_group_topup_enabled(self, event_settings) -> None:
+        if not event_settings.is_group_topup_enabled(self.config.core):
+            self._raise_group_topup_disabled()
+
+    @with_db_transaction
+    @requires_customer
+    async def create_shared_topup_link(
+        self,
+        *,
+        conn: Connection,
+        current_customer: Customer,
+        label: str | None = None,
+        customer_portal_base_url: str | None = None,
+    ) -> SharedTopupLink:
+        event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=current_customer.node_id)
+        self._require_group_topup_enabled(event_settings)
+        await conn.fetchval("select id from account where id = $1 for update", current_customer.id)
+        active_link_count = await conn.fetchval(
+            "select count(*) "
+            "from shared_topup_link "
+            "where customer_account_id = $1 "
+            "  and revoked_at is null "
+            "  and (expires_at is null or expires_at > now())",
+            current_customer.id,
+        )
+        if active_link_count >= MAX_ACTIVE_SHARED_TOPUP_LINKS_PER_CUSTOMER:
+            raise InvalidArgument("Too many active shared topup links")
+
+        token = secrets.token_urlsafe(32)
+        link = await conn.fetchrow(
+            "insert into shared_topup_link (customer_account_id, token_hash, label) "
+            "values ($1, $2, $3) "
+            "returning id, created_at, expires_at, revoked_at, label",
+            current_customer.id,
+            self.hash_shared_topup_token(token),
+            label,
+        )
+        return SharedTopupLink(token=token, **dict(link))
+
+    @with_db_transaction(read_only=True)
+    @requires_customer
+    async def list_shared_topup_links(
+        self,
+        *,
+        conn: Connection,
+        current_customer: Customer,
+        customer_portal_base_url: str | None = None,
+    ) -> list[SharedTopupLink]:
+        event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=current_customer.node_id)
+        self._require_group_topup_enabled(event_settings)
+        rows = await conn.fetch(
+            "select id, null::text as token, created_at, expires_at, revoked_at, label "
+            "from shared_topup_link "
+            "where customer_account_id = $1 "
+            "order by created_at desc",
+            current_customer.id,
+        )
+        return [SharedTopupLink(**dict(row)) for row in rows]
+
+    @with_db_transaction
+    @requires_customer
+    async def revoke_shared_topup_link(
+        self,
+        *,
+        conn: Connection,
+        current_customer: Customer,
+        link_id: int,
+        customer_portal_base_url: str | None = None,
+    ) -> None:
+        event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=current_customer.node_id)
+        self._require_group_topup_enabled(event_settings)
+        result = await conn.execute(
+            "update shared_topup_link set revoked_at = now() "
+            "where id = $1 and customer_account_id = $2 and revoked_at is null",
+            link_id,
+            current_customer.id,
+        )
+        if result == "UPDATE 0":
+            raise InvalidArgument("Shared topup link not found")
+
+    @with_db_transaction(read_only=True)
+    @requires_customer
+    async def list_shared_topup_contributions(
+        self,
+        *,
+        conn: Connection,
+        current_customer: Customer,
+        customer_portal_base_url: str | None = None,
+    ) -> list[SharedTopupContribution]:
+        event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=current_customer.node_id)
+        self._require_group_topup_enabled(event_settings)
+        return await conn.fetch_many(
+            SharedTopupContribution,
+            "select "
+            "  sto.order_uuid, "
+            "  sto.contributor_name, "
+            "  (((pso.order_content #>> '{}')::jsonb)->>'amount')::numeric as amount, "
+            "  pso.status::text as status, "
+            "  sto.created_at, "
+            "  o.booked_at "
+            "from shared_topup_order sto "
+            "join pending_sumup_order pso on pso.uuid = sto.order_uuid "
+            "left join ordr o on o.uuid = sto.order_uuid "
+            "where sto.customer_account_id = $1 "
+            "order by sto.created_at desc",
+            current_customer.id,
+        )
+
+    @with_db_transaction(read_only=True)
+    async def get_shared_topup_public_info(
+        self,
+        *,
+        conn: Connection,
+        token: str,
+        customer_portal_base_url: str | None = None,
+    ) -> SharedTopupPublicInfo:
+        link = await self._fetch_shared_topup_link(
+            conn=conn,
+            token=token,
+            customer_portal_base_url=customer_portal_base_url,
+        )
+        event_node = await fetch_event_node_for_node(conn=conn, node_id=link["node_id"])
+        if event_node is None or event_node.event is None:
+            raise AccessDenied("Invalid shared topup link")
+        self._require_group_topup_enabled(event_node.event)
+        payment_methods = await self.sumup.get_available_payment_methods_for_node(
+            conn=conn,
+            node_id=event_node.id,
+            allow_group_topup=True,
+        )
+        return SharedTopupPublicInfo(
+            event_name=event_node.name,
+            currency_identifier=event_node.event.currency_identifier,
+            payment_methods=payment_methods,
+        )
+
+    async def _fetch_shared_topup_link(
+        self,
+        *,
+        conn: Connection,
+        token: str,
+        customer_portal_base_url: str | None = None,
+    ):
+        return await fetch_shared_topup_link(
+            conn=conn,
+            token=token,
+            customer_portal_base_url=customer_portal_base_url,
         )
 
     @with_db_transaction
@@ -235,8 +404,9 @@ class CustomerService(Service[Config]):
         customer_bank: CustomerBank,
         mail_service: MailService,
         customer_portal_base_url: str | None = None,
-    ) -> None:
+    ) -> dict | None:
         event_node = await fetch_event_node_for_node(conn=conn, node_id=current_customer.node_id)
+        assert event_node is not None
         if event_node.event is None:
             raise InvalidArgument("Invalid event node")
 
@@ -253,8 +423,8 @@ class CustomerService(Service[Config]):
         try:
             iban_obj = IBAN(iban)
             iban = str(iban_obj)
-        except ValueError:
-            raise InvalidArgument("IBAN is not valid")
+        except ValueError as exc:
+            raise InvalidArgument("IBAN is not valid") from exc
 
         account_name = customer_bank.account_name
         if account_name is not None:
@@ -333,11 +503,12 @@ class CustomerService(Service[Config]):
             res_config = await fetch_restricted_event_settings_for_node(conn, updated_customer.node_id)
             if res_config.email_enabled and res_config.payout_registered_message is not None:
                 message = res_config.payout_registered_message.format(**updated_customer.model_dump())
+                subject = res_config.payout_registered_subject or ""
                 payout_sender = res_config.payout_sender or res_config.email_default_sender
                 email_to_send = {
-                    "subject": res_config.payout_registered_subject,
+                    "subject": subject,
                     "message": message,
-                    "html_message": render_plain_text_payout_html(message, res_config.payout_registered_subject),
+                    "html_message": render_plain_text_payout_html(message, subject),
                     "from_addr": (
                         formataddr((f"{event_node.name} Auszahlung", payout_sender))
                         if payout_sender
@@ -391,6 +562,7 @@ class CustomerService(Service[Config]):
         customer_portal_base_url: str | None = None,
     ) -> None:
         event_node = await fetch_event_node_for_node(conn=conn, node_id=current_customer.node_id)
+        assert event_node is not None
         if event_node.event is None:
             raise InvalidArgument("Invalid event node")
         
@@ -421,6 +593,7 @@ class CustomerService(Service[Config]):
         )
         banner_image_url = f"/api/banner/{node_id}" if has_banner else None
         sumup_topup_enabled = self.config.core.sumup_enabled and node.event.sumup_topup_enabled
+        group_topup_enabled = self.config.core.sumup_enabled and node.event.group_topup_enabled
         sumup_topup_payment_methods: list[str] = []
         if sumup_topup_enabled:
             try:
@@ -441,6 +614,7 @@ class CustomerService(Service[Config]):
             payout_enabled=node.event.sepa_enabled,
             donation_enabled=node.event.donation_enabled,
             sumup_topup_enabled=sumup_topup_enabled,
+            group_topup_enabled=group_topup_enabled,
             sumup_topup_payment_methods=sumup_topup_payment_methods,
             translation_texts=node.event.translation_texts,
             currency_identifier=node.event.currency_identifier,
@@ -450,6 +624,7 @@ class CustomerService(Service[Config]):
             primary_color=node.event.customer_portal_primary_color,
             secondary_color=node.event.customer_portal_secondary_color,
             background_color=node.event.customer_portal_background_color,
+            font_color=node.event.customer_portal_font_color,
         )
 
     @with_db_transaction(read_only=True)

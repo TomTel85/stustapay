@@ -19,9 +19,9 @@ import de.stustapay.stustapay.ui.common.operator.OperatorActionCard
 import de.stustapay.stustapay.ui.common.operator.OperatorInfoCard
 import de.stustapay.stustapay.ui.common.operator.OperatorPalette
 import de.stustapay.stustapay.ui.common.operator.OperatorScaffold
-import de.stustapay.stustapay.ui.common.selfservice.SelfServiceDisplayMode
-import de.stustapay.stustapay.ui.common.selfservice.SelfServiceDisplayModeManager
-import de.stustapay.stustapay.ui.common.selfservice.SelfServiceDisplayModeState
+import de.stustapay.stustapay.ui.common.selfservice.AppDisplayMode
+import de.stustapay.stustapay.ui.common.selfservice.AppDisplayModeManager
+import de.stustapay.stustapay.ui.common.selfservice.AppDisplayModeState
 
 @Preview
 @Composable
@@ -29,20 +29,33 @@ fun SelfServiceDisplaySettingsView(
     navigateBack: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    val currentMode = SelfServiceDisplayModeState.current
+    val currentMode = AppDisplayModeState.current
+    val isManaged = AppDisplayModeState.isManaged
     val currentModeLabel = when (currentMode) {
-        SelfServiceDisplayMode.Day -> stringResource(R.string.settings_selfservice_display_day)
-        SelfServiceDisplayMode.Night -> stringResource(R.string.settings_selfservice_display_night)
+        AppDisplayMode.Day -> stringResource(R.string.settings_selfservice_display_day)
+        AppDisplayMode.Night -> stringResource(R.string.settings_selfservice_display_night)
     }
 
     OperatorScaffold(
         title = stringResource(R.string.settings_selfservice_display_title),
-        subtitle = stringResource(R.string.settings_selfservice_display_subtitle),
+        subtitle = stringResource(
+            if (isManaged) {
+                R.string.settings_selfservice_display_subtitle_managed
+            } else {
+                R.string.settings_selfservice_display_subtitle
+            }
+        ),
         icon = Icons.Filled.WbSunny,
         terminalLabel = stringResource(R.string.settings_selfservice_display_terminal_label),
         footerHint = stringResource(R.string.settings_selfservice_display_footer_hint),
         footerSection = stringResource(R.string.settings_selfservice_display_footer_section),
-        footerStatus = stringResource(R.string.settings_selfservice_display_footer_status),
+        footerStatus = stringResource(
+            if (isManaged) {
+                R.string.settings_selfservice_display_footer_status_managed
+            } else {
+                R.string.settings_selfservice_display_footer_status
+            }
+        ),
         onBack = navigateBack,
     ) {
         Column(
@@ -58,7 +71,13 @@ fun SelfServiceDisplaySettingsView(
                     color = OperatorPalette.title,
                 )
                 Text(
-                    text = stringResource(R.string.settings_selfservice_display_footer_hint),
+                    text = stringResource(
+                        if (isManaged) {
+                            R.string.settings_selfservice_display_remote_notice
+                        } else {
+                            R.string.settings_selfservice_display_footer_hint
+                        }
+                    ),
                     color = OperatorPalette.subtitle,
                 )
             }
@@ -67,9 +86,13 @@ fun SelfServiceDisplaySettingsView(
                 title = stringResource(R.string.settings_selfservice_display_day),
                 description = stringResource(R.string.settings_selfservice_display_day_desc),
                 icon = Icons.Filled.WbSunny,
-                emphasized = currentMode == SelfServiceDisplayMode.Day,
-                onClick = {
-                    SelfServiceDisplayModeManager.persistDisplayMode(context, SelfServiceDisplayMode.Day)
+                emphasized = currentMode == AppDisplayMode.Day,
+                onClick = if (isManaged) {
+                    null
+                } else {
+                    {
+                        AppDisplayModeManager.persistDisplayMode(context, AppDisplayMode.Day)
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -78,9 +101,13 @@ fun SelfServiceDisplaySettingsView(
                 title = stringResource(R.string.settings_selfservice_display_night),
                 description = stringResource(R.string.settings_selfservice_display_night_desc),
                 icon = Icons.Filled.Brightness2,
-                emphasized = currentMode == SelfServiceDisplayMode.Night,
-                onClick = {
-                    SelfServiceDisplayModeManager.persistDisplayMode(context, SelfServiceDisplayMode.Night)
+                emphasized = currentMode == AppDisplayMode.Night,
+                onClick = if (isManaged) {
+                    null
+                } else {
+                    {
+                        AppDisplayModeManager.persistDisplayMode(context, AppDisplayMode.Night)
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
             )

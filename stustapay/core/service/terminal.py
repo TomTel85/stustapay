@@ -5,12 +5,13 @@ from typing import Optional
 
 import asyncpg
 from sftkit.database import Connection
-from sftkit.error import InvalidArgument
+from sftkit.error import AccessDenied, InvalidArgument, NotFound
 from sftkit.service import Service, with_db_transaction
 
 from stustapay.core.config import Config
 from stustapay.core.schema.entry import EntryArea, EntryAreaConfig
 from stustapay.core.schema.terminal import (
+    AppDisplayMode,
     CurrentTerminal,
     HeadwindDeviceMapping,
     HeadwindDeviceMappingWithTerminal,
@@ -23,7 +24,6 @@ from stustapay.core.schema.terminal import (
     TerminalSecrets,
     TerminalSumupSecrets,
     TerminalTillConfig,
-    TerminalUserTagSecrets,
     UserTagSecret,
 )
 from stustapay.core.schema.till import Till, TillProfile, UserInfo, UserRoleInfo
@@ -33,7 +33,6 @@ from stustapay.core.schema.user import (
     Privilege,
     UserRole,
     UserTag,
-    format_user_tag_uid,
 )
 from stustapay.core.service.auth import AuthService, TerminalTokenMetadata
 from stustapay.core.service.common.decorators import (
@@ -41,7 +40,7 @@ from stustapay.core.service.common.decorators import (
     requires_terminal,
     requires_user,
 )
-from sftkit.error import AccessDenied, NotFound
+from stustapay.core.service.sumup_link import resolve_terminal_sumup_access
 from stustapay.core.service.till.common import assign_cash_register_to_active_user_till
 from stustapay.core.service.till.till import (
     assign_till_to_terminal,
@@ -53,7 +52,6 @@ from stustapay.core.service.tree.common import (
     fetch_node,
     fetch_restricted_event_settings_for_node,
 )
-from stustapay.core.service.sumup_link import resolve_terminal_sumup_access
 from stustapay.core.service.user import list_assignable_roles_for_user_at_node
 from stustapay.payment.sumup.api import SumUpOAuthToken, fetch_new_oauth_token
 
@@ -111,6 +109,12 @@ def _normalize_self_service(terminal: NewTerminal) -> bool:
     return terminal.mode == TerminalMode.till and terminal.self_service
 
 
+def _normalize_app_display_mode(terminal: NewTerminal) -> AppDisplayMode | None:
+    if terminal.mode == TerminalMode.till and terminal.self_service:
+        return terminal.app_display_mode
+    return None
+
+
 class TerminalService(Service[Config]):
     def __init__(self, db_pool: asyncpg.Pool, config: Config, auth_service: AuthService):
         super().__init__(db_pool, config)
@@ -130,15 +134,17 @@ class TerminalService(Service[Config]):
                 raise InvalidArgument("Entry terminals must be assigned to an entry area")
             await _ensure_entry_area(conn=conn, node=node, entry_area_id=terminal.entry_area_id)
 
+        app_display_mode = _normalize_app_display_mode(terminal)
         terminal_id = await conn.fetchval(
-            "insert into terminal (node_id, name, description, mode, entry_area_id, self_service) "
-            "values ($1, $2, $3, $4, $5, $6) returning id",
+            "insert into terminal (node_id, name, description, mode, entry_area_id, self_service, app_display_mode) "
+            "values ($1, $2, $3, $4, $5, $6, $7) returning id",
             node.id,
             terminal.name,
             terminal.description,
             terminal.mode.value,
             terminal.entry_area_id,
             _normalize_self_service(terminal),
+            app_display_mode.value if app_display_mode is not None else None,
         )
         t = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         assert t is not None
@@ -187,14 +193,16 @@ class TerminalService(Service[Config]):
             if existing_terminal.till_id is not None:
                 await remove_terminal_from_till(conn=conn, till_id=existing_terminal.till_id)
 
+        app_display_mode = _normalize_app_display_mode(terminal)
         term_id = await conn.fetchval(
-            "update terminal set name = $1, description = $2, mode = $3, entry_area_id = $4, self_service = $5 "
-            "where id = $6 and node_id = $7 returning id",
+            "update terminal set name = $1, description = $2, mode = $3, entry_area_id = $4, self_service = $5, "
+            "app_display_mode = $6 where id = $7 and node_id = $8 returning id",
             terminal.name,
             terminal.description,
             terminal.mode.value,
             terminal.entry_area_id,
             _normalize_self_service(terminal),
+            app_display_mode.value if app_display_mode is not None else None,
             terminal_id,
             existing_terminal.node_id,
         )
@@ -556,6 +564,7 @@ class TerminalService(Service[Config]):
             mode=current_terminal.mode,
             entry_area=entry_area,
             self_service=current_terminal.self_service,
+            app_display_mode=current_terminal.app_display_mode,
             user_privileges=user_privileges,
             available_roles=available_roles,
             active_user_id=current_terminal.active_user_id,
@@ -656,6 +665,7 @@ class TerminalService(Service[Config]):
 
         returns the newly logged-in User if successful
         """
+        del token
         available_roles = await self.check_user_login(  # pylint: disable=missing-kwoa,unexpected-keyword-arg
             conn=conn, current_terminal=current_terminal, user_tag=user_tag
         )
@@ -890,6 +900,7 @@ class TerminalService(Service[Config]):
         """
         Login a User to a terminal by user_id and role_id from the administration API
         """
+        del current_user
         terminal = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         if terminal is None:
             raise NotFound(f"Terminal with id {terminal_id} not found")
@@ -934,7 +945,9 @@ class TerminalService(Service[Config]):
                 user_id=user_id,
                 cash_register_id=cash_register_id,
             )
-        
+        updated_terminal = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
+        assert updated_terminal is not None
+        return updated_terminal
 
     # region Headwind device mapping helpers
 

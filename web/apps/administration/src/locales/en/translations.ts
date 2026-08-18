@@ -66,6 +66,11 @@ export const translations = {
     actions: "Actions",
     delete: "Delete",
   },
+  errorPage: {
+    brand: "TeamFestlichPay",
+    maintenance: "Maintenance in progress",
+    currentlyUnavailable: "The TeamFestlichPay administration is currently unavailable. Please try again later.",
+  },
   nodes: {
     overview: "Overview",
     statistics: "Stats",
@@ -352,6 +357,7 @@ export const translations = {
     warningEventDatesNeedConfiguration:
       "Please configure the start / end times for this event as well as the daily end time in the event settings",
     generateRevenueReport: "Generate revenue report",
+    generateRevenueReportError: "Could not generate revenue report",
     filterDate: "Date",
     filterSubnode: "Filter by Subnode",
     allSubnodes: "All Subnodes",
@@ -568,6 +574,7 @@ export const translations = {
       uploadBanner: "Upload Banner",
       primaryColor: "Primary Color",
       secondaryColor: "Secondary Color",
+      fontColor: "Font Color",
       appearance: "Portal Appearance",
     },
     pretix: {
@@ -613,6 +620,7 @@ export const translations = {
       globalTabLabel: "Global App",
       sumup_payment_enabled: "SumUp Payment Enabled",
       sumup_topup_enabled: "SumUp Top Up Enabled",
+      group_topup_enabled: "Group Top Up Enabled",
       sumup_api_key: "SumUp API Key",
       sumup_merchant_code: "SumUp Merchant Code",
       sumup_affiliate_key: "SumUp Affiliate Key",
@@ -1096,6 +1104,12 @@ export const translations = {
       exit: "Exit",
     },
     selfService: "Self-service terminal",
+    appDisplayMode: {
+      label: "Display mode",
+      localDefault: "Local default",
+      day: "Day mode",
+      night: "Night mode",
+    },
     till: "Till",
     switchTill: "Switch Till",
     removeTill: "Remove Till",

@@ -23,6 +23,7 @@ from stustapay.core.schema.tree import (
 from stustapay.core.schema.user import CurrentUser, Privilege
 from stustapay.core.service.auth import AuthService
 from stustapay.core.service.common.decorators import requires_node, requires_user
+from stustapay.core.service.config import fetch_global_sumup_config
 from stustapay.core.service.sumup_link import (
     delete_node_sumup_link,
     enrich_event_sumup_settings,
@@ -35,7 +36,6 @@ from stustapay.core.service.tree.common import (
     get_tree_for_current_user,
 )
 from stustapay.payment.sumup.api import fetch_merchant_profile, fetch_refresh_token_from_auth_code
-from stustapay.core.service.config import fetch_global_sumup_config
 
 EVENT_SYSTEM_ACCOUNT_TYPES = {
     AccountType.cash_entry.value,
@@ -71,6 +71,7 @@ OPTIONAL_EVENT_DB_COLUMNS = {
     "customer_portal_primary_color",
     "customer_portal_secondary_color",
     "customer_portal_background_color",
+    "customer_portal_font_color",
     "wifi_ssid",
     "wifi_passphrase",
 }
@@ -87,6 +88,7 @@ COPY_EVENT_SUMUP_RESET_VALUES = {
     "sumup_oauth_client_id": "",
     "sumup_oauth_client_secret": "",
     "sumup_topup_enabled": False,
+    "group_topup_enabled": False,
     "sumup_payment_enabled": False,
 }
 
@@ -102,6 +104,7 @@ def _build_event_db_values(event: NewEvent, available_columns: set[str]) -> list
     values: list[tuple[str, object]] = [
         ("currency_identifier", event.currency_identifier),
         ("sumup_topup_enabled", event.sumup_topup_enabled),
+        ("group_topup_enabled", event.group_topup_enabled),
         ("max_account_balance", event.max_account_balance),
         ("vip_max_account_balance", event.vip_max_account_balance),
         ("ust_id", event.ust_id),
@@ -147,6 +150,7 @@ def _build_event_db_values(event: NewEvent, available_columns: set[str]) -> list
         "customer_portal_primary_color": event.customer_portal_primary_color,
         "customer_portal_secondary_color": event.customer_portal_secondary_color,
         "customer_portal_background_color": event.customer_portal_background_color,
+        "customer_portal_font_color": event.customer_portal_font_color,
         "wifi_ssid": event.wifi_ssid,
         "wifi_passphrase": event.wifi_passphrase,
     }
@@ -1428,7 +1432,12 @@ class TreeService(Service[Config]):
         if request.options.copy_event_settings:
             copied_event_payload = source_event.model_dump(exclude=COPY_EVENT_SETTINGS_MODEL_EXCLUDES)
             copied_event_payload.update(
-                {"name": request.name, "description": request.description, **COPY_EVENT_SUMUP_RESET_VALUES}
+                {
+                    "name": request.name,
+                    "description": request.description,
+                    "customer_portal_url": "",
+                    **COPY_EVENT_SUMUP_RESET_VALUES,
+                }
             )
             new_event_data = NewEvent.model_validate(copied_event_payload)
         else:
@@ -1439,6 +1448,7 @@ class TreeService(Service[Config]):
                 max_account_balance=150.0,
                 vip_max_account_balance=300.0,
                 sumup_topup_enabled=False,
+                group_topup_enabled=False,
                 sumup_payment_enabled=False,
                 customer_portal_url="",
                 customer_portal_about_page_url="",
