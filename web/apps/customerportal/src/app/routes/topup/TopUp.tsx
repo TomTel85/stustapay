@@ -26,6 +26,7 @@ import { Navigate, Link as RouterLink, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import { z } from "zod";
 import type { SumUpCardInstance, SumUpResponseType } from "./SumUpCard";
+import { getGooglePayWidgetOptions } from "./sumUpGooglePay";
 
 const TopUpSchema = z.object({
   amount: z.number().int(i18n.t("topup.errorAmountMustBeIntegral")).positive(i18n.t("topup.errorAmountGreaterZero")),
@@ -386,7 +387,7 @@ export const TopUp: React.FC = () => {
     setIsExtendedPending(false);
     setSumupMessage(t("topup.processingPayment"));
 
-    const config = {
+    const widgetConfig = {
       id: "sumup-card",
       checkoutId: state.checkoutId,
       onLoad: handleSumupCardLoad.current,
@@ -394,19 +395,27 @@ export const TopUp: React.FC = () => {
       locale: i18n.language,
       // Enable alternative payment methods if available for the merchant
       country: "DE",
+      ...getGooglePayWidgetOptions(config.google_pay_merchant_id, config.google_pay_merchant_name),
     };
     if (sumupCard.current) {
-      sumupCard.current.update(config);
+      sumupCard.current.update(widgetConfig);
     } else {
       try {
-        sumupCard.current = SumUpCard.mount(config);
-        // sumupCard.current = SumUpCardMock.mount(config);
+        sumupCard.current = SumUpCard.mount(widgetConfig);
+        // sumupCard.current = SumUpCardMock.mount(widgetConfig);
       } catch (e) {
         console.error("Error mounting SumUp card", e);
         dispatch({ type: "sumup-error", message: t("topup.error.message") });
       }
     }
-  }, [state, i18n.language, dispatch, t]);
+  }, [
+    state,
+    i18n.language,
+    dispatch,
+    t,
+    config.google_pay_merchant_id,
+    config.google_pay_merchant_name,
+  ]);
 
   if (!config.sumup_topup_enabled) {
     toast.error(t("topup.sumupTopupDisabled"));

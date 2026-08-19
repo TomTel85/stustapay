@@ -1441,6 +1441,28 @@
             "type": "array",
             "title": "Sumup Topup Payment Methods"
           },
+          "google_pay_merchant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Pay Merchant Id"
+          },
+          "google_pay_merchant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Pay Merchant Name"
+          },
           "allowed_country_codes": {
             "anyOf": [
               {
@@ -2586,6 +2608,28 @@
             },
             "type": "array",
             "title": "Payment Methods"
+          },
+          "google_pay_merchant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Pay Merchant Id"
+          },
+          "google_pay_merchant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Pay Merchant Name"
           }
         },
         "type": "object",

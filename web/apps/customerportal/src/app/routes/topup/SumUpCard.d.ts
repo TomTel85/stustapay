@@ -4,8 +4,14 @@ export interface CardOptions {
   id: string;
   checkoutId: string;
   locale?: string;
+  country?: string;
+  googlePay?: {
+    merchantId: string;
+    merchantName: string;
+  };
+  onPaymentMethodsLoad?: (paymentMethods: string[]) => string[];
   onLoad?: () => void;
-  onResponse?: (type: SumUpResponseType, body?: any) => void;
+  onResponse?: (type: SumUpResponseType, body?: unknown) => void;
 }
 
 export interface SumUpCardInstance {

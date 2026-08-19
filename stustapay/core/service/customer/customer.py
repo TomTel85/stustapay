@@ -62,6 +62,8 @@ class CustomerPortalApiConfig(BaseModel):
     sumup_topup_enabled: bool
     group_topup_enabled: bool
     sumup_topup_payment_methods: list[str] = Field(default_factory=list)
+    google_pay_merchant_id: str | None = None
+    google_pay_merchant_name: str | None = None
     allowed_country_codes: Optional[list[str]]
     translation_texts: dict[Language, dict[str, str]]
     event_name: str
@@ -240,6 +242,8 @@ class CustomerService(Service[Config]):
             event_name=event_node.name,
             currency_identifier=event_node.event.currency_identifier,
             payment_methods=payment_methods,
+            google_pay_merchant_id=self.config.customerportal.google_pay_merchant_id or None,
+            google_pay_merchant_name=self.config.customerportal.google_pay_merchant_name or event_node.name,
         )
 
     async def _fetch_shared_topup_link(
@@ -616,6 +620,8 @@ class CustomerService(Service[Config]):
             sumup_topup_enabled=sumup_topup_enabled,
             group_topup_enabled=group_topup_enabled,
             sumup_topup_payment_methods=sumup_topup_payment_methods,
+            google_pay_merchant_id=self.config.customerportal.google_pay_merchant_id or None,
+            google_pay_merchant_name=self.config.customerportal.google_pay_merchant_name or node.name,
             translation_texts=node.event.translation_texts,
             currency_identifier=node.event.currency_identifier,
             event_name=node.name,

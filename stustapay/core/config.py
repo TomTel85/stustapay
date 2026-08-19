@@ -37,6 +37,8 @@ class CustomerPortalApiConfig(HTTPServerConfig):
     base_url: str
     host: str = "localhost"
     port: int = 8082
+    google_pay_merchant_id: str = ""
+    google_pay_merchant_name: str = ""
 
 
 class HeadwindConfig(BaseModel):

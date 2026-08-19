@@ -17,6 +17,9 @@ customerportal:
   base_url: "http://localhost:8082/api" # TODO: change to production url
   host: "localhost"
   port: 8082
+  # Public Google Pay values issued during production approval (not the SumUp merchant code).
+  google_pay_merchant_id: ""
+  google_pay_merchant_name: ""
 
 terminalserver:
   base_url: "http://localhost:8083/api" # TODO: change to production url

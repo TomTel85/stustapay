@@ -20,6 +20,8 @@ customerportal:
   base_url: "http://localhost:8082"
   host: "localhost"
   port: 8082
+  google_pay_merchant_id: ""
+  google_pay_merchant_name: ""
 
 terminalserver:
   base_url: "http://localhost:8083"

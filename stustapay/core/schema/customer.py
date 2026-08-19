@@ -68,6 +68,8 @@ class SharedTopupPublicInfo(BaseModel):
     event_name: str
     currency_identifier: str
     payment_methods: list[str]
+    google_pay_merchant_id: str | None = None
+    google_pay_merchant_name: str | None = None
 
 
 class SharedTopupContribution(BaseModel):

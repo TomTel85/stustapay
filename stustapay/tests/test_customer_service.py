@@ -43,10 +43,14 @@ def reset_customer_sumup_state(customer_service: CustomerService):
     for attr in ("_create_sumup_api", "get_available_payment_methods_for_node"):
         customer_service.sumup.__dict__.pop(attr, None)
     customer_service.sumup.config.core.sumup_enabled = False
+    customer_service.config.customerportal.google_pay_merchant_id = ""
+    customer_service.config.customerportal.google_pay_merchant_name = ""
     yield
     for attr in ("_create_sumup_api", "get_available_payment_methods_for_node"):
         customer_service.sumup.__dict__.pop(attr, None)
     customer_service.sumup.config.core.sumup_enabled = False
+    customer_service.config.customerportal.google_pay_merchant_id = ""
+    customer_service.config.customerportal.google_pay_merchant_name = ""
 
 
 class OnlineTopUpSumUpApiMock:
@@ -430,6 +434,8 @@ async def test_get_api_config_includes_sumup_payment_methods(
         event_node.event.id,
     )
     customer_service.sumup.config.core.sumup_enabled = True
+    customer_service.config.customerportal.google_pay_merchant_id = "01234567890123456789"
+    customer_service.config.customerportal.google_pay_merchant_name = "Test Merchant"
 
     async def fake_get_available_payment_methods_for_node(conn: Connection, node_id: int) -> list[str]:
         del conn
@@ -447,6 +453,8 @@ async def test_get_api_config_includes_sumup_payment_methods(
     assert config.sumup_topup_enabled is True
     assert config.group_topup_enabled is False
     assert config.sumup_topup_payment_methods == ["card", "apple_pay", "ideal"]
+    assert config.google_pay_merchant_id == "01234567890123456789"
+    assert config.google_pay_merchant_name == "Test Merchant"
 
 
 async def test_get_api_config_returns_empty_payment_methods_on_sumup_error(
@@ -874,8 +882,11 @@ async def test_shared_topup_link_lifecycle_and_contributor_validation(
     await _set_group_topup_enabled(db_connection, event_node, True)
     customer_service.sumup.config.core.sumup_enabled = True
 
-    async def fake_get_available_payment_methods_for_node(conn: Connection, node_id: int) -> list[str]:
+    async def fake_get_available_payment_methods_for_node(
+        conn: Connection, node_id: int, *, allow_group_topup: bool = False
+    ) -> list[str]:
         del conn, node_id
+        assert allow_group_topup is True
         return []
 
     monkeypatch.setattr(
@@ -896,6 +907,8 @@ async def test_shared_topup_link_lifecycle_and_contributor_validation(
 
     info = await customer_service.get_shared_topup_public_info(token=link.token)
     assert info.event_name == event_node.name
+    assert info.google_pay_merchant_id is None
+    assert info.google_pay_merchant_name == event_node.name
 
     with pytest.raises(InvalidArgument):
         await customer_service.sumup.create_shared_topup_checkout(

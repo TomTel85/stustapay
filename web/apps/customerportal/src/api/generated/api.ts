@@ -437,6 +437,8 @@ export type CustomerPortalApiConfig = {
   sumup_topup_enabled: boolean;
   group_topup_enabled: boolean;
   sumup_topup_payment_methods?: string[];
+  google_pay_merchant_id?: string | null;
+  google_pay_merchant_name?: string | null;
   allowed_country_codes: string[] | null;
   translation_texts: {
     [key: string]: {
@@ -563,6 +565,8 @@ export type SharedTopupPublicInfo = {
   event_name: string;
   currency_identifier: string;
   payment_methods: string[];
+  google_pay_merchant_id?: string | null;
+  google_pay_merchant_name?: string | null;
 };
 export type CreateSharedTopupCheckoutResponse = {
   checkout_id: string;

@@ -17,6 +17,7 @@ import { Navigate, useLocation, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { z } from "zod";
 import type { SumUpCardInstance, SumUpResponseType } from "./SumUpCard";
+import { getGooglePayWidgetOptions } from "./sumUpGooglePay";
 
 const EXTENDED_CHECKOUT_POLL_INTERVAL_MS = 30 * 1000;
 const GROUP_TOPUP_DISABLED_MESSAGE = "Group top-up is currently disabled";
@@ -238,6 +239,7 @@ export const SharedTopUp: React.FC = () => {
         checkoutId: state.checkoutId,
         locale: reactI18n.language,
         country: "DE",
+        ...getGooglePayWidgetOptions(publicInfo?.google_pay_merchant_id, publicInfo?.google_pay_merchant_name),
         onLoad: () => setSumupMessage(t("topup.processingPayment")),
         onResponse: (type: SumUpResponseType, body?: unknown) => {
           if (
@@ -270,7 +272,15 @@ export const SharedTopUp: React.FC = () => {
       setSumupMessage(t("topup.processingPayment"));
       startPolling("success");
     }
-  }, [state, token, checkCheckout, reactI18n.language, t]);
+  }, [
+    state,
+    token,
+    checkCheckout,
+    reactI18n.language,
+    t,
+    publicInfo?.google_pay_merchant_id,
+    publicInfo?.google_pay_merchant_name,
+  ]);
 
   if (token.length === 0) {
     return <Navigate to="/login" />;
