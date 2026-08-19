@@ -571,6 +571,7 @@ async def test_copy_event(
             fixed_price=True,
             tax_rate_id=tax_rate_id,
             target_account_id=mapped_account_id,
+            is_donation=True,
         ),
     )
     system_target_product = await product_service.create_product(
@@ -784,6 +785,10 @@ async def test_copy_event(
         "select target_account_id from product where id = $1",
         copied_dedicated_product_id,
     ) == copied_mapped_account_id
+    assert await db_connection.fetchval(
+        "select is_donation from product where id = $1",
+        copied_dedicated_product_id,
+    ) is True
     assert await db_connection.fetchval(
         "select target_account_id from product where id = $1",
         copied_system_target_product_id,

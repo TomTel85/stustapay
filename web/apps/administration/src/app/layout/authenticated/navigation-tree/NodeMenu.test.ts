@@ -40,6 +40,13 @@ const findEntryByRoute = (path: string) => {
 };
 
 describe("isMenuEntryValidAtNode", () => {
+  test("shows reports as the first menu entry for statistics viewers", () => {
+    const node = createNode(["view_node_stats"]);
+
+    expect(nodeMenuEntryDefinitions[0].route(node)).toBe("/node/7/reports");
+    expect(isMenuEntryValidAtNode(nodeMenuEntryDefinitions[0], node)).toBe(true);
+  });
+
   test("hides terminal and till entries without node administration access", () => {
     const node = createNode([]);
 

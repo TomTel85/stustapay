@@ -73,8 +73,23 @@ export const translations = {
   },
   nodes: {
     overview: "Overview",
+    reports: "Reports",
     statistics: "Stats",
     settings: "Settings",
+  },
+  reports: {
+    title: "Reports",
+    description: "PDF reports for the currently selected event scope.",
+    eventRequired: "Reports are only available within an event.",
+    revenueTitle: "Revenue report",
+    revenueDescription: "Revenue and individual bookings for the selected scope.",
+    downloadRevenue: "Download revenue report",
+    revenueError: "Could not generate revenue report",
+    accountingTitle: "Financial report",
+    accountingDescription:
+      "Accounting overview with revenue, cash movements, online top-ups, donations, and products for the selected scope.",
+    downloadAccounting: "Download financial report",
+    accountingError: "Could not generate financial report",
   },
   account: {
     overview: "Overview",
@@ -224,7 +239,8 @@ export const translations = {
       "This guide explains the most important workflows in the administration portal and links directly to the relevant sections.",
     contents: "Contents",
     relatedLinks: "Relevant portal links",
-    currentContext: "Current context: {{node}}. Open this guide directly from an event to keep context-specific shortcuts.",
+    currentContext:
+      "Current context: {{node}}. Open this guide directly from an event to keep context-specific shortcuts.",
     selectNodeHint:
       "No event context is active right now. Node-specific shortcuts stay disabled until you open the guide from a node or event.",
     requiresNodeContext: "Available after selecting an event or node.",
@@ -358,6 +374,9 @@ export const translations = {
       "Please configure the start / end times for this event as well as the daily end time in the event settings",
     generateRevenueReport: "Generate revenue report",
     generateRevenueReportError: "Could not generate revenue report",
+    generateAccountingReport: "Download accounting report",
+    generateAccountingReportPending: "Generating accounting report …",
+    generateAccountingReportError: "Could not generate accounting report",
     filterDate: "Date",
     filterSubnode: "Filter by Subnode",
     allSubnodes: "All Subnodes",
@@ -454,11 +473,13 @@ export const translations = {
     hasBookings: "Already booked",
     isLocked: "Locked",
     isReturnable: "Can be returned",
+    isDonation: "Report as donation",
     isFixedPrice: "Fixed Price",
     taxRate: "Tax Rate",
     fixedPrice: "Price is fixed",
     lock: "Lock Product",
-    updateWarningUsed: "This product has already been booked. Changes only apply to future bookings.",
+    updateWarningUsed:
+      "This product has already been booked. Price changes only apply to future bookings; the donation marker also applies to historical reports.",
     create: "Add a new product",
     update: "Update product",
     delete: "Delete Product",
@@ -632,7 +653,8 @@ export const translations = {
       secretConfigured: "Configured",
       secretNotConfigured: "Not configured",
       oauthConfigMissing: "Global SumUp OAuth client credentials are not configured.",
-      affiliateKeyMissing: "The global SumUp affiliate key is not configured. Card-present flows will stay unavailable.",
+      affiliateKeyMissing:
+        "The global SumUp affiliate key is not configured. Card-present flows will stay unavailable.",
       globalUpdateSuccess: "Global SumUp settings updated successfully",
       globalUpdateFailed: "Updating global SumUp settings failed: {{reason}}",
       globalLoadErrorTitle: "Error loading global SumUp settings",
@@ -649,7 +671,8 @@ export const translations = {
       linkedEventCountValue: "{{count}} descendant events can reuse this connection.",
       resolvedLinkSummary: "Using SumUp merchant {{merchantCode}} via {{nodeName}}.",
       noResolvedLink: "No active SumUp merchant connection is available for this event.",
-      legacyFallbackNotice: "This event still has legacy SumUp credentials. Move the merchant connection to the parent node for shared reuse.",
+      legacyFallbackNotice:
+        "This event still has legacy SumUp credentials. Move the merchant connection to the parent node for shared reuse.",
       legacyStoredButUnusedNotice:
         "This event still has legacy SumUp credentials stored, but the parent node connection is currently used, so the old event-level credentials are ignored.",
       clearLegacyButton: "Delete legacy credentials",
@@ -679,7 +702,8 @@ export const translations = {
       tabLabel: "Payout",
       payout_disabled_notice_de: "Notice when payout is disabled (DE)",
       payout_disabled_notice_en: "Notice when payout is disabled (EN)",
-      payout_disabled_notice_help: "Optional notice shown in the customer portal while payouts are disabled for this event.",
+      payout_disabled_notice_help:
+        "Optional notice shown in the customer portal while payouts are disabled for this event.",
       sepa_enabled: "Payout enabled",
       ibanNotValid: "IBAN is not valid",
       sepa_sender_name: "SEPA sender name",
@@ -829,10 +853,12 @@ export const translations = {
       "This cash register is not assigned to a cashier, we therefore cannot transfer it to another. Please use the stock up cashier functionality for that.",
     assign: "Assign to cashier",
     assignTargetCashier: "Cashier to assign the register to",
-    alreadyAssigned: "This cash register is already assigned to a cashier. Please use the transfer functionality instead.",
+    alreadyAssigned:
+      "This cash register is already assigned to a cashier. Please use the transfer functionality instead.",
     modifyBalance: "Add funds",
     amount: "Amount",
-    modifyBalanceDescription: "Enter a positive amount to add funds to the cash register. The funds will be transferred from the cash vault.",
+    modifyBalanceDescription:
+      "Enter a positive amount to add funds to the cash register. The funds will be transferred from the cash vault.",
     cannotModifyNotAssigned: "This cash register is not assigned to a cashier and cannot have funds added to it.",
     euro200: "Amount of 200€ bills",
     euro100: "Amount of 100€ bills",
@@ -987,8 +1013,7 @@ export const translations = {
       tab: "Tag swap",
       title: "Tag swap",
       open: "Open tag swap",
-      description:
-        "Move a customer account to a different tag. Target tags with an empty stub account can be reused.",
+      description: "Move a customer account to a different tag. Target tags with an empty stub account can be reused.",
       quickActionDescription:
         "Search source and target tags with autocomplete and optionally block the old tag from future account creation.",
       sourceLabel: "Source tag",

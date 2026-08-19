@@ -72,6 +72,7 @@ export const ProductDetail: React.FC = () => {
         <DetailField label={t("product.name")} value={product.name} />
         <DetailBoolField label={t("product.hasBookings")} value={product.has_bookings ?? false} />
         <DetailBoolField label={t("product.isReturnable")} value={product.is_returnable} />
+        <DetailBoolField label={t("product.isDonation")} value={product.is_donation ?? false} />
         <DetailBoolField label={t("product.isFixedPrice")} value={product.fixed_price} />
         <DetailListField label={t("product.restrictions")} value={product?.restrictions} />
         <DetailNumberField label={t("product.price")} type="currency" value={product.price} />

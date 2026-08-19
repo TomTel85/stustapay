@@ -14,6 +14,7 @@ export function ProductForm<T extends NewProduct>(props: ProductFormProps<T>) {
     <>
       <FormTextField autoFocus name="name" label={t("product.name")} formik={props} />
       <FormCheckbox label={t("product.isReturnable")} name="is_returnable" formik={props} />
+      <FormCheckbox label={t("product.isDonation")} name="is_donation" formik={props} />
 
       <FormCheckbox
         label={t("product.fixedPrice")}

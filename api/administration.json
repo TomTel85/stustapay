@@ -8865,6 +8865,140 @@
         }
       }
     },
+    "/tree/nodes/{node_id}/generate-accounting-report": {
+      "post": {
+        "tags": [
+          "tree"
+        ],
+        "summary": "Generate Accounting Report",
+        "operationId": "generate_accounting_report",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          },
+          {
+            "name": "to_timestamp",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Timestamp"
+            }
+          },
+          {
+            "name": "from_timestamp",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Timestamp"
+            }
+          },
+          {
+            "name": "till_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Till Id"
+            }
+          },
+          {
+            "name": "subnode_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subnode Id"
+            }
+          },
+          {
+            "name": "selected_dates",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Selected Dates"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "application/pdf": {}
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/tree/nodes/{node_id}/sumup-link": {
       "get": {
         "tags": [
@@ -17117,6 +17251,11 @@
             "title": "Is Returnable",
             "default": false
           },
+          "is_donation": {
+            "type": "boolean",
+            "title": "Is Donation",
+            "default": false
+          },
           "target_account_id": {
             "anyOf": [
               {
@@ -19382,6 +19521,11 @@
           "is_returnable": {
             "type": "boolean",
             "title": "Is Returnable"
+          },
+          "is_donation": {
+            "type": "boolean",
+            "title": "Is Donation",
+            "default": false
           },
           "target_account_id": {
             "anyOf": [

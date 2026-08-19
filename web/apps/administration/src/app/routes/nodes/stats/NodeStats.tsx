@@ -165,7 +165,8 @@ export const NodeStats: React.FC = () => {
     },
     {
       ...statsQueryOptions(predictionPollingIntervalMs, isPredictionExpanded),
-      skip: currentNode.event == null || !isPredictionEnabled || selectedProductId !== undefined || !isPredictionExpanded,
+      skip:
+        currentNode.event == null || !isPredictionEnabled || selectedProductId !== undefined || !isPredictionExpanded,
     }
   );
 
@@ -306,10 +307,13 @@ export const NodeStats: React.FC = () => {
     ...statsQueryOptions(pollingIntervalMs, isProductDataEnabled),
     skip: !isProductDataEnabled,
   });
-  const { data: revenueByCounter, isLoading: isRevenueByCounterLoading } = useGetRevenueByCounterQuery(sharedStatsArgs, {
-    ...statsQueryOptions(pollingIntervalMs, isCounterDataEnabled),
-    skip: !isCounterDataEnabled,
-  });
+  const { data: revenueByCounter, isLoading: isRevenueByCounterLoading } = useGetRevenueByCounterQuery(
+    sharedStatsArgs,
+    {
+      ...statsQueryOptions(pollingIntervalMs, isCounterDataEnabled),
+      skip: !isCounterDataEnabled,
+    }
+  );
 
   const selectedSubnodeName = React.useMemo(
     () => subnodeOptions.find((node) => node.id === selectedSubnodeId)?.name,
@@ -349,7 +353,10 @@ export const NodeStats: React.FC = () => {
     return <Navigate to="/" />;
   }
 
-  if (currentNode.event != null && (eventSettings.start_date == null || eventSettings.end_date == null || eventSettings.daily_end_time == null)) {
+  if (
+    currentNode.event != null &&
+    (eventSettings.start_date == null || eventSettings.end_date == null || eventSettings.daily_end_time == null)
+  ) {
     return (
       <Alert severity="warning">
         <AlertTitle>{t("overview.warningEventDatesNeedConfiguration")}</AlertTitle>
@@ -414,7 +421,7 @@ export const NodeStats: React.FC = () => {
                         }
                         return t("overview.selectedDatesCount", { count: values.length });
                       }}
-                    > 
+                    >
                       {availableDates && availableDates.length > 0 ? (
                         availableDates.map((date) => (
                           <MenuItem key={date} value={date}>
@@ -696,7 +703,11 @@ export const NodeStats: React.FC = () => {
               productId={selectedProductId}
               prediction={isPredictionEnabled ? prediction : undefined}
               isPredictionLoading={isPredictionEnabled ? isPredictionLoading : false}
-              isLoading={isOverviewLoading || isPaymentMethodsLoading || (selectedProductId !== undefined && isProductStatsLoading)}
+              isLoading={
+                isOverviewLoading ||
+                isPaymentMethodsLoading ||
+                (selectedProductId !== undefined && isProductStatsLoading)
+              }
               overview={overview}
               paymentMethods={paymentMethods}
               productStats={productStats}

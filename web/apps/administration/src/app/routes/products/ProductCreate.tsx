@@ -16,6 +16,7 @@ const initialValues: NewProduct = {
   price_in_vouchers: 0,
   restrictions: [],
   is_returnable: false,
+  is_donation: false,
 };
 
 export const ProductCreate: React.FC = withPrivilegeGuard("node_administration", () => {

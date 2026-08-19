@@ -1,0 +1,170 @@
+\documentclass[a4paper]{article}
+\usepackage[PUTF,T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage[table]{xcolor}
+\usepackage{libertine}
+\usepackage{ngerman}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{tabularx}
+\usepackage{geometry}
+
+\renewcommand{\familydefault}{\sfdefault}
+\setlength{\parindent}{0pt}
+\setlength{\LTpre}{0pt}
+\setlength{\LTpost}{0pt}
+\renewcommand{\arraystretch}{1.18}
+\geometry{a4paper,left=15mm,right=15mm,top=22mm,bottom=22mm,headheight=16pt,headsep=10pt,footskip=15mm}
+
+\makeatletter
+\def\qr@writebinarymatrixtoauxfile#1{}%
+\makeatother
+\DeclareFontFamily{PUTF}{pdf}{}%
+\DeclareFontShape{PUTF}{pdf}{m}{n}{ <-> ecrm1000 }{}%
+\DeclareFontSubstitution{PUTF}{pdf}{m}{n}%
+
+\definecolor{textcolor}{rgb}{0.1,0.12,0.16}
+\definecolor{textmuted}{rgb}{0.43,0.47,0.52}
+\definecolor{linecolor}{rgb}{0.81,0.84,0.88}
+\definecolor{panelbg}{rgb}{0.96,0.97,0.98}
+\definecolor{panelstrong}{rgb}{0.92,0.95,0.98}
+\definecolor{accent}{rgb}{0.15,0.31,0.51}
+
+\usepackage[xetex,colorlinks=true,linkcolor=accent,urlcolor=accent,bookmarks=true,
+pdfauthor={TeamFestlichPay},pdftitle={TeamFestlichPay Buchhaltungsbericht}]{hyperref}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{textmuted}{TeamFestlichPay Buchhaltungsbericht}}
+\fancyhead[R]{\small\textcolor{textmuted}{\VAR[event_name|latex]}}
+\fancyfoot[C]{\textcolor{textmuted}{Seite \thepage/\pageref*{LastPage}}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{linecolor}\leaders\hrule height \headrulewidth\hfill}}
+\newcommand{\SectionTitle}[1]{{\Large\textbf{#1}}\par\vspace{0.55em}}
+\newcommand{\EmptyHint}[1]{\textcolor{textmuted}{#1}\par}
+
+\begin{document}
+\color{textcolor}
+
+{\Huge\textbf{Buchhaltungsbericht}}\par
+\vspace{0.35em}
+{\large\textcolor{textmuted}{\VAR[event_name|latex]}}\par
+\vspace{1em}
+
+\fcolorbox{linecolor}{panelbg}{
+\parbox{\dimexpr\textwidth-2\fboxsep-2\fboxrule\relax}{
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{4.2cm}X@{}}
+Bereich & \VAR[scope_name|latex] \\
+Kasse & \BLOCK[if till_name]\VAR[till_name|latex]\BLOCK[else]Alle Kassen\BLOCK[endif] \\
+Zeitraum & \VAR[from_time|datetime] bis \VAR[to_time|datetime] \\
+\BLOCK[if selected_dates]Ausgewählte Veranstaltungstage & \VAR[', '.join(selected_dates)|latex] \\
+\BLOCK[endif]Event-Tagesgrenze & \BLOCK[if daily_end_time]\VAR[daily_end_time.strftime('%H:%M')|latex] Uhr\BLOCK[else]00:00 Uhr\BLOCK[endif] \\
+Event-Tagesgrenze & \BLOCK[if daily_end_time]\VAR[daily_end_time.strftime('%H:%M')|latex] Uhr\BLOCK[else]00:00 Uhr\BLOCK[endif] \\
+Erzeugt am & \VAR[generated_at|datetime] \\
+\end{tabularx}
+}}
+
+\vspace{1.1em}
+\SectionTitle{1. Einnahmen nach Knoten, Kasse und Zahlungsart}
+\textcolor{textmuted}{Enthalten sind nicht stornierte Produktverkäufe.}\par
+\vspace{0.5em}
+\BLOCK[if revenue_rows]
+\begin{longtable}{>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{4.6cm}>{\raggedright\arraybackslash}p{3.1cm}>{\raggedleft\arraybackslash}p{3.0cm}}
+\rowcolor{panelbg}\textbf{Knoten} & \textbf{Kasse} & \textbf{Zahlungsart} & \textbf{Betrag} \\
+\endfirsthead
+\rowcolor{panelbg}\textbf{Knoten} & \textbf{Kasse} & \textbf{Zahlungsart} & \textbf{Betrag} \\
+\endhead
+\BLOCK[for row in revenue_rows]
+\VAR[row.node_name|latex] & \VAR[row.till_name|latex] & \VAR[row.payment_method|latex] & \VAR[row.amount|money] \\
+\BLOCK[endfor]
+\rowcolor{panelstrong}\multicolumn{3}{r}{\textbf{Gesamter Produktumsatz}} & \textbf{\VAR[total_revenue|money]} \\
+\end{longtable}
+\BLOCK[else]
+\EmptyHint{Keine Produktumsätze im ausgewählten Zeitraum. Gesamt: \VAR[total_revenue|money]}
+\BLOCK[endif]
+
+\vspace{0.9em}
+\SectionTitle{2. Tagesübersicht Bargeld}
+\textcolor{textmuted}{Interne Kassenbestückungen, Transporte und Tresorrückgaben sind nicht enthalten.}\par
+\vspace{0.5em}
+\BLOCK[if daily_cash_rows]
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}@{}}
+\rowcolor{panelbg}\textbf{Tag} & \textbf{Aufladungen} & \textbf{Barverkäufe} & \textbf{Auszahlungen} & \textbf{Endbetrag} \\
+\endfirsthead
+\rowcolor{panelbg}\textbf{Tag} & \textbf{Aufladungen} & \textbf{Barverkäufe} & \textbf{Auszahlungen} & \textbf{Endbetrag} \\
+\endhead
+\BLOCK[for row in daily_cash_rows]
+\VAR[row.day|latex] & \VAR[row.cash_topups|money] & \VAR[row.cash_sales|money] & \VAR[row.cash_payouts|money] & \VAR[row.net_amount|money] \\
+\BLOCK[endfor]
+\rowcolor{panelstrong}\textbf{Gesamt} & \textbf{\VAR[total_cash_topups|money]} & \textbf{\VAR[total_cash_sales|money]} & \textbf{\VAR[total_cash_payouts|money]} & \textbf{\VAR[total_cash_net|money]} \\
+\end{longtable}
+\BLOCK[else]
+\EmptyHint{Keine externen Bargeldbewegungen im ausgewählten Zeitraum. Endbetrag: \VAR[total_cash_net|money]}
+\BLOCK[endif]
+
+\clearpage
+\SectionTitle{3. Online-Aufladungen}
+\textcolor{textmuted}{Das Kassensystem weist diese Zahl als „SumUp online“ aus. Die innerhalb von SumUp verwendete Zahlungsart, insbesondere PayPal, kann rückwirkend nicht separat ausgewiesen werden.}\par
+\vspace{0.5em}
+\BLOCK[if daily_online_topup_rows]
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X>{\raggedleft\arraybackslash}p{4cm}}
+\rowcolor{panelbg}\textbf{Tag} & \textbf{SumUp online} \\
+\BLOCK[for row in daily_online_topup_rows]
+\VAR[row.day|latex] & \VAR[row.amount|money] \\
+\BLOCK[endfor]
+\rowcolor{panelstrong}\textbf{Gesamt} & \textbf{\VAR[total_online_topups|money]} \\
+\end{tabularx}
+\BLOCK[else]
+\EmptyHint{Keine Online-Aufladungen im ausgewählten Zeitraum. Gesamt: \VAR[total_online_topups|money]}
+\BLOCK[endif]
+
+\vspace{1.2em}
+\SectionTitle{4. Spendenübersicht}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X>{\raggedleft\arraybackslash}p{4cm}}
+\rowcolor{panelbg}\textbf{Kategorie} & \textbf{Betrag} \\
+Verkaufte Spendenprodukte im Berichtszeitraum & \VAR[total_product_donations|money] \\
+Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_credit_donations]\VAR[total_remaining_credit_donations|money]\BLOCK[else]Nicht im berechtigten Bereich verfügbar\BLOCK[endif] \\
+\rowcolor{panelstrong}\textbf{Spenden gesamt} & \textbf{\VAR[total_donations|money]} \\
+\end{tabularx}
+\vspace{0.45em}
+\BLOCK[if includes_remaining_credit_donations]
+\textcolor{textmuted}{Restguthaben-Spenden sind ein aktueller Event-Gesamtstand zum Erzeugungszeitpunkt und keinem Veranstaltungstag zugeordnet.}\par
+\BLOCK[else]
+\textcolor{textmuted}{Der Event-Gesamtstand der Restguthaben-Spenden ist nur bei einem Bericht verfügbar, der an der Eventwurzel aufgerufen wird.}\par
+\BLOCK[endif]
+
+\vspace{0.9em}
+\BLOCK[if donation_product_rows]
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.4cm}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{3.7cm}>{\raggedleft\arraybackslash}p{1.3cm}>{\raggedleft\arraybackslash}p{2.4cm}@{}}
+\rowcolor{panelbg}\textbf{Knoten} & \textbf{Kasse} & \textbf{Spendenprodukt} & \textbf{Menge} & \textbf{Betrag} \\
+\endfirsthead
+\rowcolor{panelbg}\textbf{Knoten} & \textbf{Kasse} & \textbf{Spendenprodukt} & \textbf{Menge} & \textbf{Betrag} \\
+\endhead
+\BLOCK[for row in donation_product_rows]
+\VAR[row.node_name|latex] & \VAR[row.till_name|latex] & \VAR[row.product_name|latex] & \VAR[row.quantity] & \VAR[row.amount|money] \\
+\BLOCK[endfor]
+\end{longtable}
+\BLOCK[else]
+\EmptyHint{Keine als Spende gekennzeichneten Produktverkäufe im ausgewählten Zeitraum.}
+\BLOCK[endif]
+
+\clearpage
+\SectionTitle{5. Produktübersicht zur Abstimmung}
+\BLOCK[if product_rows]
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{3.5cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedleft\arraybackslash}p{1.2cm}>{\raggedleft\arraybackslash}p{2.2cm}@{}}
+\rowcolor{panelbg}\textbf{Knoten} & \textbf{Kasse} & \textbf{Produkt} & \textbf{Zahlungsart} & \textbf{Menge} & \textbf{Betrag} \\
+\endfirsthead
+\rowcolor{panelbg}\textbf{Knoten} & \textbf{Kasse} & \textbf{Produkt} & \textbf{Zahlungsart} & \textbf{Menge} & \textbf{Betrag} \\
+\endhead
+\BLOCK[for row in product_rows]
+\VAR[row.node_name|latex] & \VAR[row.till_name|latex] & \VAR[row.product_name|latex] & \VAR[row.payment_method|latex] & \VAR[row.quantity] & \VAR[row.amount|money] \\
+\BLOCK[endfor]
+\rowcolor{panelstrong}\multicolumn{5}{r}{\textbf{Gesamt}} & \textbf{\VAR[total_revenue|money]} \\
+\end{longtable}
+\BLOCK[else]
+\EmptyHint{Keine Produkte im ausgewählten Zeitraum verkauft. Gesamt: \VAR[total_revenue|money]}
+\BLOCK[endif]
+
+\end{document}

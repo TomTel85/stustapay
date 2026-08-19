@@ -40,11 +40,13 @@ jest.mock("@/hooks", () => ({
       start_date: "2026-01-01",
       end_date: "2026-01-07",
       daily_end_time: "06:00:00",
+      bon_title: "Test Festival",
     },
   }),
   useCurrentNode: () => ({
     currentNode: {
       id: 5,
+      name: "Eventbereich",
       event: {},
       event_node_id: 5,
       children: [],
@@ -81,7 +83,9 @@ jest.mock("@/api", () => ({
 }));
 
 jest.mock("./DashboardKPIs", () => ({
-  DashboardKPIs: (props: { enabled?: boolean }) => <div data-testid="kpis">{props.enabled ? "enabled" : "disabled"}</div>,
+  DashboardKPIs: (props: { enabled?: boolean }) => (
+    <div data-testid="kpis">{props.enabled ? "enabled" : "disabled"}</div>
+  ),
 }));
 
 jest.mock("./RevenueByCounterChart", () => ({
@@ -109,7 +113,9 @@ jest.mock("./QuantitiesByProductTable", () => ({
 }));
 
 jest.mock("./OrdersTable", () => ({
-  OrdersTable: (props: { enabled?: boolean }) => <div data-testid="orders-table">{props.enabled ? "enabled" : "disabled"}</div>,
+  OrdersTable: (props: { enabled?: boolean }) => (
+    <div data-testid="orders-table">{props.enabled ? "enabled" : "disabled"}</div>
+  ),
 }));
 
 jest.mock("./RevenuePredictionChart", () => ({
@@ -191,12 +197,18 @@ describe("NodeStats", () => {
       }),
       expect.objectContaining({ skip: true })
     );
-    expect(mockUseGetProductStatsQuery).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ skip: true }));
+    expect(mockUseGetProductStatsQuery).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ skip: true })
+    );
     expect(mockUseGetRevenueByCounterQuery).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({ skip: true })
     );
-    expect(mockUseGetAvailableDatesQuery).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ skip: true }));
+    expect(mockUseGetAvailableDatesQuery).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ skip: true })
+    );
     expect(screen.getByTestId("orders-table").textContent).toContain("disabled");
     expect(screen.getByLabelText("overview.filterDate").textContent).toContain("overview.today");
   });
@@ -222,7 +234,10 @@ describe("NodeStats", () => {
       </MemoryRouter>
     );
 
-    expect(mockUseGetAvailableDatesQuery).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ skip: false }));
+    expect(mockUseGetAvailableDatesQuery).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ skip: false })
+    );
     expect(mockUseGetDashboardOverviewQuery).toHaveBeenCalledTimes(1);
     expect(mockUseGetPaymentMethodStatsQuery).toHaveBeenCalledTimes(1);
     expect(mockUseGetProductStatsQuery).toHaveBeenCalledTimes(1);
@@ -267,7 +282,9 @@ describe("NodeStats", () => {
       </MemoryRouter>
     );
 
-    const ordersAccordion = screen.getByText("overview.orders").closest("[class*=MuiAccordion]") ?? screen.getByText("overview.orders").parentElement;
+    const ordersAccordion =
+      screen.getByText("overview.orders").closest("[class*=MuiAccordion]") ??
+      screen.getByText("overview.orders").parentElement;
     expect(ordersAccordion).toBeTruthy();
     expect(screen.getByTestId("orders-table")).toBeTruthy();
     expect(within(screen.getByTestId("orders-table")).getByText("enabled")).toBeTruthy();

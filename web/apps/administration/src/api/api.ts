@@ -25,6 +25,7 @@ import {
   GenerateTestReportApiArg,
   Terminal,
   GenerateRevenueReportApiArg,
+  GenerateAccountingReportApiArg,
   UpdateUserTagCommentApiArg,
   UpdateUserTagVipStatusApiArg,
   UpdateUserTagAccountCreationBlockedApiArg,
@@ -248,6 +249,21 @@ export const api = generatedApi.enhanceEndpoints({
       query: (queryArg: GenerateRevenueReportApiArg) => ({
         url: `/tree/nodes/${queryArg.nodeId}/generate-revenue-report`,
         method: "POST",
+        responseHandler: async (resp: Response) => window.URL.createObjectURL(await resp.blob()),
+      }),
+      invalidatesTags: [],
+    },
+    generateAccountingReport: {
+      query: (queryArg: GenerateAccountingReportApiArg) => ({
+        url: `/tree/nodes/${queryArg.nodeId}/generate-accounting-report`,
+        method: "POST",
+        params: {
+          to_timestamp: queryArg.toTimestamp,
+          from_timestamp: queryArg.fromTimestamp,
+          till_id: queryArg.tillId,
+          subnode_id: queryArg.subnodeId,
+          selected_dates: queryArg.selectedDates,
+        },
         responseHandler: async (resp: Response) => window.URL.createObjectURL(await resp.blob()),
       }),
       invalidatesTags: [],

@@ -336,6 +336,7 @@ export type Product = {
   restrictions: ProductRestriction[];
   is_locked: boolean;
   is_returnable: boolean;
+  is_donation?: boolean;
   target_account_id?: number | null;
   node_id: number;
   id: number;

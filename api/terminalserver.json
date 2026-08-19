@@ -3753,6 +3753,11 @@
             "type": "boolean",
             "title": "Is Returnable"
           },
+          "is_donation": {
+            "type": "boolean",
+            "title": "Is Donation",
+            "default": false
+          },
           "target_account_id": {
             "anyOf": [
               {

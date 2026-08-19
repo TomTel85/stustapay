@@ -69,8 +69,8 @@ class ProductService(Service[Config]):
         product_id = await conn.fetchval(
             "insert into product "
             "(node_id, name, price, tax_rate_id, target_account_id, fixed_price, price_in_vouchers, is_locked, "
-            "is_returnable, type) "
-            "values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'user_defined') "
+            "is_returnable, is_donation, type) "
+            "values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'user_defined') "
             "returning id",
             node.id,
             product.name,
@@ -85,6 +85,7 @@ class ProductService(Service[Config]):
             ),
             True,
             product.is_returnable,
+            product.is_donation,
         )
 
         for restriction in product.restrictions:
@@ -124,7 +125,7 @@ class ProductService(Service[Config]):
 
         row = await conn.fetchrow(
             "update product set name = $2, price = $3, tax_rate_id = $4, target_account_id = $5, fixed_price = $6, "
-            "price_in_vouchers = $7, is_locked = $8, is_returnable = $9 "
+            "price_in_vouchers = $7, is_locked = $8, is_returnable = $9, is_donation = $10 "
             "where id = $1 "
             "returning id",
             product_id,
@@ -140,6 +141,7 @@ class ProductService(Service[Config]):
             ),
             True,
             product.is_returnable,
+            product.is_donation,
         )
         if row is None:
             raise RuntimeError("product disappeared unexpecteldy within a transaction")

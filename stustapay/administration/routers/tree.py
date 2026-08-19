@@ -1,9 +1,12 @@
 import logging
+from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel
 
 from stustapay.administration.service import HeadwindError, build_headwind_custom3, get_headwind_client
+from stustapay.bon.accounting_report import AccountingReportQuery
 from stustapay.bon.bon import BonJson
 from stustapay.core.http.auth_user import CurrentAuthToken
 from stustapay.core.http.context import Context, ContextTreeService, get_context
@@ -77,8 +80,7 @@ async def update_event(
     updated_node = await tree_service.update_event(token=token, node_id=node_id, event=payload)
 
     wifi_changed = (
-        previous_settings.wifi_ssid != payload.wifi_ssid
-        or previous_settings.wifi_passphrase != payload.wifi_passphrase
+        previous_settings.wifi_ssid != payload.wifi_ssid or previous_settings.wifi_passphrase != payload.wifi_passphrase
     )
     if not wifi_changed or not context.config.headwind.enabled:
         return updated_node
@@ -166,6 +168,40 @@ async def generate_test_report(token: CurrentAuthToken, tree_service: ContextTre
 async def generate_revenue_report(token: CurrentAuthToken, tree_service: ContextTreeService, node_id: int):
     mime_type, content = await tree_service.generate_revenue_report(token=token, node_id=node_id)
     headers = {"Content-Disposition": 'inline; filename="revenue_report.pdf"'}
+    return Response(content, headers=headers, media_type=mime_type)
+
+
+@router.post(
+    "/nodes/{node_id}/generate-accounting-report",
+    responses={
+        "200": {
+            "description": "Successful Response",
+            "content": {"application/pdf": {}},
+        }
+    },
+)
+async def generate_accounting_report(
+    token: CurrentAuthToken,
+    tree_service: ContextTreeService,
+    node_id: int,
+    to_timestamp: Optional[datetime] = None,
+    from_timestamp: Optional[datetime] = None,
+    till_id: Optional[int] = None,
+    subnode_id: Optional[int] = None,
+    selected_dates: Optional[list[str]] = Query(None),
+):
+    mime_type, content = await tree_service.generate_accounting_report(
+        token=token,
+        node_id=node_id,
+        query=AccountingReportQuery(
+            to_time=to_timestamp,
+            from_time=from_timestamp,
+            till_id=till_id,
+            subnode_id=subnode_id,
+            selected_dates=selected_dates,
+        ),
+    )
+    headers = {"Content-Disposition": 'inline; filename="accounting_report.pdf"'}
     return Response(content, headers=headers, media_type=mime_type)
 
 

@@ -8,6 +8,7 @@ import { AcceptInvitation, Login, Profile } from "./routes/auth";
 import { CashierCloseOut, CashierDetail, CashierList, CashierShiftDetail } from "./routes/cashiers";
 import { EventCreate, NodeOverview, MoneyOverview, NodePageLayout, NodeSettings, NodeCreate } from "./routes/nodes";
 import { NodeStats } from "./routes/nodes/stats";
+import { NodeReports } from "./routes/nodes/reports";
 import { OrderBon, OrderDetail, SaleEdit, TransactionDetail } from "./routes/orders";
 import { PayoutRunCreate, PayoutRunDetail, PayoutRunList } from "./routes/payouts";
 import { ProductCreate, ProductDetail, ProductList, ProductUpdate } from "./routes/products";
@@ -185,6 +186,10 @@ const router = createBrowserRouter([
                 ),
               },
             ],
+          },
+          {
+            path: "reports",
+            element: <NodeReports />,
           },
           {
             path: "stats",

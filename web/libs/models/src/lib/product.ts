@@ -13,6 +13,7 @@ export const NewProductSchema = z.object({
   price_in_vouchers: z.number().optional().nullable(),
   restrictions: z.array(ProductRestrictionSchema),
   is_returnable: z.boolean(),
+  is_donation: z.boolean(),
   tax_rate_id: z.number().int(),
 });
 export type NewProduct = z.infer<typeof NewProductSchema>;

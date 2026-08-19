@@ -4,6 +4,7 @@ import {
   Android as AndroidIcon,
   ConfirmationNumber as ConfirmationNumberIcon,
   Leaderboard as LeaderboardIcon,
+  Assessment as AssessmentIcon,
   MeetingRoom as MeetingRoomIcon,
   Money as MoneyIcon,
   Nfc as NfcIcon,
@@ -54,6 +55,14 @@ type NodeMenuItem = {
 const privilegeOf = (privileges: PrivilegeRequirement): Privilege[] => normalizePrivilegeRequirement(privileges);
 
 export const nodeMenuEntryDefinitions: NodeMenuItem[] = [
+  {
+    route: (node) => `/node/${node.id}/reports`,
+    label: i18n.t("nodes.reports"),
+    icon: AssessmentIcon,
+    additionalRequirements: (node) =>
+      (node.event != null || node.event_node_id != null) &&
+      (node.privileges_at_node.includes("view_node_stats") || node.privileges_at_node.includes("node_administration")),
+  },
   {
     route: (node) => `/node/${node.id}/stats`,
     label: i18n.t("nodes.statistics"),

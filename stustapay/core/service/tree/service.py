@@ -3,6 +3,7 @@ from sftkit.database import Connection
 from sftkit.error import InvalidArgument, NotFound
 from sftkit.service import Service, with_db_transaction
 
+from stustapay.bon.accounting_report import AccountingReportQuery, generate_accounting_report
 from stustapay.bon.bon import BonJson, generate_dummy_bon_json
 from stustapay.bon.revenue_report import generate_dummy_report, generate_report
 from stustapay.core.banner_image import http_response_for_stored_banner, validate_and_prepare_banner_upload
@@ -380,7 +381,11 @@ async def _build_existing_account_mapping(conn: Connection, source_node_id: int,
         list(EVENT_SYSTEM_ACCOUNT_TYPES),
     )
     target_by_type = {account["type"]: account["id"] for account in target_accounts}
-    return {account["id"]: target_by_type[account["type"]] for account in source_accounts if account["type"] in target_by_type}
+    return {
+        account["id"]: target_by_type[account["type"]]
+        for account in source_accounts
+        if account["type"] in target_by_type
+    }
 
 
 async def _build_existing_product_mapping(conn: Connection, source_node_id: int, target_node_id: int) -> dict[int, int]:
@@ -395,7 +400,11 @@ async def _build_existing_product_mapping(conn: Connection, source_node_id: int,
         list(PREPROVISIONED_PRODUCT_TYPES),
     )
     target_by_type = {product["type"]: product["id"] for product in target_products}
-    return {product["id"]: target_by_type[product["type"]] for product in source_products if product["type"] in target_by_type}
+    return {
+        product["id"]: target_by_type[product["type"]]
+        for product in source_products
+        if product["type"] in target_by_type
+    }
 
 
 async def _ensure_user_tag_secret_mapping(
@@ -598,6 +607,17 @@ class TreeService(Service[Config]):
             raise InvalidArgument(f"Error while generating report: {report.msg}")
         return report.bon.mime_type, report.bon.content
 
+    @with_db_transaction(read_only=True)
+    @requires_node()
+    @requires_user(privileges=[Privilege.node_administration, Privilege.view_node_stats])
+    async def generate_accounting_report(
+        self, *, conn: Connection, node: Node, query: AccountingReportQuery
+    ) -> tuple[str, bytes]:
+        report = await generate_accounting_report(conn=conn, node=node, query=query)
+        if not report.success or report.bon is None:
+            raise InvalidArgument(f"Error while generating accounting report: {report.msg}")
+        return report.bon.mime_type, report.bon.content
+
     @with_db_transaction
     @requires_node(event_only=True)
     @requires_user(privileges=[Privilege.node_administration])
@@ -686,14 +706,13 @@ class TreeService(Service[Config]):
             "select e.banner_image, e.banner_image_mime_type "
             "from event e join node n on n.event_id = e.id "
             "where n.id = $1 and e.banner_image is not null",
-            node_id
+            node_id,
         )
         if result is None:
             return None
         payload = http_response_for_stored_banner(result["banner_image"])
         assert payload is not None
         return payload
-
 
     async def _copy_user_tags(
         self,
@@ -748,8 +767,7 @@ class TreeService(Service[Config]):
     ):
         """Copy account balances from source node to target node."""
         accounts = await conn.fetch(
-            "SELECT id, user_tag_id, type, name, comment, balance, vouchers FROM account "
-            "WHERE node_id = $1",
+            "SELECT id, user_tag_id, type, name, comment, balance, vouchers FROM account WHERE node_id = $1",
             source_node_id,
         )
 
@@ -777,7 +795,15 @@ class TreeService(Service[Config]):
 
         return account_id_mapping
 
-    async def _generate_unique_name(self, conn: Connection, table_name: str, name_column: str, original_name: str, scope_id: int, exclude_names: set[str] | None = None) -> str | None:
+    async def _generate_unique_name(
+        self,
+        conn: Connection,
+        table_name: str,
+        name_column: str,
+        original_name: str,
+        scope_id: int,
+        exclude_names: set[str] | None = None,
+    ) -> str | None:
         """Generate a unique name for the given table and scope by appending a suffix if needed."""
         exclude_names = exclude_names or set()
 
@@ -806,14 +832,14 @@ class TreeService(Service[Config]):
         if scope_column is None:
             # Global check for tax_rate
             exists = await conn.fetchval(
-                f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE {name_column} = $1)",
-                original_name
+                f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE {name_column} = $1)", original_name
             )
         else:
             # Scoped check
             exists = await conn.fetchval(
                 f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE {name_column} = $1 AND {scope_column} = $2)",
-                original_name, scope_id
+                original_name,
+                scope_id,
             )
 
         if not exists and original_name not in exclude_names:
@@ -823,13 +849,13 @@ class TreeService(Service[Config]):
         copy_name = f"{original_name} (Copy)"
         if scope_column is None:
             exists = await conn.fetchval(
-                f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE {name_column} = $1)",
-                copy_name
+                f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE {name_column} = $1)", copy_name
             )
         else:
             exists = await conn.fetchval(
                 f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE {name_column} = $1 AND {scope_column} = $2)",
-                copy_name, scope_id
+                copy_name,
+                scope_id,
             )
 
         if not exists and copy_name not in exclude_names:
@@ -841,13 +867,13 @@ class TreeService(Service[Config]):
             numbered_name = f"{original_name} (Copy {counter})"
             if scope_column is None:
                 exists = await conn.fetchval(
-                    f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE {name_column} = $1)",
-                    numbered_name
+                    f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE {name_column} = $1)", numbered_name
                 )
             else:
                 exists = await conn.fetchval(
                     f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE {name_column} = $1 AND {scope_column} = $2)",
-                    numbered_name, scope_id
+                    numbered_name,
+                    scope_id,
                 )
             if not exists and numbered_name not in exclude_names:
                 return numbered_name
@@ -1048,8 +1074,7 @@ class TreeService(Service[Config]):
             target_node_id,
         )
         tills = await conn.fetch(
-            "SELECT id, name, description, active_profile_id, terminal_id, is_virtual "
-            "FROM till WHERE node_id = $1",
+            "SELECT id, name, description, active_profile_id, terminal_id, is_virtual FROM till WHERE node_id = $1",
             source_node_id,
         )
         for till in tills:
@@ -1082,24 +1107,32 @@ class TreeService(Service[Config]):
 
         return profile_mapping
 
-    async def _copy_sub_nodes(self, conn: Connection, source_node_id: int, target_node_id: int, copy_options: CopyEventOptions) -> None:
+    async def _copy_sub_nodes(
+        self, conn: Connection, source_node_id: int, target_node_id: int, copy_options: CopyEventOptions
+    ) -> None:
         """Recursively copy sub-nodes and their contents."""
         # Get all direct children of the source node
         child_nodes = await conn.fetch(
-            "SELECT id, name, description FROM node WHERE parent = $1 AND event_id IS NULL",
-            source_node_id
+            "SELECT id, name, description FROM node WHERE parent = $1 AND event_id IS NULL", source_node_id
         )
 
         for child_node in child_nodes:
             # Create the child node in the target
-            unique_name = await self._generate_unique_name(conn, "node", "name", child_node['name'], target_node_id)
-            new_node = await create_node(conn=conn, parent_id=target_node_id, new_node=NewNode(name=unique_name, description=child_node['description']), event_id=None)
+            unique_name = await self._generate_unique_name(conn, "node", "name", child_node["name"], target_node_id)
+            new_node = await create_node(
+                conn=conn,
+                parent_id=target_node_id,
+                new_node=NewNode(name=unique_name, description=child_node["description"]),
+                event_id=None,
+            )
 
             # Recursively copy this node's contents and children
-            await self._copy_node_contents(conn, child_node['id'], new_node.id, copy_options)
-            await self._copy_sub_nodes(conn, child_node['id'], new_node.id, copy_options)
+            await self._copy_node_contents(conn, child_node["id"], new_node.id, copy_options)
+            await self._copy_sub_nodes(conn, child_node["id"], new_node.id, copy_options)
 
-    async def _copy_node_contents(self, conn: Connection, source_node_id: int, target_node_id: int, copy_options: CopyEventOptions) -> None:
+    async def _copy_node_contents(
+        self, conn: Connection, source_node_id: int, target_node_id: int, copy_options: CopyEventOptions
+    ) -> None:
         """Copy the contents of a node (excluding sub-nodes)."""
         account_id_mapping = await _build_existing_account_mapping(conn, source_node_id, target_node_id)
         product_mapping = await _build_existing_product_mapping(conn, source_node_id, target_node_id)
@@ -1161,13 +1194,15 @@ class TreeService(Service[Config]):
         used_terminal_names: set[str] = set()
         terminal_mapping: dict[int, int] = {}
         for terminal in terminals:
-            unique_name = await self._generate_unique_name(conn, "terminal", "name", terminal['name'], target_node_id, used_terminal_names)
+            unique_name = await self._generate_unique_name(
+                conn, "terminal", "name", terminal["name"], target_node_id, used_terminal_names
+            )
             assert unique_name is not None
             used_terminal_names.add(unique_name)
             new_terminal_id = await conn.fetchval(
                 "INSERT INTO terminal (name, description, node_id, mode, entry_area_id) VALUES ($1, $2, $3, $4, null) RETURNING id",
                 unique_name,
-                terminal['description'],
+                terminal["description"],
                 target_node_id,
                 terminal["mode"],
             )
@@ -1175,30 +1210,38 @@ class TreeService(Service[Config]):
 
         return terminal_mapping
 
-    async def _copy_users_and_roles(self, conn: Connection, source_node_id: int, target_node_id: int, user_tag_mapping: dict[int, int] | None = None, account_id_mapping: dict[int, int] | None = None):
+    async def _copy_users_and_roles(
+        self,
+        conn: Connection,
+        source_node_id: int,
+        target_node_id: int,
+        user_tag_mapping: dict[int, int] | None = None,
+        account_id_mapping: dict[int, int] | None = None,
+    ):
         """Copy user roles and users from source node to target node."""
-        roles = await conn.fetch(
-            "SELECT id, name, is_privileged FROM user_role WHERE node_id = $1", source_node_id
-        )
+        roles = await conn.fetch("SELECT id, name, is_privileged FROM user_role WHERE node_id = $1", source_node_id)
         role_mapping: dict[int, int] = {}
         used_role_names: set[str] = set()
         for role in roles:
-            unique_name = await self._generate_unique_name(conn, "user_role", "name", role['name'], target_node_id, used_role_names)
+            unique_name = await self._generate_unique_name(
+                conn, "user_role", "name", role["name"], target_node_id, used_role_names
+            )
             assert unique_name is not None
             used_role_names.add(unique_name)
             new_role_id = await conn.fetchval(
                 "INSERT INTO user_role (name, is_privileged, node_id) VALUES ($1, $2, $3) RETURNING id",
-                unique_name, role['is_privileged'], target_node_id
+                unique_name,
+                role["is_privileged"],
+                target_node_id,
             )
-            role_mapping[role['id']] = new_role_id
+            role_mapping[role["id"]] = new_role_id
 
-            privileges = await conn.fetch(
-                "SELECT privilege FROM user_role_to_privilege WHERE role_id = $1", role['id']
-            )
+            privileges = await conn.fetch("SELECT privilege FROM user_role_to_privilege WHERE role_id = $1", role["id"])
             for privilege in privileges:
                 await conn.execute(
                     "INSERT INTO user_role_to_privilege (role_id, privilege) VALUES ($1, $2)",
-                    new_role_id, privilege['privilege']
+                    new_role_id,
+                    privilege["privilege"],
                 )
 
         users = await conn.fetch(
@@ -1209,16 +1252,16 @@ class TreeService(Service[Config]):
         user_mapping: dict[int, int] = {}
         for user in users:
             new_user_tag_id = None
-            if user['user_tag_id'] is not None and user_tag_mapping:
-                new_user_tag_id = user_tag_mapping.get(user['user_tag_id'])
+            if user["user_tag_id"] is not None and user_tag_mapping:
+                new_user_tag_id = user_tag_mapping.get(user["user_tag_id"])
 
             new_transport_account_id = None
-            if user['transport_account_id'] is not None and account_id_mapping:
-                new_transport_account_id = account_id_mapping.get(user['transport_account_id'])
+            if user["transport_account_id"] is not None and account_id_mapping:
+                new_transport_account_id = account_id_mapping.get(user["transport_account_id"])
 
             new_cashier_account_id = None
-            if user['cashier_account_id'] is not None and account_id_mapping:
-                new_cashier_account_id = account_id_mapping.get(user['cashier_account_id'])
+            if user["cashier_account_id"] is not None and account_id_mapping:
+                new_cashier_account_id = account_id_mapping.get(user["cashier_account_id"])
 
             new_customer_account_id = None
             if user["customer_account_id"] is not None and account_id_mapping:
@@ -1235,9 +1278,9 @@ class TreeService(Service[Config]):
                 "INSERT INTO usr (login, password, display_name, description, user_tag_id, transport_account_id, cashier_account_id, customer_account_id, cash_register_id, node_id, created_by, email) "
                 "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, null, $9, null, $10) RETURNING id",
                 user["login"],
-                user['password'],
-                user['display_name'],
-                user['description'],
+                user["password"],
+                user["display_name"],
+                user["description"],
                 new_user_tag_id,
                 new_transport_account_id,
                 new_cashier_account_id,
@@ -1245,7 +1288,7 @@ class TreeService(Service[Config]):
                 target_node_id,
                 user["email"],
             )
-            user_mapping[user['id']] = new_user_id
+            user_mapping[user["id"]] = new_user_id
 
         for user in users:
             new_created_by = None
@@ -1254,13 +1297,18 @@ class TreeService(Service[Config]):
             await conn.execute("UPDATE usr SET created_by = $1 WHERE id = $2", new_created_by, user_mapping[user["id"]])
 
             user_roles = await conn.fetch(
-                "SELECT role_id, terminal_only FROM user_to_role WHERE user_id = $1 AND node_id = $2", user['id'], source_node_id
+                "SELECT role_id, terminal_only FROM user_to_role WHERE user_id = $1 AND node_id = $2",
+                user["id"],
+                source_node_id,
             )
             for user_role in user_roles:
-                if user_role['role_id'] in role_mapping:
+                if user_role["role_id"] in role_mapping:
                     await conn.execute(
                         "INSERT INTO user_to_role (user_id, role_id, node_id, terminal_only) VALUES ($1, $2, $3, $4)",
-                        user_mapping[user["id"]], role_mapping[user_role['role_id']], target_node_id, user_role['terminal_only']
+                        user_mapping[user["id"]],
+                        role_mapping[user_role["role_id"]],
+                        target_node_id,
+                        user_role["terminal_only"],
                     )
 
         return user_mapping
@@ -1280,22 +1328,20 @@ class TreeService(Service[Config]):
         referenced_tax_rate_ids = await conn.fetch(
             "SELECT DISTINCT tax_rate_id FROM product WHERE node_id = $1 AND tax_rate_id IS NOT NULL", source_node_id
         )
-        referenced_tax_ids = [row['tax_rate_id'] for row in referenced_tax_rate_ids]
+        referenced_tax_ids = [row["tax_rate_id"] for row in referenced_tax_rate_ids]
 
         tax_mapping: dict[int, int] = {}
         used_tax_names: set[str] = set()
         for tax_id in referenced_tax_ids:
-            tax = await conn.fetchrow(
-                "SELECT id, name, rate, description, node_id FROM tax_rate WHERE id = $1", tax_id
-            )
+            tax = await conn.fetchrow("SELECT id, name, rate, description, node_id FROM tax_rate WHERE id = $1", tax_id)
             if tax is None:
                 continue
 
             existing = await conn.fetchval(
-                "SELECT id FROM tax_rate WHERE node_id = $1 AND name = $2", target_node_id, tax['name']
+                "SELECT id FROM tax_rate WHERE node_id = $1 AND name = $2", target_node_id, tax["name"]
             )
             if existing:
-                tax_mapping[tax['id']] = existing
+                tax_mapping[tax["id"]] = existing
                 await conn.execute(
                     "UPDATE tax_rate SET rate = $2, description = $3 WHERE id = $1",
                     existing,
@@ -1303,31 +1349,37 @@ class TreeService(Service[Config]):
                     tax["description"],
                 )
             else:
-                unique_name = await self._generate_unique_name(conn, "tax_rate", "name", tax['name'], target_node_id, used_tax_names)
+                unique_name = await self._generate_unique_name(
+                    conn, "tax_rate", "name", tax["name"], target_node_id, used_tax_names
+                )
                 assert unique_name is not None
                 used_tax_names.add(unique_name)
                 new_tax_id = await conn.fetchval(
                     "INSERT INTO tax_rate (name, rate, description, node_id) VALUES ($1, $2, $3, $4) RETURNING id",
-                    unique_name, tax['rate'], tax['description'], target_node_id
+                    unique_name,
+                    tax["rate"],
+                    tax["description"],
+                    target_node_id,
                 )
-                tax_mapping[tax['id']] = new_tax_id
+                tax_mapping[tax["id"]] = new_tax_id
 
         products = await conn.fetch(
-            "SELECT id, name, type, price, fixed_price, price_in_vouchers, is_locked, is_returnable, target_account_id, tax_rate_id, ticket_metadata_id "
-            "FROM product WHERE node_id = $1", source_node_id
+            "SELECT id, name, type, price, fixed_price, price_in_vouchers, is_locked, is_returnable, is_donation, target_account_id, tax_rate_id, ticket_metadata_id "
+            "FROM product WHERE node_id = $1",
+            source_node_id,
         )
-        ticket_metadata_ids = [product["ticket_metadata_id"] for product in products if product["ticket_metadata_id"] is not None]
+        ticket_metadata_ids = [
+            product["ticket_metadata_id"] for product in products if product["ticket_metadata_id"] is not None
+        ]
         ticket_metadata_rows = await conn.fetch(
             "SELECT id, initial_top_up_amount FROM product_ticket_metadata WHERE id = ANY($1)",
             ticket_metadata_ids or [0],
         )
-        ticket_metadata_by_id = {
-            metadata["id"]: metadata["initial_top_up_amount"] for metadata in ticket_metadata_rows
-        }
+        ticket_metadata_by_id = {metadata["id"]: metadata["initial_top_up_amount"] for metadata in ticket_metadata_rows}
         ticket_metadata_mapping: dict[int, int] = {}
         used_product_names: set[str] = set()
         for product in products:
-            new_tax_id = tax_mapping.get(product['tax_rate_id'])
+            new_tax_id = tax_mapping.get(product["tax_rate_id"])
             if new_tax_id is None:
                 continue
 
@@ -1352,13 +1404,15 @@ class TreeService(Service[Config]):
                     product["name"],
                 )
             if existing is None:
-                unique_name = await self._generate_unique_name(conn, "product", "name", product["name"], target_node_id, used_product_names)
+                unique_name = await self._generate_unique_name(
+                    conn, "product", "name", product["name"], target_node_id, used_product_names
+                )
                 if unique_name is None:
                     continue
                 used_product_names.add(unique_name)
                 existing = await conn.fetchval(
-                    "INSERT INTO product (name, type, price, fixed_price, price_in_vouchers, is_locked, is_returnable, target_account_id, tax_rate_id, node_id, ticket_metadata_id) "
-                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
+                    "INSERT INTO product (name, type, price, fixed_price, price_in_vouchers, is_locked, is_returnable, is_donation, target_account_id, tax_rate_id, node_id, ticket_metadata_id) "
+                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
                     unique_name,
                     product["type"],
                     product["price"],
@@ -1366,6 +1420,7 @@ class TreeService(Service[Config]):
                     product["price_in_vouchers"],
                     product["is_locked"],
                     product["is_returnable"],
+                    product["is_donation"],
                     target_account_id,
                     new_tax_id,
                     target_node_id,
@@ -1375,7 +1430,7 @@ class TreeService(Service[Config]):
             product_mapping[product["id"]] = existing
             await conn.execute(
                 "UPDATE product SET name = $2, type = $3, price = $4, fixed_price = $5, price_in_vouchers = $6, "
-                "is_locked = $7, is_returnable = $8, target_account_id = $9, tax_rate_id = $10, ticket_metadata_id = $11 "
+                "is_locked = $7, is_returnable = $8, is_donation = $9, target_account_id = $10, tax_rate_id = $11, ticket_metadata_id = $12 "
                 "WHERE id = $1",
                 existing,
                 product["name"],
@@ -1385,6 +1440,7 @@ class TreeService(Service[Config]):
                 product["price_in_vouchers"],
                 product["is_locked"],
                 product["is_returnable"],
+                product["is_donation"],
                 target_account_id,
                 new_tax_id,
                 new_ticket_metadata_id,
@@ -1408,15 +1464,23 @@ class TreeService(Service[Config]):
         """Copy TSE devices from source node to target node."""
         tse_devices = await conn.fetch(
             "SELECT name, status, serial, hashalgo, time_format, public_key, certificate, process_data_encoding "
-            "FROM tse WHERE node_id = $1", source_node_id
+            "FROM tse WHERE node_id = $1",
+            source_node_id,
         )
         for tse in tse_devices:
-            unique_name = await self._generate_unique_name(conn, "tse", "name", tse['name'], target_node_id)
+            unique_name = await self._generate_unique_name(conn, "tse", "name", tse["name"], target_node_id)
             await conn.execute(
                 "INSERT INTO tse (name, status, serial, hashalgo, time_format, public_key, certificate, process_data_encoding, node_id) "
                 "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-                unique_name, tse['status'], tse['serial'], tse['hashalgo'], tse['time_format'],
-                tse['public_key'], tse['certificate'], tse['process_data_encoding'], target_node_id
+                unique_name,
+                tse["status"],
+                tse["serial"],
+                tse["hashalgo"],
+                tse["time_format"],
+                tse["public_key"],
+                tse["certificate"],
+                tse["process_data_encoding"],
+                target_node_id,
             )
 
     @with_db_transaction

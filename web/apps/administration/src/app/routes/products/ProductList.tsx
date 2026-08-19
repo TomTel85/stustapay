@@ -91,6 +91,7 @@ export const ProductList: React.FC = () => {
         price_in_vouchers: product.price_in_vouchers,
         restrictions: product.restrictions,
         is_returnable: product.is_returnable,
+        is_donation: product.is_donation,
         target_account_id: product.target_account_id,
       },
     });
@@ -115,6 +116,11 @@ export const ProductList: React.FC = () => {
     {
       field: "is_returnable",
       headerName: t("product.isReturnable"),
+      type: "boolean",
+    },
+    {
+      field: "is_donation",
+      headerName: t("product.isDonation"),
       type: "boolean",
     },
     {

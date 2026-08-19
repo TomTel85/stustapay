@@ -1387,6 +1387,20 @@ const injectedRtkApi = api
         query: (queryArg) => ({ url: `/tree/nodes/${queryArg.nodeId}/generate-revenue-report`, method: "POST" }),
         invalidatesTags: ["tree"],
       }),
+      generateAccountingReport: build.mutation<GenerateAccountingReportApiResponse, GenerateAccountingReportApiArg>({
+        query: (queryArg) => ({
+          url: `/tree/nodes/${queryArg.nodeId}/generate-accounting-report`,
+          method: "POST",
+          params: {
+            to_timestamp: queryArg.toTimestamp,
+            from_timestamp: queryArg.fromTimestamp,
+            till_id: queryArg.tillId,
+            subnode_id: queryArg.subnodeId,
+            selected_dates: queryArg.selectedDates,
+          },
+        }),
+        invalidatesTags: ["tree"],
+      }),
       getNodeSumupLinkStatus: build.query<GetNodeSumupLinkStatusApiResponse, GetNodeSumupLinkStatusApiArg>({
         query: (queryArg) => ({ url: `/tree/nodes/${queryArg.nodeId}/sumup-link` }),
         providesTags: ["tree"],
@@ -2797,6 +2811,15 @@ export type GenerateRevenueReportApiResponse = /** status 200 Successful Respons
 export type GenerateRevenueReportApiArg = {
   nodeId: number;
 };
+export type GenerateAccountingReportApiResponse = /** status 200 Successful Response */ any;
+export type GenerateAccountingReportApiArg = {
+  nodeId: number;
+  toTimestamp?: string | null;
+  fromTimestamp?: string | null;
+  tillId?: number | null;
+  subnodeId?: number | null;
+  selectedDates?: string[] | null;
+};
 export type GetNodeSumupLinkStatusApiResponse = /** status 200 Successful Response */ NodeSumUpConnectionStatus;
 export type GetNodeSumupLinkStatusApiArg = {
   nodeId: number;
@@ -3185,6 +3208,7 @@ export type Product = {
   restrictions: ProductRestriction[];
   is_locked: boolean;
   is_returnable: boolean;
+  is_donation?: boolean;
   target_account_id?: number | null;
   node_id: number;
   id: number;
@@ -3219,6 +3243,7 @@ export type NewProduct = {
   restrictions?: ProductRestriction[];
   is_locked?: boolean;
   is_returnable?: boolean;
+  is_donation?: boolean;
   target_account_id?: number | null;
 };
 export type User = {
@@ -5194,6 +5219,7 @@ export const {
   useGenerateTestBonMutation,
   useGenerateTestReportMutation,
   useGenerateRevenueReportMutation,
+  useGenerateAccountingReportMutation,
   useGetNodeSumupLinkStatusQuery,
   useLazyGetNodeSumupLinkStatusQuery,
   useDeleteNodeSumupLinkMutation,

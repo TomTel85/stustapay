@@ -30,6 +30,7 @@ async def test_basic_product_workflow(
     )
 
     assert product.name == "Test Product"
+    assert product.is_donation is False
 
     with pytest.raises(AccessDenied):
         await product_service.create_product(
@@ -42,11 +43,12 @@ async def test_basic_product_workflow(
         token=event_admin_token,
         product_id=product.id,
         node_id=event_node.id,
-        product=NewProduct(name="Updated Test Product", price=4, tax_rate_id=tax_rate_none.id),
+        product=NewProduct(name="Updated Test Product", price=4, tax_rate_id=tax_rate_none.id, is_donation=True),
     )
     assert updated_product.name == "Updated Test Product"
     assert updated_product.price == 4
     assert updated_product.tax_name == tax_rate_none.name
+    assert updated_product.is_donation is True
 
     products = await product_service.list_products(token=event_admin_token, node_id=event_node.id)
     assert len(list(filter(lambda p: p.name == "Updated Test Product", products))) == 1

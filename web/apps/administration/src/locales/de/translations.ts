@@ -74,12 +74,28 @@ export const translations: NestedPartialAsStrings<Translations> = {
   errorPage: {
     brand: "TeamFestlichPay",
     maintenance: "Wartung",
-    currentlyUnavailable: "Die TeamFestlichPay Administration ist aktuell nicht verfügbar. Bitte versuche es später erneut.",
+    currentlyUnavailable:
+      "Die TeamFestlichPay Administration ist aktuell nicht verfügbar. Bitte versuche es später erneut.",
   },
   nodes: {
     overview: "Übersicht",
+    reports: "Berichte",
     statistics: "Statistiken",
     settings: "Einstellungen",
+  },
+  reports: {
+    title: "Berichte",
+    description: "PDF-Berichte für den aktuell ausgewählten Veranstaltungsbereich.",
+    eventRequired: "Berichte sind nur innerhalb einer Veranstaltung verfügbar.",
+    revenueTitle: "Umsatzbericht",
+    revenueDescription: "Umsätze und Einzelbuchungen für den ausgewählten Bereich.",
+    downloadRevenue: "Umsatzbericht herunterladen",
+    revenueError: "Umsatzbericht konnte nicht erstellt werden",
+    accountingTitle: "Finanzbericht",
+    accountingDescription:
+      "Buchhalterische Übersicht mit Umsätzen, Bargeldbewegungen, Online-Aufladungen, Spenden und Produkten für den ausgewählten Bereich.",
+    downloadAccounting: "Finanzbericht herunterladen",
+    accountingError: "Finanzbericht konnte nicht erstellt werden",
   },
   account: {
     overview: "Übersicht",
@@ -157,7 +173,8 @@ export const translations: NestedPartialAsStrings<Translations> = {
     groupTagDefaultHelper: "Wird verwendet, wenn in der CSV kein group_tag steht",
     grid: {
       title: "Tag-Grid",
-      description: "Zeilen manuell anlegen oder tabellarische Daten direkt aus Excel/Google Sheets in das Grid einfügen.",
+      description:
+        "Zeilen manuell anlegen oder tabellarische Daten direkt aus Excel/Google Sheets in das Grid einfügen.",
       addRow: "Zeile hinzufügen",
       addTenRows: "10 Zeilen hinzufügen",
       removeEmptyRows: "Leere Zeilen entfernen",
@@ -183,7 +200,8 @@ export const translations: NestedPartialAsStrings<Translations> = {
     },
     accountCreation: {
       title: "Konten für importierte Tags erstellen",
-      description: "Erstellen Sie Kundenkonten für die importierten Tags. Tags, die bereits Konten haben, werden übersprungen.",
+      description:
+        "Erstellen Sie Kundenkonten für die importierten Tags. Tags, die bereits Konten haben, werden übersprungen.",
       createButton: "Konten erstellen",
       skipButton: "Überspringen",
       success: "{{created}} Konten erfolgreich erstellt. {{skipped}} Tags hatten bereits Konten.",
@@ -229,7 +247,8 @@ export const translations: NestedPartialAsStrings<Translations> = {
       "Diese Anleitung beschreibt die wichtigsten Abläufe im Admin-Portal und verlinkt direkt in die passenden Bereiche.",
     contents: "Inhaltsverzeichnis",
     relatedLinks: "Passende Portal-Links",
-    currentContext: "Aktueller Kontext: {{node}}. Öffne die Anleitung direkt aus einem Event, damit kontextbezogene Shortcuts verfügbar sind.",
+    currentContext:
+      "Aktueller Kontext: {{node}}. Öffne die Anleitung direkt aus einem Event, damit kontextbezogene Shortcuts verfügbar sind.",
     selectNodeHint:
       "Aktuell ist kein Event-Kontext aktiv. Node-spezifische Shortcuts bleiben deaktiviert, bis du die Anleitung aus einem Event oder Knoten öffnest.",
     requiresNodeContext: "Verfügbar, sobald ein Event oder Knoten ausgewählt ist.",
@@ -350,6 +369,9 @@ export const translations: NestedPartialAsStrings<Translations> = {
       "Bitte konfigurieren Sie die Start- / Endzeiten für dieses Ereignis sowie die tägliche Endzeit in den Ereigniseinstellungen",
     generateRevenueReport: "Umsatzbericht generieren",
     generateRevenueReportError: "Umsatzbericht konnte nicht generiert werden",
+    generateAccountingReport: "Buchhaltungsbericht herunterladen",
+    generateAccountingReportPending: "Buchhaltungsbericht wird erstellt …",
+    generateAccountingReportError: "Buchhaltungsbericht konnte nicht erstellt werden",
     filterDate: "Datum",
     filterSubnode: "Nach Unterknoten filtern",
     allSubnodes: "Alle Unterknoten",
@@ -446,11 +468,13 @@ export const translations: NestedPartialAsStrings<Translations> = {
     hasBookings: "Bereits gebucht",
     isLocked: "Gesperrt",
     isReturnable: "Kann zurückgegeben werden",
+    isDonation: "Als Spende ausweisen",
     isFixedPrice: "Festpreis",
     taxRate: "Steuersatz",
     fixedPrice: "Preis ist festgelegt",
     lock: "Produkt sperren",
-    updateWarningUsed: "Dieses Produkt wurde bereits gebucht. Änderungen gelten nur für zukünftige Buchungen.",
+    updateWarningUsed:
+      "Dieses Produkt wurde bereits gebucht. Preisänderungen gelten nur für zukünftige Buchungen; die Spendenkennzeichnung gilt auch für historische Berichte.",
     create: "Neues Produkt hinzufügen",
     update: "Produkt aktualisieren",
     delete: "Produkt löschen",
@@ -615,7 +639,8 @@ export const translations: NestedPartialAsStrings<Translations> = {
       secretConfigured: "Konfiguriert",
       secretNotConfigured: "Nicht konfiguriert",
       oauthConfigMissing: "Globale SumUp-OAuth-Zugangsdaten sind nicht konfiguriert.",
-      affiliateKeyMissing: "Der globale SumUp-Affiliate-Schluessel ist nicht konfiguriert. Kartenzahlungen vor Ort bleiben deaktiviert.",
+      affiliateKeyMissing:
+        "Der globale SumUp-Affiliate-Schluessel ist nicht konfiguriert. Kartenzahlungen vor Ort bleiben deaktiviert.",
       globalUpdateSuccess: "Globale SumUp-Einstellungen wurden gespeichert",
       globalUpdateFailed: "Speichern der globalen SumUp-Einstellungen fehlgeschlagen: {{reason}}",
       globalLoadErrorTitle: "Fehler beim Laden der globalen SumUp-Einstellungen",
@@ -657,7 +682,8 @@ export const translations: NestedPartialAsStrings<Translations> = {
       wifiSsid: "WLAN-SSID",
       wifiPassphrase: "WLAN-Passphrase",
       bothFieldsRequired: "SSID und Passphrase müssen entweder beide gesetzt oder beide leer sein.",
-      syncWarning: "Ereigniseinstellungen gespeichert, aber die WLAN-Synchronisierung ist auf {{count}} zugeordneten Geräten fehlgeschlagen.",
+      syncWarning:
+        "Ereigniseinstellungen gespeichert, aber die WLAN-Synchronisierung ist auf {{count}} zugeordneten Geräten fehlgeschlagen.",
     },
     payout: {
       tabLabel: "Auszahlung",
@@ -671,11 +697,14 @@ export const translations: NestedPartialAsStrings<Translations> = {
       sepa_sender_iban: "SEPA-Absender-IBAN",
       sepa_description: "SEPA-Beschreibung",
       sepa_allowed_country_codes: "Erlaubte Ländercodes für Auszahlungen",
-      payout_done_subject: "Betreff der E-Mail, die beim Einstellen einer Auszahlung auf \"Erledigt\" gesendet wird",
-      payout_done_message: "Nachricht der E-Mail, die beim Einstellen einer Auszahlung auf \"Erledigt\" gesendet wird",
-      payout_registered_subject: "Betreff der E-Mail, die gesendet wird, wenn ein Kunde seine Auszahlungsinformationen eingibt",
-      payout_registered_message: "Nachricht der E-Mail, die gesendet wird, wenn ein Kunde seine Auszahlungsinformationen eingibt",
-      payout_sender: "E-Mail-Absender aller auszugsbezogenen E-Mails. Wenn leer, wird der E-Mail-Absender des Ereignisses verwendet",
+      payout_done_subject: 'Betreff der E-Mail, die beim Einstellen einer Auszahlung auf "Erledigt" gesendet wird',
+      payout_done_message: 'Nachricht der E-Mail, die beim Einstellen einer Auszahlung auf "Erledigt" gesendet wird',
+      payout_registered_subject:
+        "Betreff der E-Mail, die gesendet wird, wenn ein Kunde seine Auszahlungsinformationen eingibt",
+      payout_registered_message:
+        "Nachricht der E-Mail, die gesendet wird, wenn ein Kunde seine Auszahlungsinformationen eingibt",
+      payout_sender:
+        "E-Mail-Absender aller auszugsbezogenen E-Mails. Wenn leer, wird der E-Mail-Absender des Ereignisses verwendet",
     },
     email: {
       tabLabel: "E-Mail",
@@ -910,7 +939,8 @@ export const translations: NestedPartialAsStrings<Translations> = {
     maxNumPayoutsMustBeSmallerThanEventDefault:
       "Die maximale Anzahl von Auszahlungen muss kleiner sein als die Standardkonfiguration für ein Ereignis: {{maxNumPayoutsAtEvent}}",
     downloadCsv: "CSV",
-    createNewSepaXmlInfo: "Dies wird die SEPA-XML dieser Auszahlung mit dem angegebenen Ausführungsdatum neu generieren.",
+    createNewSepaXmlInfo:
+      "Dies wird die SEPA-XML dieser Auszahlung mit dem angegebenen Ausführungsdatum neu generieren.",
     downloadPreviousSepa: "Vorherige SEPA-XML",
     downloadSepa: "SEPA-XML",
     done: "Erledigt",
@@ -949,8 +979,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
     supportCustomersDescription:
       "Öffne Kundendetails für Guthaben, Auszahlungsstatus und hinterlegte Auszahlungsinformationen.",
     supportAccountsDescription: "Nutze Konten für Guthaben-Transfers, Kommentare und direkte Kontooperationen.",
-    supportUserTagsDescription:
-      "Nutze Benutzer-Tags für Armband-Zuordnung, Kontoverknüpfung und NFC-Supportfälle.",
+    supportUserTagsDescription: "Nutze Benutzer-Tags für Armband-Zuordnung, Kontoverknüpfung und NFC-Supportfälle.",
     quickActions: "Schnellzugriffe",
     searchCustomersDescription:
       "Suche nach Name, Kommentar, E-Mail, IBAN, Konto-Inhaber, PIN oder UID und öffne direkt die Kundendetails.",
