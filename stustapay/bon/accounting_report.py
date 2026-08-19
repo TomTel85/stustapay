@@ -62,6 +62,7 @@ class AccountingReportContext(BaseModel):
     generated_at: datetime
     from_time: datetime
     to_time: datetime
+    includes_all_event_bookings: bool
     daily_end_time: time | None
     selected_dates: list[str]
     currency_symbol: str
@@ -88,19 +89,6 @@ def _normalize_datetime(value: datetime) -> datetime:
     return value
 
 
-def _extend_event_end(end_time: datetime, daily_end_time: time | None) -> datetime:
-    normalized = _normalize_datetime(end_time)
-    if daily_end_time is None:
-        return normalized
-    boundary = normalized.replace(
-        hour=daily_end_time.hour,
-        minute=daily_end_time.minute,
-        second=daily_end_time.second,
-        microsecond=0,
-    )
-    return boundary + timedelta(days=1) if boundary < normalized else boundary
-
-
 def _resolve_bounds(query: AccountingReportQuery, event: PublicEventSettings) -> tuple[datetime, datetime]:
     stats_query = TimeseriesStatsQuery(
         from_time=query.from_time,
@@ -109,17 +97,7 @@ def _resolve_bounds(query: AccountingReportQuery, event: PublicEventSettings) ->
         subnode_id=query.subnode_id,
         selected_dates=query.selected_dates,
     )
-    if query.selected_dates or query.from_time is not None or query.to_time is not None:
-        from_time, to_time = get_event_time_bounds(stats_query, event)
-        if query.to_time is None and not query.selected_dates and event.end_date is not None:
-            to_time = _extend_event_end(event.end_date, event.daily_end_time)
-        return from_time, to_time
-
-    from_time = event.start_date or datetime(1970, 1, 1, tzinfo=timezone.utc)
-    to_time = event.end_date or datetime(4000, 1, 1, tzinfo=timezone.utc)
-    if event.end_date is not None:
-        to_time = _extend_event_end(to_time, event.daily_end_time)
-    return _normalize_datetime(from_time), _normalize_datetime(to_time)
+    return get_event_time_bounds(stats_query, event)
 
 
 def _is_in_selected_ranges(value: datetime, selected_ranges: list[tuple[datetime, datetime]]) -> bool:
@@ -326,6 +304,9 @@ async def build_accounting_report_context(
         generated_at=datetime.now(tz=REPORT_TIMEZONE),
         from_time=_normalize_datetime(from_time).astimezone(REPORT_TIMEZONE),
         to_time=_normalize_datetime(to_time).astimezone(REPORT_TIMEZONE),
+        includes_all_event_bookings=(
+            not query.selected_dates and query.from_time is None and query.to_time is None
+        ),
         daily_end_time=event.daily_end_time,
         selected_dates=query.selected_dates or [],
         currency_symbol=get_currency_symbol(event.currency_identifier),

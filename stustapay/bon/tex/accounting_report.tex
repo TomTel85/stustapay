@@ -58,10 +58,9 @@ pdfauthor={TeamFestlichPay},pdftitle={TeamFestlichPay Buchhaltungsbericht}]{hype
 \begin{tabularx}{\linewidth}{@{}>{\bfseries}p{4.2cm}X@{}}
 Bereich & \VAR[scope_name|latex] \\
 Kasse & \BLOCK[if till_name]\VAR[till_name|latex]\BLOCK[else]Alle Kassen\BLOCK[endif] \\
-Zeitraum & \VAR[from_time|datetime] bis \VAR[to_time|datetime] \\
+Zeitraum & \BLOCK[if includes_all_event_bookings]Alle Buchungen des Events\BLOCK[else]\VAR[from_time|datetime] bis \VAR[to_time|datetime]\BLOCK[endif] \\
 \BLOCK[if selected_dates]Ausgewählte Veranstaltungstage & \VAR[', '.join(selected_dates)|latex] \\
 \BLOCK[endif]Event-Tagesgrenze & \BLOCK[if daily_end_time]\VAR[daily_end_time.strftime('%H:%M')|latex] Uhr\BLOCK[else]00:00 Uhr\BLOCK[endif] \\
-Event-Tagesgrenze & \BLOCK[if daily_end_time]\VAR[daily_end_time.strftime('%H:%M')|latex] Uhr\BLOCK[else]00:00 Uhr\BLOCK[endif] \\
 Erzeugt am & \VAR[generated_at|datetime] \\
 \end{tabularx}
 }}
@@ -87,8 +86,6 @@ Erzeugt am & \VAR[generated_at|datetime] \\
 
 \vspace{0.9em}
 \SectionTitle{2. Tagesübersicht Bargeld}
-\textcolor{textmuted}{Interne Kassenbestückungen, Transporte und Tresorrückgaben sind nicht enthalten.}\par
-\vspace{0.5em}
 \BLOCK[if daily_cash_rows]
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}@{}}
 \rowcolor{panelbg}\textbf{Tag} & \textbf{Aufladungen} & \textbf{Barverkäufe} & \textbf{Auszahlungen} & \textbf{Endbetrag} \\
@@ -106,8 +103,6 @@ Erzeugt am & \VAR[generated_at|datetime] \\
 
 \clearpage
 \SectionTitle{3. Online-Aufladungen}
-\textcolor{textmuted}{Das Kassensystem weist diese Zahl als „SumUp online“ aus. Die innerhalb von SumUp verwendete Zahlungsart, insbesondere PayPal, kann rückwirkend nicht separat ausgewiesen werden.}\par
-\vspace{0.5em}
 \BLOCK[if daily_online_topup_rows]
 \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X>{\raggedleft\arraybackslash}p{4cm}}
 \rowcolor{panelbg}\textbf{Tag} & \textbf{SumUp online} \\

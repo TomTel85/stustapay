@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from stustapay.bon.accounting_report import (
     AccountingReportQuery,
     _report_day,
+    _resolve_bounds,
     build_accounting_report_context,
     render_accounting_report,
 )
@@ -162,12 +163,26 @@ async def test_build_accounting_report_context_aggregates_accounting_sections(mo
     result = await render_accounting_report(context)
     assert result.success is True
     assert "Festival \\& Freunde" in captured["tex"]
-    assert "PayPal" in captured["tex"]
     assert "SumUp online" in captured["tex"]
     assert "StuStaPay" not in captured["tex"]
+    assert "Interne Kassenbestückungen" not in captured["tex"]
+    assert "PayPal" not in captured["tex"]
     assert "2025-08-01" in captured["tex"]
 
 
 def test_report_day_uses_event_boundary_in_berlin_timezone():
     assert _report_day(datetime(2025, 8, 1, 3, tzinfo=timezone.utc), time(6)) == "31.07.2025"
     assert _report_day(datetime(2025, 8, 1, 4, tzinfo=timezone.utc), time(6)) == "01.08.2025"
+
+
+def test_unfiltered_accounting_report_uses_the_same_all_time_bounds_as_statistics():
+    event = SimpleNamespace(
+        start_date=datetime(2025, 8, 1, 6, tzinfo=timezone.utc),
+        end_date=datetime(2025, 8, 2, 6, tzinfo=timezone.utc),
+        daily_end_time=time(6),
+    )
+
+    from_time, to_time = _resolve_bounds(AccountingReportQuery(), event)
+
+    assert from_time == datetime(1970, 1, 1, tzinfo=timezone.utc)
+    assert to_time == datetime(4000, 1, 1, tzinfo=timezone.utc)
