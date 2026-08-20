@@ -9,7 +9,7 @@ import {
 } from "@stustapay/form-components";
 import { z } from "zod";
 import { FormikProps } from "formik";
-import { Container, InputAdornment, Stack, Typography, Switch, FormControlLabel } from "@mui/material";
+import { Container, InputAdornment, Stack, Typography } from "@mui/material";
 import { useCreateEventMutation } from "@/api";
 import { useCurrentNode } from "@/hooks";
 import { EventSumUpSettings, EventSumUpSettingsSchema, EventSumupSettingsForm } from "./event-settings/TabSumUp";
@@ -21,7 +21,7 @@ import {
   CustomerPortalSettingsSchema,
 } from "./event-settings/TabCustomerPortal";
 import { PayoutSettingsForm } from "./event-settings/TabPayout";
-import { PayoutSettings, PayoutSettingsSchema } from "./event-settings/TabPayout.schema";
+import { DEFAULT_PAYOUT_COUNTRY_CODES, PayoutSettings, PayoutSettingsSchema } from "./event-settings/TabPayout.schema";
 import { CurrencyIdentifierSchema, getCurrencySymbolForIdentifier } from "@stustapay/models";
 import { CurrencyIdentifierSelect } from "@/components/features";
 import { useNavigate } from "react-router-dom";
@@ -54,7 +54,6 @@ const GeneralFormSchema = z
     },
     { message: i18n.t("settings.general.start_end_date_must_be_set_same"), path: ["end_date"] }
   );
-
 
 type GeneralFormValues = z.infer<typeof GeneralFormSchema>;
 
@@ -139,7 +138,7 @@ const payoutFormStep: FormStep = {
   title: "Payout",
   initialValues: {
     translation_texts: {},
-    sepa_allowed_country_codes: [],
+    sepa_allowed_country_codes: [...DEFAULT_PAYOUT_COUNTRY_CODES],
     sepa_description: "",
     sepa_enabled: false,
     sepa_sender_iban: "",

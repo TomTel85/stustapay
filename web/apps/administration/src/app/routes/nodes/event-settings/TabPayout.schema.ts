@@ -21,6 +21,36 @@ const requiredIssue = {
   message: "Required if payout is enabled",
 };
 
+export const DEFAULT_PAYOUT_COUNTRY_CODES = [
+  "AT",
+  "BE",
+  "BG",
+  "CY",
+  "CZ",
+  "DE",
+  "DK",
+  "EE",
+  "ES",
+  "FI",
+  "FR",
+  "GR",
+  "HR",
+  "HU",
+  "IE",
+  "IT",
+  "LT",
+  "LU",
+  "LV",
+  "MT",
+  "NL",
+  "PL",
+  "PT",
+  "RO",
+  "SE",
+  "SI",
+  "SK",
+] as const;
+
 export const PayoutSettingsSchema = z
   .object({
     translation_texts: TranslationTextsSchema.shape.translation_texts,
@@ -39,7 +69,7 @@ export const PayoutSettingsSchema = z
       })
       .transform((val) => val ?? ""),
     sepa_description: emptyString(),
-    sepa_allowed_country_codes: z.array(z.string()).default([]),
+    sepa_allowed_country_codes: z.array(z.string()).default([...DEFAULT_PAYOUT_COUNTRY_CODES]),
     payout_done_subject: undefineableString(),
     payout_done_message: undefineableString(),
     payout_registered_subject: undefineableString(),

@@ -1,5 +1,6 @@
 import { TextDecoder, TextEncoder } from "util";
-import { PayoutSettingsSchema } from "./TabPayout.schema";
+import iban from "iban";
+import { DEFAULT_PAYOUT_COUNTRY_CODES, PayoutSettingsSchema } from "./TabPayout.schema";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -12,6 +13,27 @@ globalThis.TextEncoder = TextEncoder as typeof globalThis.TextEncoder;
 globalThis.TextDecoder = TextDecoder as typeof globalThis.TextDecoder;
 
 describe("PayoutSettingsSchema", () => {
+  test("defaults to all EU payout countries", () => {
+    const settings = PayoutSettingsSchema.parse({
+      translation_texts: {},
+      sepa_enabled: false,
+      sepa_sender_name: "",
+      sepa_sender_iban: undefined,
+      sepa_description: "",
+      payout_done_subject: undefined,
+      payout_done_message: undefined,
+      payout_registered_subject: undefined,
+      payout_registered_message: undefined,
+      payout_sender: undefined,
+    });
+
+    expect(settings.sepa_allowed_country_codes).toEqual(DEFAULT_PAYOUT_COUNTRY_CODES);
+    expect(DEFAULT_PAYOUT_COUNTRY_CODES).toHaveLength(27);
+    expect(DEFAULT_PAYOUT_COUNTRY_CODES.every((countryCode) => countryCode in iban.countries)).toBe(true);
+    expect(DEFAULT_PAYOUT_COUNTRY_CODES).not.toContain("CH");
+    expect(DEFAULT_PAYOUT_COUNTRY_CODES).not.toContain("GB");
+  });
+
   test("accepts optional payout disabled notices via translation_texts", () => {
     expect(
       PayoutSettingsSchema.parse({
