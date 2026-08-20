@@ -19,14 +19,14 @@ jest.mock("react-i18next", () => ({
 }));
 
 describe("SumupPaymentMethods", () => {
-  test("hides apple pay and google pay while keeping other known payment methods", () => {
+  test("renders active apple pay and google pay methods as translated chips", () => {
     render(<SumupPaymentMethods paymentMethods={["card", "apple_pay", "google_pay"]} />);
 
     expect(screen.getByText("You can top up your balance online with SumUp here.")).toBeTruthy();
     expect(screen.getByText("Available payment methods")).toBeTruthy();
     expect(screen.getByText("Card")).toBeTruthy();
-    expect(screen.queryByText("Apple Pay")).toBeNull();
-    expect(screen.queryByText("Google Pay")).toBeNull();
+    expect(screen.getByText("Apple Pay")).toBeTruthy();
+    expect(screen.getByText("Google Pay")).toBeTruthy();
   });
 
   test("formats unknown payment methods and hides duplicate chips", () => {
@@ -43,12 +43,12 @@ describe("SumupPaymentMethods", () => {
     expect(screen.queryByText("Available payment methods")).toBeNull();
   });
 
-  test("does not render a payment method header when only hidden payment methods are provided", () => {
+  test("renders the payment method header when only wallet methods are active", () => {
     render(<SumupPaymentMethods paymentMethods={["apple_pay", "google_pay"]} />);
 
     expect(screen.getByText("You can top up your balance online with SumUp here.")).toBeTruthy();
-    expect(screen.queryByText("Available payment methods")).toBeNull();
-    expect(screen.queryByText("Apple Pay")).toBeNull();
-    expect(screen.queryByText("Google Pay")).toBeNull();
+    expect(screen.getByText("Available payment methods")).toBeTruthy();
+    expect(screen.getByText("Apple Pay")).toBeTruthy();
+    expect(screen.getByText("Google Pay")).toBeTruthy();
   });
 });
