@@ -7,6 +7,7 @@ from sftkit.database import Connection
 from sftkit.error import InvalidArgument
 from sftkit.service import Service, with_db_transaction
 
+from stustapay.bon.report_time import ReportDayMode
 from stustapay.core.config import Config
 from stustapay.core.schema.product import Product
 from stustapay.core.schema.tree import Node, PublicEventSettings
@@ -745,21 +746,56 @@ class OrderStatsService(Service[Config]):
     @with_db_transaction(read_only=True)
     @requires_node()
     @requires_user([Privilege.node_administration, Privilege.view_node_stats])
-    async def get_available_dates(self, *, conn: Connection, node: Node, subnode_id: Optional[int] = None) -> list[str]:
+    async def get_available_dates(
+        self,
+        *,
+        conn: Connection,
+        node: Node,
+        subnode_id: Optional[int] = None,
+        day_mode: Optional[ReportDayMode] = None,
+    ) -> list[str]:
         scope_node = await self._resolve_scope_node(conn=conn, node=node, subnode_id=subnode_id)
+        query_args: tuple[object, ...]
 
-        dates = await _timed_stats_query(
-            query_name="get_available_dates",
-            node_id=scope_node.id,
-            query_coro=conn.fetch(
+        if day_mode == ReportDayMode.EVENT_DAY:
+            event = await fetch_event_for_node(conn=conn, node=scope_node)
+            if event.daily_end_time is None:
+                raise InvalidArgument("daily end time must be configured when using event days")
+            query = (
+                "SELECT DISTINCT ((o.booked_at AT TIME ZONE 'Europe/Berlin') "
+                "- ($2::time - time '00:00'))::date::text as date "
+                "FROM ordr o "
+                "JOIN till t ON o.till_id = t.id "
+                "JOIN node n ON n.id = t.node_id "
+                "WHERE ($1 = ANY(n.parent_ids) OR n.id = $1) "
+                "ORDER BY date DESC"
+            )
+            query_args = (scope_node.id, event.daily_end_time)
+        elif day_mode == ReportDayMode.CALENDAR_DAY:
+            query = (
+                "SELECT DISTINCT (o.booked_at AT TIME ZONE 'Europe/Berlin')::date::text as date "
+                "FROM ordr o "
+                "JOIN till t ON o.till_id = t.id "
+                "JOIN node n ON n.id = t.node_id "
+                "WHERE ($1 = ANY(n.parent_ids) OR n.id = $1) "
+                "ORDER BY date DESC"
+            )
+            query_args = (scope_node.id,)
+        else:
+            query = (
                 "SELECT DISTINCT date(o.booked_at)::text as date "
                 "FROM ordr o "
                 "JOIN till t ON o.till_id = t.id "
                 "JOIN node n ON n.id = t.node_id "
                 "WHERE ($1 = ANY(n.parent_ids) OR n.id = $1) "
-                "ORDER BY date DESC",
-                scope_node.id,
-            ),
+                "ORDER BY date DESC"
+            )
+            query_args = (scope_node.id,)
+
+        dates = await _timed_stats_query(
+            query_name="get_available_dates",
+            node_id=scope_node.id,
+            query_coro=conn.fetch(query, *query_args),
         )
         return [row["date"] for row in dates]
 

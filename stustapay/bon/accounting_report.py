@@ -1,19 +1,25 @@
 from collections import defaultdict
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, time
 from decimal import Decimal
 
-import pytz
 from pydantic import BaseModel
 from sftkit.database import Connection
 from sftkit.error import InvalidArgument
 
 from stustapay.bon.pdflatex import PdfRenderResult, pdflatex, render_template
+from stustapay.bon.report_time import (
+    REPORT_TIMEZONE,
+    ReportDayMode,
+    is_in_ranges,
+    normalize_datetime,
+    report_day,
+    selected_date_ranges,
+)
 from stustapay.core.currency import get_currency_symbol
 from stustapay.core.schema.tree import Node, PublicEventSettings
-from stustapay.core.service.order.stats import TimeseriesStatsQuery, get_event_time_bounds, get_selected_date_ranges
+from stustapay.core.service.order.stats import TimeseriesStatsQuery, get_event_time_bounds
 from stustapay.core.service.tree.common import fetch_event_for_node, fetch_node
 
-REPORT_TIMEZONE = pytz.timezone("Europe/Berlin")
 ZERO = Decimal("0")
 
 
@@ -23,6 +29,7 @@ class AccountingReportQuery(BaseModel):
     till_id: int | None = None
     subnode_id: int | None = None
     selected_dates: list[str] | None = None
+    day_mode: ReportDayMode = ReportDayMode.CALENDAR_DAY
 
 
 class RevenueSummaryRow(BaseModel):
@@ -64,6 +71,7 @@ class AccountingReportContext(BaseModel):
     to_time: datetime
     includes_all_event_bookings: bool
     daily_end_time: time | None
+    day_mode: ReportDayMode
     selected_dates: list[str]
     currency_symbol: str
     revenue_rows: list[RevenueSummaryRow]
@@ -83,35 +91,26 @@ class AccountingReportContext(BaseModel):
     includes_remaining_credit_donations: bool
 
 
-def _normalize_datetime(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value
-
-
 def _resolve_bounds(query: AccountingReportQuery, event: PublicEventSettings) -> tuple[datetime, datetime]:
+    ranges = selected_date_ranges(
+        query.selected_dates,
+        day_mode=query.day_mode,
+        daily_end_time=event.daily_end_time,
+    )
+    if ranges:
+        return ranges[0][0], ranges[-1][1]
     stats_query = TimeseriesStatsQuery(
         from_time=query.from_time,
         to_time=query.to_time,
         till_id=query.till_id,
         subnode_id=query.subnode_id,
-        selected_dates=query.selected_dates,
+        selected_dates=None,
     )
     return get_event_time_bounds(stats_query, event)
 
 
-def _is_in_selected_ranges(value: datetime, selected_ranges: list[tuple[datetime, datetime]]) -> bool:
-    if not selected_ranges:
-        return True
-    normalized = _normalize_datetime(value)
-    return any(_normalize_datetime(start) <= normalized <= _normalize_datetime(end) for start, end in selected_ranges)
-
-
-def _report_day(value: datetime, daily_end_time: time | None) -> str:
-    local = _normalize_datetime(value).astimezone(REPORT_TIMEZONE)
-    if daily_end_time is not None and local.timetz().replace(tzinfo=None) < daily_end_time:
-        local -= timedelta(days=1)
-    return local.strftime("%d.%m.%Y")
+def _report_day(value: datetime, daily_end_time: time | None, day_mode: ReportDayMode) -> str:
+    return report_day(value, day_mode=day_mode, daily_end_time=daily_end_time).strftime("%d.%m.%Y")
 
 
 def _payment_method_label(payment_method: str) -> str:
@@ -160,14 +159,11 @@ async def build_accounting_report_context(
     assert event_node is not None
     till_name = await _fetch_till_name(conn=conn, scope_node=scope_node, till_id=query.till_id)
     from_time, to_time = _resolve_bounds(query=query, event=event)
-    stats_query = TimeseriesStatsQuery(
-        from_time=query.from_time,
-        to_time=query.to_time,
-        till_id=query.till_id,
-        subnode_id=query.subnode_id,
-        selected_dates=query.selected_dates,
+    selected_ranges = selected_date_ranges(
+        query.selected_dates,
+        day_mode=query.day_mode,
+        daily_end_time=event.daily_end_time,
     )
-    selected_ranges = get_selected_date_ranges(stats_query, event)
 
     sales_rows = await conn.fetch(
         "select o.booked_at, o.payment_method, n.name as node_name, t.name as till_name, "
@@ -228,19 +224,26 @@ async def build_accounting_report_context(
     includes_remaining_credit_donations = node.id == node.event_node_id
     remaining_credit_donations = ZERO
     if includes_remaining_credit_donations:
-        remaining_credit_donations = await conn.fetchval(
-            "select coalesce(round(sum(tr.amount), 2), 0) "
+        remaining_credit_rows = await conn.fetch(
+            "select tr.booked_at, tr.amount "
             "from transaction tr "
             "join account sa on sa.id = tr.source_account "
             "join account ta on ta.id = tr.target_account "
-            "where sa.type = 'private' and ta.type = 'donation_exit' and ta.node_id = $1",
+            "where sa.type = 'private' and ta.type = 'donation_exit' and ta.node_id = $1 "
+            "and tr.booked_at >= $2 and tr.booked_at <= $3",
             node.event_node_id,
+            from_time,
+            to_time,
+        )
+        remaining_credit_donations = sum(
+            (row["amount"] for row in remaining_credit_rows if is_in_ranges(row["booked_at"], selected_ranges)),
+            ZERO,
         )
 
     product_aggregation: dict[tuple[str, str, str, str, bool], tuple[int, Decimal]] = {}
     revenue_aggregation: dict[tuple[str, str, str], Decimal] = defaultdict(lambda: ZERO)
     for row in sales_rows:
-        if not _is_in_selected_ranges(row["booked_at"], selected_ranges):
+        if not is_in_ranges(row["booked_at"], selected_ranges):
             continue
         payment_label = _payment_method_label(row["payment_method"])
         product_key = (
@@ -273,9 +276,9 @@ async def build_accounting_report_context(
 
     daily_cash: dict[str, DailyCashRow] = {}
     for row in cash_rows:
-        if not _is_in_selected_ranges(row["booked_at"], selected_ranges):
+        if not is_in_ranges(row["booked_at"], selected_ranges):
             continue
-        day = _report_day(row["booked_at"], event.daily_end_time)
+        day = _report_day(row["booked_at"], event.daily_end_time, query.day_mode)
         daily = daily_cash.setdefault(day, DailyCashRow(day=day))
         if row["source_type"] == "cash_entry" and row["order_type"] == "top_up":
             daily.cash_topups += row["amount"]
@@ -287,8 +290,8 @@ async def build_accounting_report_context(
 
     daily_online: dict[str, Decimal] = defaultdict(lambda: ZERO)
     for row in online_rows:
-        if _is_in_selected_ranges(row["booked_at"], selected_ranges):
-            daily_online[_report_day(row["booked_at"], event.daily_end_time)] += row["amount"]
+        if is_in_ranges(row["booked_at"], selected_ranges):
+            daily_online[_report_day(row["booked_at"], event.daily_end_time, query.day_mode)] += row["amount"]
 
     donation_product_rows = [row for row in product_rows if row.is_donation]
     total_product_donations = sum((row.amount for row in donation_product_rows), ZERO)
@@ -302,12 +305,11 @@ async def build_accounting_report_context(
         scope_name=scope_node.name,
         till_name=till_name,
         generated_at=datetime.now(tz=REPORT_TIMEZONE),
-        from_time=_normalize_datetime(from_time).astimezone(REPORT_TIMEZONE),
-        to_time=_normalize_datetime(to_time).astimezone(REPORT_TIMEZONE),
-        includes_all_event_bookings=(
-            not query.selected_dates and query.from_time is None and query.to_time is None
-        ),
+        from_time=normalize_datetime(from_time).astimezone(REPORT_TIMEZONE),
+        to_time=normalize_datetime(to_time).astimezone(REPORT_TIMEZONE),
+        includes_all_event_bookings=(not query.selected_dates and query.from_time is None and query.to_time is None),
         daily_end_time=event.daily_end_time,
+        day_mode=query.day_mode,
         selected_dates=query.selected_dates or [],
         currency_symbol=get_currency_symbol(event.currency_identifier),
         revenue_rows=revenue_rows,

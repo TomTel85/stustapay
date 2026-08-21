@@ -3,6 +3,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
+from stustapay.bon.report_time import ReportDayMode
 from stustapay.core.http.auth_user import CurrentAuthToken
 from stustapay.core.http.context import ContextOrderService
 from stustapay.core.service.order.stats import (
@@ -221,8 +222,14 @@ async def get_available_dates(
     order_service: ContextOrderService,
     node_id: int,
     subnode_id: Optional[int] = None,
+    day_mode: Optional[ReportDayMode] = None,
 ):
-    return await order_service.stats.get_available_dates(token=token, node_id=node_id, subnode_id=subnode_id)
+    return await order_service.stats.get_available_dates(
+        token=token,
+        node_id=node_id,
+        subnode_id=subnode_id,
+        day_mode=day_mode,
+    )
 
 
 @router.get("/revenue-prediction", response_model=RevenuePrediction)

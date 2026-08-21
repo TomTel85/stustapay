@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from stustapay.administration.service import HeadwindError, build_headwind_custom3, get_headwind_client
 from stustapay.bon.accounting_report import AccountingReportQuery
 from stustapay.bon.bon import BonJson
+from stustapay.bon.report_time import ReportDayMode
+from stustapay.bon.revenue_report import RevenueReportQuery
 from stustapay.core.http.auth_user import CurrentAuthToken
 from stustapay.core.http.context import Context, ContextTreeService, get_context
 from stustapay.core.schema.sumup import NodeSumUpConnectionStatus
@@ -165,8 +167,18 @@ async def generate_test_report(token: CurrentAuthToken, tree_service: ContextTre
         }
     },
 )
-async def generate_revenue_report(token: CurrentAuthToken, tree_service: ContextTreeService, node_id: int):
-    mime_type, content = await tree_service.generate_revenue_report(token=token, node_id=node_id)
+async def generate_revenue_report(
+    token: CurrentAuthToken,
+    tree_service: ContextTreeService,
+    node_id: int,
+    selected_dates: Optional[list[str]] = Query(None),
+    day_mode: ReportDayMode = ReportDayMode.CALENDAR_DAY,
+):
+    mime_type, content = await tree_service.generate_revenue_report(
+        token=token,
+        node_id=node_id,
+        query=RevenueReportQuery(selected_dates=selected_dates, day_mode=day_mode),
+    )
     headers = {"Content-Disposition": 'inline; filename="revenue_report.pdf"'}
     return Response(content, headers=headers, media_type=mime_type)
 
@@ -189,6 +201,7 @@ async def generate_accounting_report(
     till_id: Optional[int] = None,
     subnode_id: Optional[int] = None,
     selected_dates: Optional[list[str]] = Query(None),
+    day_mode: ReportDayMode = ReportDayMode.CALENDAR_DAY,
 ):
     mime_type, content = await tree_service.generate_accounting_report(
         token=token,
@@ -199,6 +212,7 @@ async def generate_accounting_report(
             till_id=till_id,
             subnode_id=subnode_id,
             selected_dates=selected_dates,
+            day_mode=day_mode,
         ),
     )
     headers = {"Content-Disposition": 'inline; filename="accounting_report.pdf"'}

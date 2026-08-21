@@ -5,7 +5,7 @@ from sftkit.service import Service, with_db_transaction
 
 from stustapay.bon.accounting_report import AccountingReportQuery, generate_accounting_report
 from stustapay.bon.bon import BonJson, generate_dummy_bon_json
-from stustapay.bon.revenue_report import generate_dummy_report, generate_report
+from stustapay.bon.revenue_report import RevenueReportQuery, generate_dummy_report, generate_report
 from stustapay.core.banner_image import http_response_for_stored_banner, validate_and_prepare_banner_upload
 from stustapay.core.config import Config
 from stustapay.core.schema.account import AccountType
@@ -599,10 +599,12 @@ class TreeService(Service[Config]):
     @with_db_transaction(read_only=True)
     @requires_node()
     @requires_user(privileges=[Privilege.node_administration])
-    async def generate_revenue_report(self, *, conn: Connection, node: Node) -> tuple[str, bytes]:
+    async def generate_revenue_report(
+        self, *, conn: Connection, node: Node, query: RevenueReportQuery
+    ) -> tuple[str, bytes]:
         if node.event_node_id is None:
             raise InvalidArgument("Cannot generate test report for a node not associated with an event")
-        report = await generate_report(conn=conn, node_id=node.id)
+        report = await generate_report(conn=conn, node_id=node.id, query=query)
         if not report.success or report.bon is None:
             raise InvalidArgument(f"Error while generating report: {report.msg}")
         return report.bon.mime_type, report.bon.content

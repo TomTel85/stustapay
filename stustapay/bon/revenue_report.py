@@ -1,17 +1,23 @@
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
-import pytz
 from pydantic import BaseModel
 from sftkit.database import Connection
 
 from stustapay.bon.bon import BonConfig, gen_dummy_order
 from stustapay.bon.pdflatex import PdfRenderResult, pdflatex, render_template
+from stustapay.bon.report_time import (
+    REPORT_TIMEZONE,
+    ReportDayMode,
+    is_in_ranges,
+    normalize_datetime,
+    report_day,
+    selected_date_ranges,
+)
 from stustapay.core.currency import get_currency_symbol
 from stustapay.core.schema.order import LineItem, Order
-from stustapay.core.schema.tree import Node, PublicEventSettings, RestrictedEventSettings
+from stustapay.core.schema.tree import Node, RestrictedEventSettings
 from stustapay.core.service.tree.common import fetch_event_for_node, fetch_node
 
-REPORT_TIMEZONE = pytz.timezone("Europe/Berlin")
 GERMAN_WEEKDAYS = [
     "Montag",
     "Dienstag",
@@ -59,6 +65,11 @@ class ReportDayGroup(BaseModel):
     orders: list[ReportOrderEntry]
 
 
+class RevenueReportQuery(BaseModel):
+    selected_dates: list[str] | None = None
+    day_mode: ReportDayMode = ReportDayMode.CALENDAR_DAY
+
+
 class NodeReportContext(BaseModel):
     config: BonConfig
     orders: list[Order]
@@ -67,6 +78,10 @@ class NodeReportContext(BaseModel):
     order_groups: list[ReportDayGroup]
     from_time: datetime
     to_time: datetime
+    includes_all_event_bookings: bool
+    selected_dates: list[str]
+    day_mode: ReportDayMode
+    daily_end_time: time | None
     node: Node
 
     total_revenue: float
@@ -146,6 +161,8 @@ async def generate_dummy_report(node_id: int, event: RestrictedEventSettings) ->
         fees=fee,
         currency_symbol=get_currency_symbol(event.currency_identifier),
         daily_end_time=event.daily_end_time,
+        day_mode=ReportDayMode.EVENT_DAY if event.daily_end_time is not None else ReportDayMode.CALENDAR_DAY,
+        selected_dates=[],
     )
     return await render_report(context=ctx)
 
@@ -164,63 +181,12 @@ def _check_order_revenue_consistency(daily_revenue: list[DailyRevenue], orders: 
         )
 
 
-def _normalize_datetime(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
-
-
 def _to_report_timezone(dt: datetime) -> datetime:
-    return _normalize_datetime(dt).astimezone(REPORT_TIMEZONE)
+    return normalize_datetime(dt).astimezone(REPORT_TIMEZONE)
 
 
-def _format_day_label(dt: datetime) -> str:
-    return f"{GERMAN_WEEKDAYS[dt.weekday()]} {dt:%Y-%m-%d}"
-
-
-def _extend_report_end_time(end_time: datetime, daily_end_time: time | None) -> datetime:
-    normalized_end_time = _normalize_datetime(end_time)
-    if daily_end_time is None:
-        return normalized_end_time
-
-    boundary = normalized_end_time.replace(
-        hour=daily_end_time.hour,
-        minute=daily_end_time.minute,
-        second=daily_end_time.second,
-        microsecond=0,
-    )
-    if boundary < normalized_end_time:
-        boundary += timedelta(days=1)
-    return boundary
-
-
-def _resolve_report_time_bounds(event: PublicEventSettings, orders: list[OrderWithFees]) -> tuple[datetime, datetime]:
-    if orders:
-        fallback_from = _normalize_datetime(orders[0].booked_at)
-        fallback_to = _normalize_datetime(orders[-1].booked_at)
-    else:
-        fallback_from = event.start_date or event.end_date or datetime.now(tz=timezone.utc)
-        fallback_to = event.end_date or event.start_date or fallback_from
-
-    from_time = _normalize_datetime(event.start_date or fallback_from)
-    raw_to_time = _normalize_datetime(event.end_date or fallback_to)
-    to_time = _extend_report_end_time(raw_to_time, event.daily_end_time) if event.end_date is not None else raw_to_time
-    return from_time, to_time
-
-
-def _report_day_start(local_dt: datetime, daily_end_time: time | None) -> datetime:
-    day_start = local_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    if daily_end_time is None:
-        return day_start
-
-    boundary = day_start.replace(
-        hour=daily_end_time.hour,
-        minute=daily_end_time.minute,
-        second=daily_end_time.second,
-    )
-    if local_dt < boundary:
-        return boundary - timedelta(days=1)
-    return boundary
+def _format_day_label(value: date) -> str:
+    return f"{GERMAN_WEEKDAYS[value.weekday()]} {value:%Y-%m-%d}"
 
 
 def _build_report_line_items(line_items: list[LineItem]) -> list[ReportLineItem]:
@@ -235,19 +201,21 @@ def _build_report_line_items(line_items: list[LineItem]) -> list[ReportLineItem]
     ]
 
 
-def _build_order_groups(orders: list[OrderWithFees], daily_end_time: time | None) -> list[ReportDayGroup]:
-    groups: dict[datetime, ReportDayGroup] = {}
+def _build_order_groups(
+    orders: list[OrderWithFees], daily_end_time: time | None, day_mode: ReportDayMode
+) -> list[ReportDayGroup]:
+    groups: dict[date, ReportDayGroup] = {}
     for order in orders:
         local_booked_at = _to_report_timezone(order.booked_at)
-        day_start = _report_day_start(local_booked_at, daily_end_time)
-        if day_start not in groups:
-            groups[day_start] = ReportDayGroup(
-                date_label=_format_day_label(day_start),
+        day = report_day(order.booked_at, day_mode=day_mode, daily_end_time=daily_end_time)
+        if day not in groups:
+            groups[day] = ReportDayGroup(
+                date_label=_format_day_label(day),
                 day_total=0.0,
                 orders=[],
             )
 
-        groups[day_start].orders.append(
+        groups[day].orders.append(
             ReportOrderEntry(
                 time_label=local_booked_at.strftime("%H:%M"),
                 transaction_id=f"{order.id:010}",
@@ -256,9 +224,9 @@ def _build_order_groups(orders: list[OrderWithFees], daily_end_time: time | None
                 line_items=_build_report_line_items(order.line_items),
             )
         )
-        groups[day_start].day_total += order.total_price
+        groups[day].day_total += order.total_price
 
-    return [groups[day_start] for day_start in sorted(groups)]
+    return [groups[day] for day in sorted(groups)]
 
 
 def _build_summary(daily_revenue: list[DailyRevenue], orders: list[OrderWithFees], total: float) -> ReportSummary:
@@ -278,22 +246,21 @@ def _build_summary(daily_revenue: list[DailyRevenue], orders: list[OrderWithFees
 
 
 def _build_daily_revenue(
-    orders: list[OrderWithFees], *, fees: float, daily_end_time: time | None
+    orders: list[OrderWithFees], *, fees: float, daily_end_time: time | None, day_mode: ReportDayMode
 ) -> tuple[list[DailyRevenue], float]:
-    day_totals: dict[datetime, float] = {}
+    day_totals: dict[date, float] = {}
     for order in orders:
-        local_booked_at = _to_report_timezone(order.booked_at)
-        day_start = _report_day_start(local_booked_at, daily_end_time)
-        day_totals[day_start] = day_totals.get(day_start, 0.0) + order.total_price
+        day = report_day(order.booked_at, day_mode=day_mode, daily_end_time=daily_end_time)
+        day_totals[day] = day_totals.get(day, 0.0) + order.total_price
 
     daily_revenue: list[DailyRevenue] = []
     total = 0.0
-    for day_start in sorted(day_totals):
-        revenue = day_totals[day_start]
+    for day in sorted(day_totals):
+        revenue = day_totals[day]
         daily_fees = revenue * fees
         daily_revenue.append(
             DailyRevenue(
-                day=_format_day_label(day_start),
+                day=_format_day_label(day),
                 revenue=revenue,
                 fees=daily_fees,
                 revenue_minus_fees=revenue - daily_fees,
@@ -316,6 +283,8 @@ def _build_report_context(
     config: BonConfig,
     currency_symbol: str,
     daily_end_time: time | None,
+    day_mode: ReportDayMode,
+    selected_dates: list[str],
 ) -> NodeReportContext:
     fees_of_total = total * fees
     return NodeReportContext(
@@ -325,9 +294,13 @@ def _build_report_context(
         config=config,
         daily_revenue_stats=daily_revenue,
         summary=_build_summary(daily_revenue=daily_revenue, orders=orders, total=total),
-        order_groups=_build_order_groups(orders=orders, daily_end_time=daily_end_time),
+        order_groups=_build_order_groups(orders=orders, daily_end_time=daily_end_time, day_mode=day_mode),
         from_time=from_time,
         to_time=to_time,
+        includes_all_event_bookings=not selected_dates,
+        selected_dates=selected_dates,
+        day_mode=day_mode,
+        daily_end_time=daily_end_time,
         total_revenue=total,
         fees=fees_of_total,
         fees_percent=fees,
@@ -335,7 +308,10 @@ def _build_report_context(
     )
 
 
-async def generate_report(conn: Connection, node_id: int, fees=0.0) -> PdfRenderResult:
+async def generate_report(
+    conn: Connection, node_id: int, query: RevenueReportQuery | None = None, fees=0.0
+) -> PdfRenderResult:
+    query = query or RevenueReportQuery()
     node = await fetch_node(conn=conn, node_id=node_id)
     assert node is not None
     event = await fetch_event_for_node(conn=conn, node=node)
@@ -391,14 +367,32 @@ async def generate_report(conn: Connection, node_id: int, fees=0.0) -> PdfRender
         node_id,
         fees,
     )
-    from_time, to_time = _resolve_report_time_bounds(event, all_orders)
+    selected_ranges = selected_date_ranges(
+        query.selected_dates,
+        day_mode=query.day_mode,
+        daily_end_time=event.daily_end_time,
+    )
+    orders = [order for order in all_orders if is_in_ranges(order.booked_at, selected_ranges)]
+    if selected_ranges:
+        from_time = selected_ranges[0][0]
+        to_time = selected_ranges[-1][1]
+    elif orders:
+        from_time = normalize_datetime(orders[0].booked_at)
+        to_time = normalize_datetime(orders[-1].booked_at)
+    else:
+        fallback = event.start_date or event.end_date or datetime.now(tz=timezone.utc)
+        from_time = normalize_datetime(fallback)
+        to_time = from_time
     from_time_local = from_time.astimezone(REPORT_TIMEZONE)
     to_time_local = to_time.astimezone(REPORT_TIMEZONE)
 
-    orders = [order for order in all_orders if from_time <= _normalize_datetime(order.booked_at) <= to_time]
-
     config = BonConfig(ust_id=event.ust_id, address=event.bon_address, issuer=event.bon_issuer, title=event_node.name)
-    daily_revenue, total = _build_daily_revenue(orders, fees=fees, daily_end_time=event.daily_end_time)
+    daily_revenue, total = _build_daily_revenue(
+        orders,
+        fees=fees,
+        daily_end_time=event.daily_end_time,
+        day_mode=query.day_mode,
+    )
     _check_order_revenue_consistency(daily_revenue, orders, total)
 
     context = _build_report_context(
@@ -412,5 +406,7 @@ async def generate_report(conn: Connection, node_id: int, fees=0.0) -> PdfRender
         currency_symbol=get_currency_symbol(event.currency_identifier),
         daily_revenue=daily_revenue,
         daily_end_time=event.daily_end_time,
+        day_mode=query.day_mode,
+        selected_dates=query.selected_dates or [],
     )
     return await render_report(context=context)

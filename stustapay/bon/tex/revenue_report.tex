@@ -106,8 +106,9 @@
 \vspace{0.75em}
 \begin{tabular}{@{}p{4.2cm}p{3.6cm}@{}}
 Stand / Bereich & \VAR[node.name|latex] \\
-Zeitraum von & \VAR[from_time|datetime] \\
-Zeitraum bis & \VAR[to_time|datetime] \\
+Zeitraum & \BLOCK[if includes_all_event_bookings]Alle vorhandenen Buchungen\BLOCK[else]\VAR[from_time|datetime] bis \VAR[to_time|datetime] (Ende exklusiv)\BLOCK[endif] \\
+\BLOCK[if selected_dates]Berichtstage & \VAR[', '.join(selected_dates)|latex] \\
+\BLOCK[endif]Tagesdefinition & \BLOCK[if day_mode.value == 'event_day']Veranstaltungstag (Tagesgrenze \VAR[daily_end_time.strftime('%H:%M')|latex] Uhr)\BLOCK[else]Kalendertag (00:00 bis 24:00 Uhr)\BLOCK[endif] \\
 \end{tabular}
 }}
 \end{minipage}

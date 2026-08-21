@@ -1012,6 +1012,7 @@ const injectedRtkApi = api
           params: {
             node_id: queryArg.nodeId,
             subnode_id: queryArg.subnodeId,
+            day_mode: queryArg.dayMode,
           },
         }),
         providesTags: ["stats"],
@@ -1384,7 +1385,14 @@ const injectedRtkApi = api
         invalidatesTags: ["tree"],
       }),
       generateRevenueReport: build.mutation<GenerateRevenueReportApiResponse, GenerateRevenueReportApiArg>({
-        query: (queryArg) => ({ url: `/tree/nodes/${queryArg.nodeId}/generate-revenue-report`, method: "POST" }),
+        query: (queryArg) => ({
+          url: `/tree/nodes/${queryArg.nodeId}/generate-revenue-report`,
+          method: "POST",
+          params: {
+            selected_dates: queryArg.selectedDates,
+            day_mode: queryArg.dayMode,
+          },
+        }),
         invalidatesTags: ["tree"],
       }),
       generateAccountingReport: build.mutation<GenerateAccountingReportApiResponse, GenerateAccountingReportApiArg>({
@@ -1397,6 +1405,7 @@ const injectedRtkApi = api
             till_id: queryArg.tillId,
             subnode_id: queryArg.subnodeId,
             selected_dates: queryArg.selectedDates,
+            day_mode: queryArg.dayMode,
           },
         }),
         invalidatesTags: ["tree"],
@@ -2608,6 +2617,7 @@ export type GetAvailableDatesApiResponse = /** status 200 Successful Response */
 export type GetAvailableDatesApiArg = {
   nodeId: number;
   subnodeId?: number | null;
+  dayMode?: ReportDayMode | null;
 };
 export type GetRevenuePredictionApiResponse = /** status 200 Successful Response */ RevenuePrediction;
 export type GetRevenuePredictionApiArg = {
@@ -2810,6 +2820,8 @@ export type GenerateTestReportApiArg = {
 export type GenerateRevenueReportApiResponse = /** status 200 Successful Response */ any;
 export type GenerateRevenueReportApiArg = {
   nodeId: number;
+  selectedDates?: string[] | null;
+  dayMode?: ReportDayMode;
 };
 export type GenerateAccountingReportApiResponse = /** status 200 Successful Response */ any;
 export type GenerateAccountingReportApiArg = {
@@ -2819,6 +2831,7 @@ export type GenerateAccountingReportApiArg = {
   tillId?: number | null;
   subnodeId?: number | null;
   selectedDates?: string[] | null;
+  dayMode?: ReportDayMode;
 };
 export type GetNodeSumupLinkStatusApiResponse = /** status 200 Successful Response */ NodeSumUpConnectionStatus;
 export type GetNodeSumupLinkStatusApiArg = {
@@ -4112,6 +4125,7 @@ export type PaymentMethodBreakdown = {
   methods: PaymentMethodStats[];
   total_revenue: number;
 };
+export type ReportDayMode = "calendar_day" | "event_day";
 export type HourlyPredictionPoint = {
   hour: number;
   actual_revenue: number | null;

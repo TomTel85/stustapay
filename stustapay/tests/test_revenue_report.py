@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from stustapay.bon.pdflatex import PdfRenderResult
-from stustapay.bon.revenue_report import OrderWithFees, generate_report
+from stustapay.bon.report_time import ReportDayMode
+from stustapay.bon.revenue_report import OrderWithFees, RevenueReportQuery, generate_report
 from stustapay.core.schema.order import LineItem, OrderType, PaymentMethod
 from stustapay.core.schema.product import Product, ProductType
 from stustapay.core.schema.tree import Node
@@ -155,10 +156,18 @@ async def test_generate_report_builds_summary_and_day_groups(monkeypatch):
     monkeypatch.setattr("stustapay.bon.revenue_report.fetch_event_for_node", AsyncMock(return_value=event))
     monkeypatch.setattr("stustapay.bon.revenue_report.render_report", fake_render_report)
 
-    result = await generate_report(conn=conn, node_id=node.id)
+    result = await generate_report(
+        conn=conn,
+        node_id=node.id,
+        query=RevenueReportQuery(selected_dates=["2025-06-20"], day_mode=ReportDayMode.EVENT_DAY),
+    )
 
     assert result.success is True
-    assert [order.id for order in captured["context"].orders] == [in_range_order.id, same_report_day_order.id, cancel_order.id]
+    assert [order.id for order in captured["context"].orders] == [
+        in_range_order.id,
+        same_report_day_order.id,
+        cancel_order.id,
+    ]
     assert captured["context"].summary.order_count == 3
     assert captured["context"].summary.average_order_value == 5.833333333333333
     assert captured["context"].summary.average_day_revenue == 17.5
@@ -175,7 +184,10 @@ async def test_generate_report_builds_summary_and_day_groups(monkeypatch):
         "0000000004",
     ]
     assert captured["context"].order_groups[0].orders[0].customer_tag_uid_hex == "ABCD"
-    assert [item.product_name for item in captured["context"].order_groups[0].orders[0].line_items] == ["Helles", "Pfand"]
+    assert [item.product_name for item in captured["context"].order_groups[0].orders[0].line_items] == [
+        "Helles",
+        "Pfand",
+    ]
     assert conn.fetch_many.await_args.args[1].count("cancel_sale") == 1
     assert "product_with_tax_and_restrictions" in conn.fetch_many.await_args.args[1]
     assert "p.type = 'user_defined'" in conn.fetch_many.await_args.args[1]
@@ -210,7 +222,11 @@ async def test_generate_report_includes_sales_before_daily_cutoff(monkeypatch):
     monkeypatch.setattr("stustapay.bon.revenue_report.fetch_event_for_node", AsyncMock(return_value=event))
     monkeypatch.setattr("stustapay.bon.revenue_report.render_report", fake_render_report)
 
-    result = await generate_report(conn=conn, node_id=node.id)
+    result = await generate_report(
+        conn=conn,
+        node_id=node.id,
+        query=RevenueReportQuery(selected_dates=["2025-06-21"], day_mode=ReportDayMode.EVENT_DAY),
+    )
 
     assert result.success is True
     assert [order.id for order in captured["context"].orders] == [in_range_order.id, before_cutoff_order.id]
@@ -246,7 +262,11 @@ async def test_generate_report_excludes_sales_after_daily_cutoff(monkeypatch):
     monkeypatch.setattr("stustapay.bon.revenue_report.fetch_event_for_node", AsyncMock(return_value=event))
     monkeypatch.setattr("stustapay.bon.revenue_report.render_report", fake_render_report)
 
-    result = await generate_report(conn=conn, node_id=node.id)
+    result = await generate_report(
+        conn=conn,
+        node_id=node.id,
+        query=RevenueReportQuery(selected_dates=["2025-06-21"], day_mode=ReportDayMode.EVENT_DAY),
+    )
 
     assert result.success is True
     assert captured["context"].orders == []
@@ -287,6 +307,7 @@ async def test_generate_report_renders_template_fallbacks(monkeypatch):
     assert "Keine Umsaetze im Zeitraum." in captured["tex"]
     assert "Keine Einzelbuchungen im Zeitraum." in captured["tex"]
     assert "Keine Umsaetze" in captured["tex"]
+    assert "Kalendertag (00:00 bis 24:00 Uhr)" in captured["tex"]
 
 
 async def test_generate_report_includes_cancel_sale_entries(monkeypatch):

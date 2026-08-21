@@ -6406,6 +6406,22 @@
               ],
               "title": "Subnode Id"
             }
+          },
+          {
+            "name": "day_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ReportDayMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Day Mode"
+            }
           }
         ],
         "responses": {
@@ -8837,6 +8853,34 @@
               "type": "integer",
               "title": "Node Id"
             }
+          },
+          {
+            "name": "selected_dates",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Selected Dates"
+            }
+          },
+          {
+            "name": "day_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ReportDayMode",
+              "default": "calendar_day"
+            }
           }
         ],
         "responses": {
@@ -8970,6 +9014,15 @@
                 }
               ],
               "title": "Selected Dates"
+            }
+          },
+          {
+            "name": "day_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ReportDayMode",
+              "default": "calendar_day"
             }
           }
         ],
@@ -20144,6 +20197,14 @@
           "languages"
         ],
         "title": "PublicEventSettings"
+      },
+      "ReportDayMode": {
+        "type": "string",
+        "enum": [
+          "calendar_day",
+          "event_day"
+        ],
+        "title": "ReportDayMode"
       },
       "ResolvedSumUpLink": {
         "properties": {

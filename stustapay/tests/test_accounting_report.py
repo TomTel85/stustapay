@@ -1,6 +1,10 @@
 from datetime import datetime, time, timezone
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import cast
+
+import pytest
+from sftkit.error import InvalidArgument
 
 from stustapay.bon.accounting_report import (
     AccountingReportQuery,
@@ -10,7 +14,8 @@ from stustapay.bon.accounting_report import (
     render_accounting_report,
 )
 from stustapay.bon.pdflatex import PdfRenderResult
-from stustapay.core.schema.tree import Node
+from stustapay.bon.report_time import ReportDayMode, is_in_ranges, selected_date_ranges
+from stustapay.core.schema.tree import Node, PublicEventSettings
 
 
 def _make_event_node() -> Node:
@@ -72,6 +77,17 @@ class FakeConnection:
                     "amount": Decimal("21.00"),
                 },
             ]
+        if "donation_exit" in query:
+            return [
+                {
+                    "booked_at": datetime(2025, 8, 1, 16, tzinfo=timezone.utc),
+                    "amount": Decimal("9.50"),
+                },
+                {
+                    "booked_at": datetime(2025, 8, 3, 16, tzinfo=timezone.utc),
+                    "amount": Decimal("99.00"),
+                },
+            ]
         if "from transaction tr" in query:
             return [
                 {
@@ -107,8 +123,6 @@ class FakeConnection:
 
     async def fetchval(self, query: str, *_args):
         self.queries.append(query)
-        if "donation_exit" in query:
-            return Decimal("9.50")
         raise AssertionError(f"Unexpected query: {query}")
 
 
@@ -168,11 +182,50 @@ async def test_build_accounting_report_context_aggregates_accounting_sections(mo
     assert "Interne Kassenbestückungen" not in captured["tex"]
     assert "PayPal" not in captured["tex"]
     assert "2025-08-01" in captured["tex"]
+    assert "Kalendertag (00:00 bis 24:00 Uhr)" in captured["tex"]
+    assert "anhand ihres Buchungszeitpunkts" in captured["tex"]
 
 
 def test_report_day_uses_event_boundary_in_berlin_timezone():
-    assert _report_day(datetime(2025, 8, 1, 3, tzinfo=timezone.utc), time(6)) == "31.07.2025"
-    assert _report_day(datetime(2025, 8, 1, 4, tzinfo=timezone.utc), time(6)) == "01.08.2025"
+    assert _report_day(datetime(2025, 8, 1, 3, tzinfo=timezone.utc), time(6), ReportDayMode.EVENT_DAY) == "31.07.2025"
+    assert _report_day(datetime(2025, 8, 1, 4, tzinfo=timezone.utc), time(6), ReportDayMode.EVENT_DAY) == "01.08.2025"
+    assert (
+        _report_day(datetime(2025, 8, 1, 3, tzinfo=timezone.utc), time(6), ReportDayMode.CALENDAR_DAY) == "01.08.2025"
+    )
+
+
+def test_selected_date_ranges_use_berlin_time_and_half_open_dst_boundaries():
+    summer = selected_date_ranges(["2025-08-01"], day_mode=ReportDayMode.CALENDAR_DAY, daily_end_time=time(6))
+    assert summer == [
+        (
+            datetime(2025, 7, 31, 22, tzinfo=timezone.utc),
+            datetime(2025, 8, 1, 22, tzinfo=timezone.utc),
+        )
+    ]
+
+    dst_change = selected_date_ranges(["2025-10-26"], day_mode=ReportDayMode.CALENDAR_DAY, daily_end_time=time(6))
+    assert dst_change == [
+        (
+            datetime(2025, 10, 25, 22, tzinfo=timezone.utc),
+            datetime(2025, 10, 26, 23, tzinfo=timezone.utc),
+        )
+    ]
+
+    non_contiguous = selected_date_ranges(
+        ["2025-08-01", "2025-08-03"],
+        day_mode=ReportDayMode.CALENDAR_DAY,
+        daily_end_time=time(6),
+    )
+    assert is_in_ranges(datetime(2025, 8, 1, 21, 59, tzinfo=timezone.utc), non_contiguous)
+    assert not is_in_ranges(datetime(2025, 8, 1, 22, tzinfo=timezone.utc), non_contiguous)
+    assert not is_in_ranges(datetime(2025, 8, 2, 12, tzinfo=timezone.utc), non_contiguous)
+
+
+def test_event_day_requires_a_configured_daily_end_time():
+    with pytest.raises(InvalidArgument, match="daily end time"):
+        selected_date_ranges(["2025-08-01"], day_mode=ReportDayMode.EVENT_DAY, daily_end_time=None)
+    with pytest.raises(InvalidArgument, match="daily end time"):
+        selected_date_ranges(None, day_mode=ReportDayMode.EVENT_DAY, daily_end_time=None)
 
 
 def test_unfiltered_accounting_report_uses_the_same_all_time_bounds_as_statistics():
@@ -182,7 +235,7 @@ def test_unfiltered_accounting_report_uses_the_same_all_time_bounds_as_statistic
         daily_end_time=time(6),
     )
 
-    from_time, to_time = _resolve_bounds(AccountingReportQuery(), event)
+    from_time, to_time = _resolve_bounds(AccountingReportQuery(), cast(PublicEventSettings, event))
 
     assert from_time == datetime(1970, 1, 1, tzinfo=timezone.utc)
     assert to_time == datetime(4000, 1, 1, tzinfo=timezone.utc)

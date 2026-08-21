@@ -59,8 +59,8 @@ pdfauthor={TeamFestlichPay},pdftitle={TeamFestlichPay Buchhaltungsbericht}]{hype
 Bereich & \VAR[scope_name|latex] \\
 Kasse & \BLOCK[if till_name]\VAR[till_name|latex]\BLOCK[else]Alle Kassen\BLOCK[endif] \\
 Zeitraum & \BLOCK[if includes_all_event_bookings]Alle Buchungen des Events\BLOCK[else]\VAR[from_time|datetime] bis \VAR[to_time|datetime]\BLOCK[endif] \\
-\BLOCK[if selected_dates]Ausgewählte Veranstaltungstage & \VAR[', '.join(selected_dates)|latex] \\
-\BLOCK[endif]Event-Tagesgrenze & \BLOCK[if daily_end_time]\VAR[daily_end_time.strftime('%H:%M')|latex] Uhr\BLOCK[else]00:00 Uhr\BLOCK[endif] \\
+\BLOCK[if selected_dates]Ausgewählte Berichtstage & \VAR[', '.join(selected_dates)|latex] \\
+\BLOCK[endif]Tagesdefinition & \BLOCK[if day_mode.value == 'event_day']Veranstaltungstag (Tagesgrenze \VAR[daily_end_time.strftime('%H:%M')|latex] Uhr)\BLOCK[else]Kalendertag (00:00 bis 24:00 Uhr)\BLOCK[endif] \\
 Erzeugt am & \VAR[generated_at|datetime] \\
 \end{tabularx}
 }}
@@ -125,7 +125,7 @@ Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_cred
 \end{tabularx}
 \vspace{0.45em}
 \BLOCK[if includes_remaining_credit_donations]
-\textcolor{textmuted}{Restguthaben-Spenden sind ein aktueller Event-Gesamtstand zum Erzeugungszeitpunkt und keinem Veranstaltungstag zugeordnet.}\par
+\textcolor{textmuted}{Restguthaben-Spenden werden anhand ihres Buchungszeitpunkts dem ausgewählten Berichtszeitraum zugeordnet.}\par
 \BLOCK[else]
 \textcolor{textmuted}{Der Event-Gesamtstand der Restguthaben-Spenden ist nur bei einem Bericht verfügbar, der an der Eventwurzel aufgerufen wird.}\par
 \BLOCK[endif]
