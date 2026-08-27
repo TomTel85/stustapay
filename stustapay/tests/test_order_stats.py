@@ -321,7 +321,7 @@ async def test_sales_stats_and_product_breakdowns_exclude_cancelled_sales(
     assert all_dates_stats.deposit_overall_stats == []
 
 
-async def test_product_breakdowns_exclude_cancellation_when_original_sale_precedes_range(
+async def test_revenue_stats_exclude_cancellation_when_original_sale_precedes_range(
     db_connection: Connection,
     order_service: OrderService,
     product_service: ProductService,
@@ -370,19 +370,33 @@ async def test_product_breakdowns_exclude_cancellation_when_original_sale_preced
         booked_at=datetime(2026, 1, 2, 10, 0, tzinfo=UTC),
     )
 
+    query = TimeseriesStatsQuery(
+        from_time=datetime(2026, 1, 2, 0, 0, tzinfo=UTC),
+        to_time=datetime(2026, 1, 2, 23, 59, tzinfo=UTC),
+    )
     product_stats = await order_service.stats.get_product_stats(
         token=event_admin_token,
         node_id=event_node.id,
-        query=TimeseriesStatsQuery(
-            from_time=datetime(2026, 1, 2, 0, 0, tzinfo=UTC),
-            to_time=datetime(2026, 1, 2, 23, 59, tzinfo=UTC),
-        ),
+        query=query,
+    )
+    overview = await order_service.stats.get_dashboard_overview(
+        token=event_admin_token,
+        node_id=event_node.id,
+        query=query,
+    )
+    counter_stats = await order_service.stats.get_revenue_by_counter(
+        token=event_admin_token,
+        node_id=event_node.id,
+        query=query,
     )
 
     assert product_stats.product_hourly_intervals == []
     assert product_stats.product_overall_stats == []
     assert product_stats.deposit_hourly_intervals == []
     assert product_stats.deposit_overall_stats == []
+    assert overview.total_revenue == 0.0
+    assert counter_stats.counters == []
+    assert counter_stats.total_revenue == 0.0
 
 
 async def test_get_revenue_by_counter_excludes_cancelled_sales(
@@ -431,6 +445,11 @@ async def test_get_revenue_by_counter_excludes_cancelled_sales(
     )
 
     await order_service.cancel_sale_admin(token=event_admin_token, node_id=event_node.id, order_id=order_id)
+    await _set_cancel_order_booked_at(
+        db_connection,
+        original_order_id=order_id,
+        booked_at=datetime(2026, 1, 1, 11, 0, tzinfo=UTC),
+    )
 
     stats = await order_service.stats.get_revenue_by_counter(
         token=event_admin_token,
@@ -490,6 +509,11 @@ async def test_dashboard_overview_excludes_cancelled_sales_from_guest_count(
         booked_at=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
     )
     await order_service.cancel_sale_admin(token=event_admin_token, node_id=event_node.id, order_id=order_id)
+    await _set_cancel_order_booked_at(
+        db_connection,
+        original_order_id=order_id,
+        booked_at=datetime(2026, 1, 1, 11, 0, tzinfo=UTC),
+    )
 
     overview = await order_service.stats.get_dashboard_overview(
         token=event_admin_token,
@@ -589,7 +613,7 @@ async def test_revenue_stats_apply_expected_cancellation_scope(
         row.revenue for row in product_stats.deposit_overall_stats
     )
 
-    assert overview.total_revenue == 5.0
+    assert overview.total_revenue == 15.0
     assert [(interval.from_time.hour, interval.count, interval.revenue) for interval in product_stats.hourly_intervals] == [
         (10, 3, 15.0)
     ]
@@ -597,7 +621,10 @@ async def test_revenue_stats_apply_expected_cancellation_scope(
     assert product_stats.daily_intervals[0].count == 3
     assert product_stats.daily_intervals[0].revenue == 15.0
     assert product_revenue_total == 15.0
-    assert counter_stats.total_revenue == 5.0
+    assert [(counter.till_name, counter.revenue, counter.order_count) for counter in counter_stats.counters] == [
+        (till.name, 15.0, 1)
+    ]
+    assert counter_stats.total_revenue == 15.0
 
 
 async def test_dashboard_overview_counts_only_guests_fully_paid_out(

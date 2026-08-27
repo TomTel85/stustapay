@@ -183,6 +183,7 @@ USER_DEFINED_REVENUE_SCOPE_SQL = (
     "JOIN line_item li ON li.order_id = o.id "
     "JOIN product p ON p.id = li.product_id "
     "WHERE o.booked_at >= $1 AND o.booked_at <= $2 "
+    "  AND o.order_type = 'sale' "
     "  AND NOT EXISTS (SELECT 1 FROM ordr c WHERE c.cancels_order = o.id) "
     "  AND p.type = 'user_defined' "
 )
@@ -1135,6 +1136,7 @@ class OrderStatsService(Service[Config]):
                 "WHERE o.booked_at >= $1 AND o.booked_at <= $2 "
                 "AND ($4::int IS NULL OR o.till_id = $4) "
                 f"{selected_date_filter} "
+                "AND o.order_type = 'sale' "
                 "AND NOT EXISTS (SELECT 1 FROM ordr c WHERE c.cancels_order = o.id) "
                 "AND p.type = 'user_defined' "
                 "AND t.is_virtual IS NOT TRUE "
