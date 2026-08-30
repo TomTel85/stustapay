@@ -21,7 +21,7 @@ from .conftest import Cashier, CreateRandomUserTag
 async def _create_customer_account(
     db_connection: Connection,
     event_node: Node,
-    create_random_user_tag: CreateRandomUserTag,
+    create_random_user_tag,
 ) -> int:
     from stustapay.core.service.user_tag import get_or_assign_user_tag
 
@@ -123,7 +123,7 @@ async def test_get_product_stats_returns_hourly_and_overall_breakdowns(
     tax_rate_ust: TaxRate,
     cashier: Cashier,
     till,
-    create_random_user_tag,
+    create_random_user_tag: CreateRandomUserTag,
 ):
     await _set_event_time_range(
         db_connection,
@@ -526,6 +526,37 @@ async def test_dashboard_overview_excludes_cancelled_sales_from_guest_count(
 
     assert overview.total_revenue == 0.0
     assert overview.guests_with_orders == 0
+
+
+async def test_dashboard_overview_includes_pending_online_donations(
+    db_connection: Connection,
+    order_service: OrderService,
+    event_node: Node,
+    event_admin_token: str,
+    create_random_user_tag: CreateRandomUserTag,
+):
+    partial_donation_account_id = await _create_customer_account(db_connection, event_node, create_random_user_tag)
+    donate_all_account_id = await _create_customer_account(db_connection, event_node, create_random_user_tag)
+
+    await db_connection.execute(
+        "update customer_info set has_entered_info = true, payout_export = true, donation = $2 "
+        "where customer_account_id = $1",
+        partial_donation_account_id,
+        12.5,
+    )
+    await db_connection.execute(
+        "update customer_info set has_entered_info = true, payout_export = true, donation = null, donate_all = true "
+        "where customer_account_id = $1",
+        donate_all_account_id,
+    )
+
+    overview = await order_service.stats.get_dashboard_overview(
+        token=event_admin_token,
+        node_id=event_node.id,
+        query=TimeseriesStatsQuery(from_time=None, to_time=None),
+    )
+
+    assert overview.online_donation == 112.5
 
 
 async def test_revenue_stats_apply_expected_cancellation_scope(
