@@ -54,6 +54,7 @@ export const DEFAULT_PAYOUT_COUNTRY_CODES = [
 export const PayoutSettingsSchema = z
   .object({
     translation_texts: TranslationTextsSchema.shape.translation_texts,
+    payout_email_enabled: z.boolean(),
     sepa_enabled: z.boolean(),
     sepa_sender_name: emptyString(),
     sepa_sender_iban: z

@@ -16735,6 +16735,55 @@
             ],
             "title": "Pretix Api Key"
           },
+          "email_use_global_settings": {
+            "type": "boolean",
+            "title": "Email Use Global Settings",
+            "default": true
+          },
+          "email_default_sender": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Default Sender"
+          },
+          "email_smtp_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Smtp Host"
+          },
+          "email_smtp_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Smtp Port"
+          },
+          "email_smtp_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Smtp Username"
+          },
           "email_smtp_password": {
             "anyOf": [
               {
@@ -16964,53 +17013,10 @@
             "type": "array",
             "title": "Sepa Allowed Country Codes"
           },
-          "email_enabled": {
+          "payout_email_enabled": {
             "type": "boolean",
-            "title": "Email Enabled"
-          },
-          "email_default_sender": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Default Sender"
-          },
-          "email_smtp_host": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Smtp Host"
-          },
-          "email_smtp_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Smtp Port"
-          },
-          "email_smtp_username": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Smtp Username"
+            "title": "Payout Email Enabled",
+            "default": false
           },
           "payout_done_subject": {
             "anyOf": [
@@ -17191,7 +17197,6 @@
           "sepa_sender_iban",
           "sepa_description",
           "sepa_allowed_country_codes",
-          "email_enabled",
           "name",
           "description"
         ],
@@ -19978,53 +19983,10 @@
             "type": "array",
             "title": "Sepa Allowed Country Codes"
           },
-          "email_enabled": {
+          "payout_email_enabled": {
             "type": "boolean",
-            "title": "Email Enabled"
-          },
-          "email_default_sender": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Default Sender"
-          },
-          "email_smtp_host": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Smtp Host"
-          },
-          "email_smtp_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Smtp Port"
-          },
-          "email_smtp_username": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Smtp Username"
+            "title": "Payout Email Enabled",
+            "default": false
           },
           "payout_done_subject": {
             "anyOf": [
@@ -20192,7 +20154,6 @@
           "sepa_description",
           "sepa_max_num_payouts_in_run",
           "sepa_allowed_country_codes",
-          "email_enabled",
           "id",
           "languages"
         ],
@@ -20286,6 +20247,55 @@
               }
             ],
             "title": "Pretix Api Key"
+          },
+          "email_use_global_settings": {
+            "type": "boolean",
+            "title": "Email Use Global Settings",
+            "default": true
+          },
+          "email_default_sender": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Default Sender"
+          },
+          "email_smtp_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Smtp Host"
+          },
+          "email_smtp_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Smtp Port"
+          },
+          "email_smtp_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Smtp Username"
           },
           "email_smtp_password": {
             "anyOf": [
@@ -20509,53 +20519,10 @@
             "type": "array",
             "title": "Sepa Allowed Country Codes"
           },
-          "email_enabled": {
+          "payout_email_enabled": {
             "type": "boolean",
-            "title": "Email Enabled"
-          },
-          "email_default_sender": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Default Sender"
-          },
-          "email_smtp_host": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Smtp Host"
-          },
-          "email_smtp_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Smtp Port"
-          },
-          "email_smtp_username": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Smtp Username"
+            "title": "Payout Email Enabled",
+            "default": false
           },
           "payout_done_subject": {
             "anyOf": [
@@ -20758,7 +20725,6 @@
           "sepa_description",
           "sepa_max_num_payouts_in_run",
           "sepa_allowed_country_codes",
-          "email_enabled",
           "id",
           "languages",
           "sumup_oauth_refresh_token"
@@ -22213,6 +22179,55 @@
             ],
             "title": "Pretix Api Key"
           },
+          "email_use_global_settings": {
+            "type": "boolean",
+            "title": "Email Use Global Settings",
+            "default": true
+          },
+          "email_default_sender": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Default Sender"
+          },
+          "email_smtp_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Smtp Host"
+          },
+          "email_smtp_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Smtp Port"
+          },
+          "email_smtp_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Smtp Username"
+          },
           "email_smtp_password": {
             "anyOf": [
               {
@@ -22442,53 +22457,10 @@
             "type": "array",
             "title": "Sepa Allowed Country Codes"
           },
-          "email_enabled": {
+          "payout_email_enabled": {
             "type": "boolean",
-            "title": "Email Enabled"
-          },
-          "email_default_sender": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Default Sender"
-          },
-          "email_smtp_host": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Smtp Host"
-          },
-          "email_smtp_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Smtp Port"
-          },
-          "email_smtp_username": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Smtp Username"
+            "title": "Payout Email Enabled",
+            "default": false
           },
           "payout_done_subject": {
             "anyOf": [
@@ -22644,8 +22616,7 @@
           "sepa_sender_name",
           "sepa_sender_iban",
           "sepa_description",
-          "sepa_allowed_country_codes",
-          "email_enabled"
+          "sepa_allowed_country_codes"
         ],
         "title": "UpdateEvent"
       },

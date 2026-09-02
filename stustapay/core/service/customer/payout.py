@@ -327,25 +327,26 @@ class PayoutService(Service[Config]):
         )
 
         res_config = await fetch_restricted_event_settings_for_node(conn, node.id)
-        for payout in payouts:
-            if payout.email is None:
-                continue
-            assert res_config.payout_done_message is not None
-            message = res_config.payout_done_message.format(**payout.model_dump())
-            subject = res_config.payout_done_subject or ""
-            payout_sender = res_config.payout_sender or res_config.email_default_sender
-            await mail_service.send_mail(
-                subject=subject,
-                text_message=message,
-                html_message=render_plain_text_payout_html(message, subject),
-                from_addr=(
-                    formataddr((f"{node.name} Auszahlung", payout_sender))
-                    if payout_sender
-                    else None
-                ),
-                to_addr=payout.email,
-                node_id=node.id,
-            )
+        if res_config.payout_email_enabled:
+            for payout in payouts:
+                if payout.email is None:
+                    continue
+                assert res_config.payout_done_message is not None
+                message = res_config.payout_done_message.format(**payout.model_dump())
+                subject = res_config.payout_done_subject or ""
+                payout_sender = res_config.payout_sender
+                await mail_service.send_mail(
+                    subject=subject,
+                    text_message=message,
+                    html_message=render_plain_text_payout_html(message, subject),
+                    from_addr=(
+                        formataddr((f"{node.name} Auszahlung", payout_sender))
+                        if payout_sender
+                        else None
+                    ),
+                    to_addr=payout.email,
+                    node_id=node.id,
+                )
 
         await reset_customer_payout_info(
             conn=conn,

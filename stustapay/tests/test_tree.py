@@ -62,7 +62,7 @@ def _build_source_event(name: str = "Original Event", description: str = "Event 
         sepa_allowed_country_codes=["DE", "AT"],
         sepa_sender_name="Festival Org",
         sepa_max_num_payouts_in_run=222,
-        email_enabled=True,
+        payout_email_enabled=True,
         email_default_sender="festival@test.com",
         email_smtp_host="smtp.test.local",
         email_smtp_port=2525,
@@ -912,7 +912,7 @@ async def test_copy_event(
     assert minimal_copy.event.max_account_balance == 150.0
     assert minimal_settings.translation_texts == {}
     assert minimal_settings.sumup_api_key == ""
-    assert minimal_settings.email_smtp_password is None
+    assert minimal_settings.payout_email_enabled is False
     assert minimal_settings.sumup_oauth_refresh_token == ""
     assert minimal_settings.customer_portal_primary_color is None
     assert minimal_settings.customer_portal_font_color is None

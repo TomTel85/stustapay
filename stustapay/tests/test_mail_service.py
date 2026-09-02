@@ -4,6 +4,7 @@ from email.message import Message
 from unittest.mock import AsyncMock
 
 import pytest
+from sftkit.error import NotFound
 
 from stustapay.core.schema.mail import Mail
 from stustapay.core.schema.tree import ROOT_NODE_ID
@@ -46,7 +47,7 @@ async def test_send_mail_sets_delivery_headers(mail_service: MailService, monkey
     monkeypatch.setattr("stustapay.core.service.mail.aiosmtplib.send", fake_send)
     monkeypatch.setattr(
         mail_service,
-        "_resolve_mail_settings",
+        "_fetch_global_mail_config",
         AsyncMock(return_value=(True, "noreply@teamfestlichpay.de", "smtp.example.test", 587, "user", "secret")),
     )
 
@@ -74,3 +75,34 @@ async def test_send_mail_sets_delivery_headers(mail_service: MailService, monkey
     assert message["From"] == "teamfestlichPay <payout@teamfestlichpay.de>"
     assert message["Reply-To"] == "teamfestlichPay <payout@teamfestlichpay.de>"
     assert message["Message-ID"].endswith("@teamfestlichpay.de>")
+
+
+async def test_resolve_mail_settings_uses_event_smtp_config(
+    mail_service: MailService, db_connection, event_node, monkeypatch: pytest.MonkeyPatch
+):
+    event_id = await db_connection.fetchval("select event_id from node where id = $1", event_node.id)
+    await db_connection.execute(
+        """
+        update event
+        set email_use_global_settings = false,
+            email_default_sender = 'event@example.test',
+            email_smtp_host = 'smtp.event.test',
+            email_smtp_port = 2525,
+            email_smtp_username = 'event-user',
+            email_smtp_password = 'event-secret'
+        where id = $1
+        """,
+        event_id,
+    )
+    fetch_global = AsyncMock()
+    monkeypatch.setattr(mail_service, "_fetch_global_mail_config", fetch_global)
+
+    settings = await mail_service._resolve_mail_settings(conn=db_connection, node_id=event_node.id)
+
+    assert settings == (True, "event@example.test", "smtp.event.test", 2525, "event-user", "event-secret")
+    fetch_global.assert_not_awaited()
+
+
+async def test_resolve_mail_settings_rejects_unknown_node(mail_service: MailService, db_connection):
+    with pytest.raises(NotFound):
+        await mail_service._resolve_mail_settings(conn=db_connection, node_id=-1)

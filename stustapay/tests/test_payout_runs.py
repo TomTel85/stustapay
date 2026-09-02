@@ -476,10 +476,11 @@ async def test_set_payout_to_done(
     await db_connection.execute("delete from mails")
     assert event_node.event is not None
     await db_connection.execute(
-        "update event set email_enabled = true, email_default_sender = $2 where id = $1",
+        "update event set payout_email_enabled = true, payout_sender = $2 where id = $1",
         event_node.event.id,
         "noreply@test.invalid",
     )
+    await db_connection.execute("update config set value = 'true' where key = 'mail.enabled'")
 
     created_payout_run: PayoutRunWithStats = await customer_service.payout.create_payout_run(
         token=event_admin_token,

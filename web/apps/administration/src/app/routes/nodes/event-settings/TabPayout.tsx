@@ -14,6 +14,7 @@ export const PayoutSettingsForm: React.FC<FormikProps<PayoutSettings>> = (formik
   const { t } = useTranslation();
   return (
     <>
+      <FormSwitch label={t("settings.payout.email_enabled")} name="payout_email_enabled" formik={formik} />
       <FormSwitch label={t("settings.payout.sepa_enabled")} name="sepa_enabled" formik={formik} />
       <FormTextField label={t("settings.payout.sepa_sender_name")} name="sepa_sender_name" formik={formik} />
       <FormTextField label={t("settings.payout.sepa_sender_iban")} name="sepa_sender_iban" formik={formik} />

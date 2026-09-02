@@ -505,10 +505,10 @@ class CustomerService(Service[Config]):
         email_to_send = None
         if updated_customer.email is not None:
             res_config = await fetch_restricted_event_settings_for_node(conn, updated_customer.node_id)
-            if res_config.email_enabled and res_config.payout_registered_message is not None:
+            if res_config.payout_email_enabled and res_config.payout_registered_message is not None:
                 message = res_config.payout_registered_message.format(**updated_customer.model_dump())
                 subject = res_config.payout_registered_subject or ""
-                payout_sender = res_config.payout_sender or res_config.email_default_sender
+                payout_sender = res_config.payout_sender
                 email_to_send = {
                     "subject": subject,
                     "message": message,

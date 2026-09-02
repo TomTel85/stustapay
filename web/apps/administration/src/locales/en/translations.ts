@@ -714,6 +714,7 @@ export const translations = {
     },
     payout: {
       tabLabel: "Payout",
+      email_enabled: "Send payout emails",
       payout_disabled_notice_de: "Notice when payout is disabled (DE)",
       payout_disabled_notice_en: "Notice when payout is disabled (EN)",
       payout_disabled_notice_help:
@@ -728,10 +729,11 @@ export const translations = {
       payout_done_message: "Message of mail sent upon setting a payout to done",
       payout_registered_subject: "Subject of mail sent when a customer enters their payout information",
       payout_registered_message: "Message of mail sent when a customer enters their payout information",
-      payout_sender: "E-Mail sender of all payout related emails. If empty the event email sender will be used",
+      payout_sender: "E-Mail sender of all payout related emails. If empty the global default sender will be used",
     },
     email: {
       tabLabel: "E-Mail",
+      useGlobalSettings: "Use global email settings",
       enabled: "Email enabled",
       default_sender: "Default sender mail address",
       smtp_host: "SMTP Host",

@@ -83,27 +83,28 @@ class MailService(Service[Config]):
         )
 
     async def _resolve_mail_settings(
-        self,
-        *,
-        conn: Connection,
-        node_id: int,
+        self, *, conn: Connection, node_id: int
     ) -> tuple[bool, str | None, str | None, int | None, str | None, str | None]:
+        node_exists = await conn.fetchval("select exists(select from node where id = $1)", node_id)
+        if not node_exists:
+            raise NotFound(element_type="node", element_id=node_id)
+
         try:
             event_settings = await fetch_restricted_event_settings_for_node(conn, node_id)
-            return (
-                event_settings.email_enabled,
-                event_settings.email_default_sender,
-                event_settings.email_smtp_host,
-                event_settings.email_smtp_port,
-                event_settings.email_smtp_username,
-                event_settings.email_smtp_password,
-            )
-        except NotFound:
-            node_exists = await conn.fetchval("select exists(select from node where id = $1)", node_id)
-            if not node_exists:
-                raise
-            # Node is not part of an event; fall back to global mail settings.
+        except NotFound:  # Nodes outside events, including root, always use the global configuration.
             return await self._fetch_global_mail_config(conn=conn)
+
+        if event_settings.email_use_global_settings:
+            return await self._fetch_global_mail_config(conn=conn)
+
+        return (
+            True,
+            event_settings.email_default_sender,
+            event_settings.email_smtp_host,
+            event_settings.email_smtp_port,
+            event_settings.email_smtp_username,
+            event_settings.email_smtp_password,
+        )
 
     @with_db_transaction
     async def send_mail(
@@ -130,8 +131,7 @@ class MailService(Service[Config]):
         ) = await self._resolve_mail_settings(conn=conn, node_id=node_id)
         if not mail_enabled:
             self.logger.warning(
-                f"Mail to {to_addr} was not scheduled for sending because mail sending is deactivated "
-                f"for node id {node_id} (event or global settings)"
+                f"Mail to {to_addr} was not scheduled for sending because mail sending is deactivated for node {node_id}"
             )
             return
         mail_id = await conn.fetchval(
@@ -235,8 +235,7 @@ class MailService(Service[Config]):
         ) = await self._resolve_mail_settings(conn=conn, node_id=mail.node_id)
         if not mail_enabled:
             self.logger.info(
-                f"The mail was not sent because mail sending is deactivated for node id {mail.node_id} "
-                f"(event or global settings)"
+                f"The mail was not sent because mail sending is deactivated for node id {mail.node_id}"
             )
             # Mark as failed without retry - configuration issue
             await conn.execute(
@@ -246,7 +245,7 @@ class MailService(Service[Config]):
                     failure_reason = $1
                 where id = $2
                 """,
-                "Mail sending deactivated (event/global settings)",
+                "Mail sending deactivated (selected settings)",
                 mail.id,
             )
             return

@@ -5,7 +5,7 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
 from stustapay.core.config import CoreConfig
-from stustapay.core.schema.config import SEPAConfig, SMTPConfig
+from stustapay.core.schema.config import SEPAConfig
 from stustapay.core.schema.language import Language
 from stustapay.core.schema.sumup import ResolvedSumUpLink
 from stustapay.core.schema.user import Privilege
@@ -52,12 +52,8 @@ class _BaseEvent(BaseModel):
     sepa_max_num_payouts_in_run: int
     sepa_allowed_country_codes: list[str]
 
-    # email configs
-    email_enabled: bool
-    email_default_sender: str | None = None
-    email_smtp_host: str | None = None
-    email_smtp_port: int | None = None
-    email_smtp_username: str | None = None
+    # Payout messages use the global email transport configuration.
+    payout_email_enabled: bool = False
 
     payout_done_subject: str | None = None
     payout_done_message: str | None = None
@@ -110,6 +106,11 @@ class _RestrictedEventMetadata(BaseModel):
 
     pretix_api_key: str | None
 
+    email_use_global_settings: bool = True
+    email_default_sender: str | None = None
+    email_smtp_host: str | None = None
+    email_smtp_port: int | None = None
+    email_smtp_username: str | None = None
     email_smtp_password: str | None = None
     wifi_ssid: str | None = None
     wifi_passphrase: str | None = None
@@ -125,6 +126,18 @@ class _RestrictedEventMetadata(BaseModel):
     def _validate_wifi_settings(self):
         if (self.wifi_ssid is None) != (self.wifi_passphrase is None):
             raise ValueError("wifi_ssid and wifi_passphrase must either both be set or both be empty")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_custom_email_settings(self):
+        if self.email_use_global_settings:
+            return self
+        if not self.email_default_sender:
+            raise ValueError("Email default sender is required when using custom email settings")
+        if not self.email_smtp_host:
+            raise ValueError("Email SMTP host is required when using custom email settings")
+        if self.email_smtp_port is None:
+            raise ValueError("Email SMTP port is required when using custom email settings")
         return self
 
 
@@ -146,18 +159,6 @@ class RestrictedEventSettings(_BaseEvent, _RestrictedEventMetadata):
     sumup_global_affiliate_key_configured: bool = False
     sumup_legacy_api_key_configured: bool = False
     sumup_legacy_oauth_configured: bool = False
-
-    @property
-    def smtp_config(self) -> SMTPConfig | None:
-        if not self.email_enabled:
-            return None
-        return SMTPConfig(
-            smtp_host=self.email_smtp_host,
-            smtp_port=self.email_smtp_port,
-            smtp_username=self.email_smtp_username,
-            smtp_password=self.email_smtp_password,
-        )
-
 
 class ObjectType(enum.Enum):
     user = "user"

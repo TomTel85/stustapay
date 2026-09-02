@@ -701,6 +701,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
     },
     payout: {
       tabLabel: "Auszahlung",
+      email_enabled: "Auszahlungs-E-Mails senden",
       payout_disabled_notice_de: "Hinweis bei deaktivierter Auszahlung (DE)",
       payout_disabled_notice_en: "Hinweis bei deaktivierter Auszahlung (EN)",
       payout_disabled_notice_help:
@@ -718,10 +719,11 @@ export const translations: NestedPartialAsStrings<Translations> = {
       payout_registered_message:
         "Nachricht der E-Mail, die gesendet wird, wenn ein Kunde seine Auszahlungsinformationen eingibt",
       payout_sender:
-        "E-Mail-Absender aller auszugsbezogenen E-Mails. Wenn leer, wird der E-Mail-Absender des Ereignisses verwendet",
+        "E-Mail-Absender aller auszugsbezogenen E-Mails. Wenn leer, wird der globale Standard-Absender verwendet",
     },
     email: {
       tabLabel: "E-Mail",
+      useGlobalSettings: "Globale E-Mail-Einstellungen verwenden",
       enabled: "E-Mail aktiviert",
       default_sender: "Standard-Absenderadresse",
       smtp_host: "SMTP-Host",

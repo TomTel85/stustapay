@@ -1386,10 +1386,11 @@ async def test_update_customer_info(
     await db_connection.execute("delete from mails")
     assert event_node.event is not None
     await db_connection.execute(
-        "update event set email_enabled = true, email_default_sender = $2 where id = $1",
+        "update event set payout_email_enabled = true, payout_sender = $2 where id = $1",
         event_node.event.id,
         "noreply@test.invalid",
     )
+    await db_connection.execute("update config set value = 'true' where key = 'mail.enabled'")
 
     auth = await customer_service.login_customer(
         uid=test_customer.user_tag_uid, pin=test_customer.user_tag_pin, node_id=event_node.id

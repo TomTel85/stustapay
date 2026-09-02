@@ -16,6 +16,7 @@ describe("PayoutSettingsSchema", () => {
   test("defaults to all EU payout countries", () => {
     const settings = PayoutSettingsSchema.parse({
       translation_texts: {},
+      payout_email_enabled: false,
       sepa_enabled: false,
       sepa_sender_name: "",
       sepa_sender_iban: undefined,
@@ -41,6 +42,7 @@ describe("PayoutSettingsSchema", () => {
           "de-DE": { payout_disabled_notice: "Nur nach dem Event" },
           "en-US": { payout_disabled_notice: "Only after the event" },
         },
+        payout_email_enabled: false,
         sepa_enabled: false,
         sepa_sender_name: "",
         sepa_sender_iban: undefined,
@@ -64,6 +66,7 @@ describe("PayoutSettingsSchema", () => {
     expect(
       PayoutSettingsSchema.parse({
         translation_texts: {},
+        payout_email_enabled: false,
         sepa_enabled: false,
         sepa_sender_name: "",
         sepa_sender_iban: undefined,
