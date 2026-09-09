@@ -13,7 +13,7 @@ from sftkit.service import Service, with_db_transaction
 
 from stustapay.core.config import Config
 from stustapay.core.schema.user import Privilege
-from stustapay.core.service.email_templates import render_payout_reminder_html
+from stustapay.core.service.email_templates import derive_invitation_base_url, render_payout_reminder_html
 from stustapay.core.service.mail import MailService
 
 PAYOUT_REMINDER_TIMEZONE = ZoneInfo("Europe/Berlin")
@@ -54,7 +54,8 @@ class PayoutReminderService(Service[Config]):
     def _message(self, *, event_name: str, count: int, payout_total: Decimal, donation_total: Decimal, currency: str, node_id: int):
         payout_amount = f"{payout_total:.2f} {currency}"
         donation_amount = f"{donation_total:.2f} {currency}"
-        payout_url = f"{self.config.administration.base_url.rstrip('/')}/node/{node_id}/payout-runs"
+        administration_url = derive_invitation_base_url(self.config.administration.base_url)
+        payout_url = f"{administration_url}/node/{node_id}/payout-runs"
         subject = f"[teamfestlichPay] Offene Auszahlungen: {event_name}"
         message = (
             f"Für {event_name} warten {count} Online-Auszahlung(en) mit insgesamt {payout_amount} "

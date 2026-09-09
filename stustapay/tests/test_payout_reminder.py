@@ -50,6 +50,8 @@ def test_next_check_after_skips_missed_weeks(config: Config):
 
 
 def test_payout_reminder_message_is_bilingual_and_links_to_the_event(config: Config):
+    config = config.model_copy(deep=True)
+    config.administration.base_url = "https://admin.teamfestlichpay.de/api/admin"
     service = _service(config)
 
     subject, message, html_message = service._message(
@@ -64,9 +66,9 @@ def test_payout_reminder_message_is_bilingual_and_links_to_the_event(config: Con
     assert "Offene Auszahlungen" in subject
     assert "12.50 EUR" in message
     assert "1.25 EUR" in message
-    assert "http://localhost:8081/node/42/payout-runs" in message
+    assert "https://admin.teamfestlichpay.de/node/42/payout-runs" in message
     assert "Auszahlungen öffnen" in html_message
-    assert "http://localhost:8081/node/42/payout-runs" in html_message
+    assert "https://admin.teamfestlichpay.de/node/42/payout-runs" in html_message
 
 
 async def test_due_reminder_queues_one_email_and_advances_the_schedule(
