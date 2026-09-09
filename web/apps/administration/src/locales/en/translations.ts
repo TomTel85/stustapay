@@ -715,6 +715,20 @@ export const translations = {
     payout: {
       tabLabel: "Payout",
       email_enabled: "Send payout emails",
+      reminderEnabled: "Send weekly pending-payout reminder",
+      reminderWeekday: "Reminder weekday",
+      reminderTime: "Reminder time",
+      reminderRecipients: "Reminder recipients",
+      reminderRecipientsRequired: "Select at least one reminder recipient.",
+      weekdays: {
+        0: "Monday",
+        1: "Tuesday",
+        2: "Wednesday",
+        3: "Thursday",
+        4: "Friday",
+        5: "Saturday",
+        6: "Sunday",
+      },
       payout_disabled_notice_de: "Notice when payout is disabled (DE)",
       payout_disabled_notice_en: "Notice when payout is disabled (EN)",
       payout_disabled_notice_help:

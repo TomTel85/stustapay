@@ -1,4 +1,12 @@
-import { RestrictedEventSettings, useUpdateEventMutation } from "@/api";
+import {
+  RestrictedEventSettings,
+  selectUserAll,
+  useListUsersQuery,
+  useUpdateEventMutation,
+  User,
+} from "@/api";
+import { Select } from "@stustapay/components";
+import { getUserName } from "@stustapay/models";
 import { Button, FormControl, FormHelperText, LinearProgress, Stack, TextField } from "@mui/material";
 import { FormSelect, FormSwitch, FormTextField } from "@stustapay/form-components";
 import { toFormikValidationSchema } from "@stustapay/utils";
@@ -10,11 +18,57 @@ import { toast } from "react-toastify";
 import { updateTranslationTexts } from "./common";
 import { PayoutSettings, PayoutSettingsSchema } from "./TabPayout.schema";
 
-export const PayoutSettingsForm: React.FC<FormikProps<PayoutSettings>> = (formik) => {
+export const PayoutSettingsForm: React.FC<FormikProps<PayoutSettings> & { nodeId?: number }> = ({ nodeId, ...formik }) => {
   const { t } = useTranslation();
+  const { data: payoutManagers } = useListUsersQuery(
+    { nodeId: nodeId ?? 0, filterPrivilege: "payout_management" },
+    { skip: nodeId == null }
+  );
+  const { data: nodeAdministrators } = useListUsersQuery({
+    nodeId: nodeId ?? 0,
+    filterPrivilege: "node_administration",
+  }, { skip: nodeId == null });
+  const reminderUsers = React.useMemo(() => {
+    const users = [...(payoutManagers ? selectUserAll(payoutManagers) : []), ...(nodeAdministrators ? selectUserAll(nodeAdministrators) : [])];
+    return [...new Map(users.filter((user) => !!user.email).map((user) => [user.id, user])).values()];
+  }, [nodeAdministrators, payoutManagers]);
+  const selectedReminderUsers = React.useMemo(
+    () => reminderUsers.filter((user) => formik.values.payout_reminder_user_ids.includes(user.id)),
+    [formik.values.payout_reminder_user_ids, reminderUsers]
+  );
   return (
     <>
       <FormSwitch label={t("settings.payout.email_enabled")} name="payout_email_enabled" formik={formik} />
+      {nodeId != null && <FormSwitch label={t("settings.payout.reminderEnabled")} name="payout_reminder_enabled" formik={formik} />}
+      {nodeId != null && formik.values.payout_reminder_enabled && (
+        <>
+          <FormSelect
+            label={t("settings.payout.reminderWeekday")}
+            name="payout_reminder_weekday"
+            formik={formik}
+            multiple={false}
+            options={[0, 1, 2, 3, 4, 5, 6]}
+            formatOption={(weekday) => t(`settings.payout.weekdays.${weekday}`)}
+          />
+          <FormTextField label={t("settings.payout.reminderTime")} name="payout_reminder_time" type="time" formik={formik} />
+          <Select<User, true>
+            label={t("settings.payout.reminderRecipients")}
+            multiple={true}
+            checkboxes={true}
+            options={reminderUsers}
+            value={selectedReminderUsers}
+            formatOption={getUserName}
+            onChange={(users) => {
+              formik.setFieldValue("payout_reminder_user_ids", (users ?? []).map((user) => user.id), true);
+              formik.setFieldTouched("payout_reminder_user_ids", true, false);
+            }}
+            error={formik.touched.payout_reminder_user_ids && !!formik.errors.payout_reminder_user_ids}
+            helperText={
+              formik.touched.payout_reminder_user_ids ? String(formik.errors.payout_reminder_user_ids ?? "") : undefined
+            }
+          />
+        </>
+      )}
       <FormSwitch label={t("settings.payout.sepa_enabled")} name="sepa_enabled" formik={formik} />
       <FormTextField label={t("settings.payout.sepa_sender_name")} name="sepa_sender_name" formik={formik} />
       <FormTextField label={t("settings.payout.sepa_sender_iban")} name="sepa_sender_iban" formik={formik} />
@@ -122,7 +176,7 @@ export const TabPayout: React.FC<{ nodeId: number; eventSettings: RestrictedEven
       {(formik) => (
         <Form onSubmit={formik.handleSubmit}>
           <Stack spacing={2}>
-            <PayoutSettingsForm {...formik} />
+            <PayoutSettingsForm {...formik} nodeId={nodeId} />
             {formik.isSubmitting && <LinearProgress />}
             <Button
               type="submit"

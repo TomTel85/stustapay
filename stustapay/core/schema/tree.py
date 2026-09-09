@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, time
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from stustapay.core.config import CoreConfig
 from stustapay.core.schema.config import SEPAConfig
@@ -112,6 +112,10 @@ class _RestrictedEventMetadata(BaseModel):
     email_smtp_port: int | None = None
     email_smtp_username: str | None = None
     email_smtp_password: str | None = None
+    payout_reminder_enabled: bool = False
+    payout_reminder_weekday: int = Field(default=0, ge=0, le=6)
+    payout_reminder_time: time = time(hour=9)
+    payout_reminder_user_ids: list[int] = []
     wifi_ssid: str | None = None
     wifi_passphrase: str | None = None
 

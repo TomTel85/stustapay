@@ -1,4 +1,7 @@
+from datetime import time
+
 import asyncpg
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from sftkit.database import Connection
 from sftkit.error import InvalidArgument, NotFound
 from sftkit.service import Service, with_db_transaction
@@ -65,6 +68,7 @@ COPY_EVENT_SETTINGS_MODEL_EXCLUDES = {
     "languages",
     "sumup_oauth_refresh_token",
     "customer_portal_banner_image_url",
+    "payout_reminder_user_ids",
 }
 
 OPTIONAL_EVENT_DB_COLUMNS = {
@@ -129,6 +133,9 @@ def _build_event_db_values(event: NewEvent, available_columns: set[str]) -> list
         ("end_date", event.end_date),
         ("daily_end_time", event.daily_end_time),
         ("payout_email_enabled", event.payout_email_enabled),
+        ("payout_reminder_enabled", event.payout_reminder_enabled),
+        ("payout_reminder_weekday", event.payout_reminder_weekday),
+        ("payout_reminder_time", event.payout_reminder_time),
         ("email_use_global_settings", event.email_use_global_settings),
         ("email_default_sender", event.email_default_sender),
         ("email_smtp_host", event.email_smtp_host),
@@ -445,7 +452,17 @@ async def create_event(conn: Connection, parent_id: int, event: NewEvent) -> Nod
     # TODO: tree, create all needed resources, e.g. global accounts which have to and should
     #  only exist at an event node
     event_columns = await _fetch_event_table_columns(conn)
-    event_values = _build_event_db_values(event, event_columns)
+    # Reminder recipients are operational contacts. Never inherit or accept them
+    # when provisioning a new event; operators configure them after roles exist.
+    event_for_creation = event.model_copy(
+        update={
+            "payout_reminder_enabled": False,
+            "payout_reminder_user_ids": [],
+            "payout_reminder_weekday": 0,
+            "payout_reminder_time": time(hour=9),
+        }
+    )
+    event_values = _build_event_db_values(event_for_creation, event_columns)
     column_names = ", ".join(column for column, _ in event_values)
     placeholders = ", ".join(f"${index}" for index in range(1, len(event_values) + 1))
     event_id = await conn.fetchval(
@@ -460,6 +477,45 @@ async def create_event(conn: Connection, parent_id: int, event: NewEvent) -> Nod
     await _create_system_products(conn=conn, node_id=node.id)
     await _create_system_tills(conn=conn, node_id=node.id)
     return node
+
+
+async def _validate_payout_reminder_recipients(
+    conn: Connection, *, event_node_id: int, user_ids: list[int], enabled: bool
+) -> None:
+    if not enabled:
+        return
+    if not user_ids:
+        raise InvalidArgument("At least one payout reminder recipient is required when reminders are enabled")
+
+    unique_user_ids = list(dict.fromkeys(user_ids))
+    recipients = await conn.fetch(
+        "select u.id, u.email "
+        "from usr u "
+        "join lateral user_privileges_at_node(u.id) up on true "
+        "where u.id = any($1) and up.node_id = $2 and u.email is not null "
+        "and ($3 = any(up.privileges_at_node) or $4 = any(up.privileges_at_node))",
+        unique_user_ids,
+        event_node_id,
+        Privilege.payout_management.name,
+        Privilege.node_administration.name,
+    )
+    if len(recipients) != len(unique_user_ids):
+        raise InvalidArgument("Payout reminder recipients need an email address and payout access for this event")
+    email_validator = TypeAdapter(EmailStr)
+    try:
+        for recipient in recipients:
+            email_validator.validate_python(recipient["email"])
+    except ValidationError as exc:
+        raise InvalidArgument("Payout reminder recipients need a valid email address") from exc
+
+
+async def _sync_payout_reminder_recipients(conn: Connection, *, event_id: int, user_ids: list[int]) -> None:
+    await conn.execute("delete from payout_reminder_recipient where event_id = $1", event_id)
+    if user_ids:
+        await conn.executemany(
+            "insert into payout_reminder_recipient (event_id, user_id) values ($1, $2)",
+            [(event_id, user_id) for user_id in dict.fromkeys(user_ids)],
+        )
 
 
 class TreeService(Service[Config]):
@@ -507,6 +563,17 @@ class TreeService(Service[Config]):
         if event_id is None:
             raise NotFound(element_type="event", element_id=node.id)
 
+        previous_reminder_settings = await conn.fetchrow(
+            "select payout_reminder_enabled, payout_reminder_weekday, payout_reminder_time from event where id = $1",
+            event_id,
+        )
+        await _validate_payout_reminder_recipients(
+            conn=conn,
+            event_node_id=node.event_node_id or node.id,
+            user_ids=event.payout_reminder_user_ids,
+            enabled=event.payout_reminder_enabled,
+        )
+
         event_columns = await _fetch_event_table_columns(conn)
         event_values = _build_event_db_values(event, event_columns)
         assignments = ", ".join(f"{column} = ${index}" for index, (column, _) in enumerate(event_values, start=2))
@@ -517,6 +584,13 @@ class TreeService(Service[Config]):
         )
         await conn.execute("delete from translation_text where event_id = $1", event_id)
         await _sync_optional_event_metadata(conn, event_id, event)
+        await _sync_payout_reminder_recipients(conn, event_id=event_id, user_ids=event.payout_reminder_user_ids)
+        if (
+            previous_reminder_settings["payout_reminder_enabled"] != event.payout_reminder_enabled
+            or previous_reminder_settings["payout_reminder_weekday"] != event.payout_reminder_weekday
+            or previous_reminder_settings["payout_reminder_time"] != event.payout_reminder_time
+        ):
+            await conn.execute("update event set payout_reminder_next_check_at = null where id = $1", event_id)
         updated_node = await fetch_node(conn=conn, node_id=node.id)
         assert updated_node is not None
         return updated_node

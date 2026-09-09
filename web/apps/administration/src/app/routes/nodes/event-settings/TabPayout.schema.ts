@@ -55,6 +55,10 @@ export const PayoutSettingsSchema = z
   .object({
     translation_texts: TranslationTextsSchema.shape.translation_texts,
     payout_email_enabled: z.boolean(),
+    payout_reminder_enabled: z.boolean(),
+    payout_reminder_weekday: z.number().int().min(0).max(6),
+    payout_reminder_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/),
+    payout_reminder_user_ids: z.array(z.number().int()),
     sepa_enabled: z.boolean(),
     sepa_sender_name: emptyString(),
     sepa_sender_iban: z
@@ -78,6 +82,13 @@ export const PayoutSettingsSchema = z
     payout_sender: z.string().email().optional(),
   })
   .superRefine((data, ctx) => {
+    if (data.payout_reminder_enabled && data.payout_reminder_user_ids.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: i18n.t("settings.payout.reminderRecipientsRequired"),
+        path: ["payout_reminder_user_ids"],
+      });
+    }
     if (!data.sepa_enabled) {
       return;
     }

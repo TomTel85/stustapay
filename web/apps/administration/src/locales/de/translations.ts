@@ -702,6 +702,20 @@ export const translations: NestedPartialAsStrings<Translations> = {
     payout: {
       tabLabel: "Auszahlung",
       email_enabled: "Auszahlungs-E-Mails senden",
+      reminderEnabled: "Wöchentliche Erinnerung für offene Auszahlungen senden",
+      reminderWeekday: "Wochentag der Erinnerung",
+      reminderTime: "Uhrzeit der Erinnerung",
+      reminderRecipients: "Empfänger der Erinnerung",
+      reminderRecipientsRequired: "Wähle mindestens einen Empfänger für die Erinnerung aus.",
+      weekdays: {
+        0: "Montag",
+        1: "Dienstag",
+        2: "Mittwoch",
+        3: "Donnerstag",
+        4: "Freitag",
+        5: "Samstag",
+        6: "Sonntag",
+      },
       payout_disabled_notice_de: "Hinweis bei deaktivierter Auszahlung (DE)",
       payout_disabled_notice_en: "Hinweis bei deaktivierter Auszahlung (EN)",
       payout_disabled_notice_help:

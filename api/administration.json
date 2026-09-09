@@ -16795,6 +16795,32 @@
             ],
             "title": "Email Smtp Password"
           },
+          "payout_reminder_enabled": {
+            "type": "boolean",
+            "title": "Payout Reminder Enabled",
+            "default": false
+          },
+          "payout_reminder_weekday": {
+            "type": "integer",
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Payout Reminder Weekday",
+            "default": 0
+          },
+          "payout_reminder_time": {
+            "type": "string",
+            "format": "time",
+            "title": "Payout Reminder Time",
+            "default": "09:00:00"
+          },
+          "payout_reminder_user_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Payout Reminder User Ids",
+            "default": []
+          },
           "wifi_ssid": {
             "anyOf": [
               {
@@ -20308,6 +20334,32 @@
             ],
             "title": "Email Smtp Password"
           },
+          "payout_reminder_enabled": {
+            "type": "boolean",
+            "title": "Payout Reminder Enabled",
+            "default": false
+          },
+          "payout_reminder_weekday": {
+            "type": "integer",
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Payout Reminder Weekday",
+            "default": 0
+          },
+          "payout_reminder_time": {
+            "type": "string",
+            "format": "time",
+            "title": "Payout Reminder Time",
+            "default": "09:00:00"
+          },
+          "payout_reminder_user_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Payout Reminder User Ids",
+            "default": []
+          },
           "wifi_ssid": {
             "anyOf": [
               {
@@ -22238,6 +22290,32 @@
               }
             ],
             "title": "Email Smtp Password"
+          },
+          "payout_reminder_enabled": {
+            "type": "boolean",
+            "title": "Payout Reminder Enabled",
+            "default": false
+          },
+          "payout_reminder_weekday": {
+            "type": "integer",
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Payout Reminder Weekday",
+            "default": 0
+          },
+          "payout_reminder_time": {
+            "type": "string",
+            "format": "time",
+            "title": "Payout Reminder Time",
+            "default": "09:00:00"
+          },
+          "payout_reminder_user_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Payout Reminder User Ids",
+            "default": []
           },
           "wifi_ssid": {
             "anyOf": [

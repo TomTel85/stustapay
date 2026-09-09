@@ -4456,6 +4456,10 @@ export type NewEvent = {
   email_smtp_port?: number | null;
   email_smtp_username?: string | null;
   email_smtp_password?: string | null;
+  payout_reminder_enabled?: boolean;
+  payout_reminder_weekday?: number;
+  payout_reminder_time?: string;
+  payout_reminder_user_ids?: number[];
   wifi_ssid?: string | null;
   wifi_passphrase?: string | null;
   currency_identifier: string;
@@ -4539,6 +4543,10 @@ export type UpdateEvent = {
   email_smtp_port?: number | null;
   email_smtp_username?: string | null;
   email_smtp_password?: string | null;
+  payout_reminder_enabled?: boolean;
+  payout_reminder_weekday?: number;
+  payout_reminder_time?: string;
+  payout_reminder_user_ids?: number[];
   wifi_ssid?: string | null;
   wifi_passphrase?: string | null;
   currency_identifier: string;
@@ -4611,6 +4619,10 @@ export type RestrictedEventSettings = {
   email_smtp_port?: number | null;
   email_smtp_username?: string | null;
   email_smtp_password?: string | null;
+  payout_reminder_enabled?: boolean;
+  payout_reminder_weekday?: number;
+  payout_reminder_time?: string;
+  payout_reminder_user_ids?: number[];
   wifi_ssid?: string | null;
   wifi_passphrase?: string | null;
   currency_identifier: string;

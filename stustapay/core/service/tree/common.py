@@ -192,4 +192,9 @@ async def fetch_restricted_event_settings_for_node(conn: Connection, node_id: in
         event_node_id,
     )
     settings.translation_texts = await _fetch_translation_textx(conn=conn, event_id=settings.id)
+    settings.payout_reminder_user_ids = await conn.fetchval(
+        "select coalesce(array_agg(user_id order by user_id), '{}'::bigint[]) "
+        "from payout_reminder_recipient where event_id = $1",
+        settings.id,
+    )
     return settings
