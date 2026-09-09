@@ -195,6 +195,50 @@ def render_plain_text_payout_html(message: str, subject: str) -> str:
     return render_email_html(content, subject)
 
 
+def render_payout_reminder_html(
+    *,
+    event_name: str,
+    count: int,
+    payout_amount: str,
+    donation_amount: str,
+    payout_url: str,
+    subject: str,
+) -> str:
+    """Render the operational payout reminder as a compact, scannable email."""
+    safe_event_name = escape(event_name)
+    safe_payout_amount = escape(payout_amount)
+    safe_donation_amount = escape(donation_amount)
+    safe_payout_url = escape(payout_url)
+    payout_label = "Auszahlung" if count == 1 else "Auszahlungen"
+    content = f"""
+<h1 style="margin:0 0 16px;font-size:24px;line-height:1.25;color:#176B67;">Offene Online-Auszahlungen</h1>
+<p style="margin:0 0 24px;">Hallo, für <strong>{safe_event_name}</strong> stehen Online-Auszahlungen zur Bearbeitung bereit.</p>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:8px 0;margin:0 -8px 24px;">
+  <tr>
+    <td width="33%" style="padding:16px;background:#F5FFFE;border-radius:12px;vertical-align:top;">
+      <div style="font-size:12px;color:#4A5B5A;">{payout_label}</div>
+      <div style="font-size:22px;font-weight:700;color:#176B67;">{count}</div>
+    </td>
+    <td width="33%" style="padding:16px;background:#F5FFFE;border-radius:12px;vertical-align:top;">
+      <div style="font-size:12px;color:#4A5B5A;">Überweisungsbetrag</div>
+      <div style="font-size:18px;font-weight:700;color:#176B67;">{safe_payout_amount}</div>
+    </td>
+    <td width="33%" style="padding:16px;background:#F5FFFE;border-radius:12px;vertical-align:top;">
+      <div style="font-size:12px;color:#4A5B5A;">Spenden</div>
+      <div style="font-size:18px;font-weight:700;color:#176B67;">{safe_donation_amount}</div>
+    </td>
+  </tr>
+</table>
+<p style="margin:24px 0 28px;">
+  <a href="{safe_payout_url}" style="display:inline-block;padding:14px 22px;background:#176B67;color:#FFFFFF;text-decoration:none;font-weight:700;border-radius:999px;">Auszahlungen öffnen</a>
+</p>
+<hr style="border:0;border-top:1px solid #DDEDEC;margin:28px 0;" />
+<p style="margin:0 0 8px;font-size:14px;"><strong>Pending online payouts</strong></p>
+<p style="margin:0;font-size:14px;line-height:1.6;">{count} payout(s) totaling <strong>{safe_payout_amount}</strong> are waiting for the next payout run for <strong>{safe_event_name}</strong>. Donations: {safe_donation_amount}.</p>
+"""
+    return render_email_html(content, subject)
+
+
 def render_invitation_html(template: str, context: dict[str, object], subject: str) -> str:
     rendered_body = render_template_string(template, context, autoescape=True)
     return render_email_html(rendered_body, subject)

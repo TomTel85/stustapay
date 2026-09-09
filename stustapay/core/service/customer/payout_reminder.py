@@ -4,6 +4,7 @@ import asyncio
 import logging
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
+from email.utils import formataddr
 
 import asyncpg
 from dateutil.tz import tzlocal
@@ -12,7 +13,7 @@ from sftkit.service import Service, with_db_transaction
 
 from stustapay.core.config import Config
 from stustapay.core.schema.user import Privilege
-from stustapay.core.service.email_templates import render_plain_text_payout_html
+from stustapay.core.service.email_templates import render_payout_reminder_html
 from stustapay.core.service.mail import MailService
 
 
@@ -49,7 +50,7 @@ class PayoutReminderService(Service[Config]):
         payout_amount = f"{payout_total:.2f} {currency}"
         donation_amount = f"{donation_total:.2f} {currency}"
         payout_url = f"{self.config.administration.base_url.rstrip('/')}/node/{node_id}/payout-runs"
-        subject = f"[teamfestlichPay] Pending payouts / Offene Auszahlungen: {event_name}"
+        subject = f"[teamfestlichPay] Offene Auszahlungen: {event_name}"
         message = (
             f"Für {event_name} warten {count} Online-Auszahlung(en) mit insgesamt {payout_amount} "
             f"auf den nächsten Auszahlungslauf. Spenden: {donation_amount}.\n"
@@ -58,13 +59,21 @@ class PayoutReminderService(Service[Config]):
             f"for the next payout run. Donations: {donation_amount}.\n"
             f"Open payouts: {payout_url}"
         )
-        return subject, message
+        html_message = render_payout_reminder_html(
+            event_name=event_name,
+            count=count,
+            payout_amount=payout_amount,
+            donation_amount=donation_amount,
+            payout_url=payout_url,
+            subject=subject,
+        )
+        return subject, message, html_message
 
     @with_db_transaction
     async def process_due_reminders(self, *, conn: Connection, now: datetime | None = None) -> None:
         now = now or datetime.now(timezone.utc)
         due_events = await conn.fetch(
-            "select e.id as event_id, n.id as node_id, n.name as event_name, e.currency_identifier, "
+            "select e.id as event_id, n.id as node_id, n.name as event_name, e.currency_identifier, e.payout_sender, "
             "e.payout_reminder_weekday, e.payout_reminder_time, e.payout_reminder_next_check_at "
             "from event e join node n on n.event_id = e.id "
             "where e.payout_reminder_enabled and "
@@ -114,7 +123,7 @@ class PayoutReminderService(Service[Config]):
                 self.logger.warning("No eligible payout reminder recipients for event %s", event["event_id"])
                 continue
 
-            subject, message = self._message(
+            subject, message, html_message = self._message(
                 event_name=event["event_name"],
                 count=pending["n_payouts"],
                 payout_total=pending["total_payout_amount"],
@@ -128,7 +137,12 @@ class PayoutReminderService(Service[Config]):
                     node_id=event["node_id"],
                     subject=subject,
                     text_message=message,
-                    html_message=render_plain_text_payout_html(message, subject),
+                    html_message=html_message,
+                    from_addr=(
+                        formataddr((f"{event['event_name']} Auszahlung", event["payout_sender"]))
+                        if event["payout_sender"]
+                        else None
+                    ),
                     to_addr=recipient["email"],
                 )
 

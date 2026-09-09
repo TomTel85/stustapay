@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, Mock
 from sftkit.database import Connection
 
 from stustapay.core.config import Config
-from stustapay.core.service.customer.payout_reminder import PayoutReminderService
 from stustapay.core.schema.tree import Node
 from stustapay.core.schema.user import User
+from stustapay.core.service.customer.payout_reminder import PayoutReminderService
 
 
 def _service(config: Config) -> PayoutReminderService:
@@ -40,7 +40,7 @@ def test_next_check_after_skips_missed_weeks(config: Config):
 def test_payout_reminder_message_is_bilingual_and_links_to_the_event(config: Config):
     service = _service(config)
 
-    subject, message = service._message(
+    subject, message, html_message = service._message(
         event_name="Test Festival",
         count=2,
         payout_total=Decimal("12.50"),
@@ -49,11 +49,12 @@ def test_payout_reminder_message_is_bilingual_and_links_to_the_event(config: Con
         node_id=42,
     )
 
-    assert "Pending payouts" in subject
     assert "Offene Auszahlungen" in subject
     assert "12.50 EUR" in message
     assert "1.25 EUR" in message
     assert "http://localhost:8081/node/42/payout-runs" in message
+    assert "Auszahlungen öffnen" in html_message
+    assert "http://localhost:8081/node/42/payout-runs" in html_message
 
 
 async def test_due_reminder_queues_one_email_and_advances_the_schedule(
@@ -78,7 +79,8 @@ async def test_due_reminder_queues_one_email_and_advances_the_schedule(
     )
     now = datetime.now(timezone.utc)
     await db_connection.execute(
-        "update event set payout_reminder_enabled = true, payout_reminder_next_check_at = $2 "
+        "update event set payout_reminder_enabled = true, payout_sender = 'payout@teamfestlichpay.de', "
+        "payout_reminder_next_check_at = $2 "
         "where id = $1",
         event_node.event.id,
         now - timedelta(minutes=1),
@@ -94,5 +96,6 @@ async def test_due_reminder_queues_one_email_and_advances_the_schedule(
 
     mail_service.send_mail.assert_awaited_once()
     assert mail_service.send_mail.await_args.kwargs["to_addr"] == "payout-admin@example.test"
+    assert mail_service.send_mail.await_args.kwargs["from_addr"] == f"{event_node.name} Auszahlung <payout@teamfestlichpay.de>"
     assert "12.50 EUR" in mail_service.send_mail.await_args.kwargs["text_message"]
     assert await db_connection.fetchval("select payout_reminder_next_check_at > $1 from event where id = $2", now, event_node.event.id)
