@@ -7,7 +7,7 @@ from sftkit.database import Connection
 from stustapay.core.config import Config
 from stustapay.core.schema.tree import Node
 from stustapay.core.schema.user import User
-from stustapay.core.service.customer.payout_reminder import PayoutReminderService
+from stustapay.core.service.customer.payout_reminder import PAYOUT_REMINDER_TIMEZONE, PayoutReminderService
 
 
 def _service(config: Config) -> PayoutReminderService:
@@ -22,7 +22,19 @@ def test_next_scheduled_check_uses_next_week_when_today_has_passed(config: Confi
     )
 
     assert next_check > datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
-    assert next_check.astimezone().weekday() == 0
+    assert next_check == datetime(2026, 9, 14, 7, tzinfo=timezone.utc)
+    assert next_check.astimezone(PAYOUT_REMINDER_TIMEZONE).hour == 9
+
+
+def test_next_scheduled_check_keeps_nine_am_across_summer_time(config: Config):
+    service = _service(config)
+
+    next_check = service.next_scheduled_check(
+        now=datetime(2026, 3, 25, 12, tzinfo=timezone.utc), weekday=6, scheduled_time=time(hour=9)
+    )
+
+    assert next_check == datetime(2026, 3, 29, 7, tzinfo=timezone.utc)
+    assert next_check.astimezone(PAYOUT_REMINDER_TIMEZONE).hour == 9
 
 
 def test_next_check_after_skips_missed_weeks(config: Config):

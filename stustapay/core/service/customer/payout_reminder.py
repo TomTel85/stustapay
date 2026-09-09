@@ -5,9 +5,9 @@ import logging
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from email.utils import formataddr
+from zoneinfo import ZoneInfo
 
 import asyncpg
-from dateutil.tz import tzlocal
 from sftkit.database import Connection
 from sftkit.service import Service, with_db_transaction
 
@@ -15,6 +15,8 @@ from stustapay.core.config import Config
 from stustapay.core.schema.user import Privilege
 from stustapay.core.service.email_templates import render_payout_reminder_html
 from stustapay.core.service.mail import MailService
+
+PAYOUT_REMINDER_TIMEZONE = ZoneInfo("Europe/Berlin")
 
 
 class PayoutReminderService(Service[Config]):
@@ -29,10 +31,9 @@ class PayoutReminderService(Service[Config]):
 
     @staticmethod
     def next_scheduled_check(*, now: datetime, weekday: int, scheduled_time: time) -> datetime:
-        """Return the next strictly future weekly occurrence in the server's local timezone."""
-        local_timezone = tzlocal()
-        local_now = now.astimezone(local_timezone)
-        candidate = datetime.combine(local_now.date(), scheduled_time, tzinfo=local_timezone)
+        """Return the next strictly future weekly occurrence in the Europe/Berlin timezone."""
+        local_now = now.astimezone(PAYOUT_REMINDER_TIMEZONE)
+        candidate = datetime.combine(local_now.date(), scheduled_time, tzinfo=PAYOUT_REMINDER_TIMEZONE)
         candidate += timedelta(days=(weekday - candidate.weekday()) % 7)
         if candidate <= local_now:
             candidate += timedelta(days=7)
@@ -41,9 +42,13 @@ class PayoutReminderService(Service[Config]):
     @staticmethod
     def next_check_after(*, scheduled_check: datetime, now: datetime) -> datetime:
         """Advance an overdue schedule beyond now so a restart produces one catch-up reminder."""
-        next_check = (scheduled_check.astimezone(tzlocal()) + timedelta(days=7)).astimezone(timezone.utc)
+        next_check = (scheduled_check.astimezone(PAYOUT_REMINDER_TIMEZONE) + timedelta(days=7)).astimezone(
+            timezone.utc
+        )
         while next_check <= now:
-            next_check = (next_check.astimezone(tzlocal()) + timedelta(days=7)).astimezone(timezone.utc)
+            next_check = (next_check.astimezone(PAYOUT_REMINDER_TIMEZONE) + timedelta(days=7)).astimezone(
+                timezone.utc
+            )
         return next_check
 
     def _message(self, *, event_name: str, count: int, payout_total: Decimal, donation_total: Decimal, currency: str, node_id: int):
