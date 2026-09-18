@@ -36,7 +36,8 @@ sealed interface UserUIState {
         val username: String,
         val activeRole: String,
         val showCreateUser: Boolean,
-        val showLoginUser: Boolean
+        val showLoginUser: Boolean,
+        val showLogout: Boolean = true
     ) : UserUIState
 
     object NotLoggedIn : UserUIState
@@ -187,7 +188,7 @@ class UserViewModel @Inject constructor(
     }
 }
 
-private fun userUiState(
+internal fun userUiState(
     terminalLoginState: Flow<TerminalLoginState>,
 ): Flow<UserUIState> {
     return terminalLoginState.asResult().map { userStateResult ->
@@ -202,10 +203,11 @@ private fun userUiState(
                 if (currentUser != null) {
                     if (currentUser.activeRoleName != null) {
                             UserUIState.LoggedIn(
-                                username = currentUser.login,
+                                username = if (currentUser.isDeviceIdentity == true) currentUser.displayName else currentUser.login,
                                 activeRole = currentUser.activeRoleName!!,
                                 showCreateUser = Access.canCreateUser(currentUser),
-                                showLoginUser = Access.canLogInOtherUsers(currentUser),
+                                showLoginUser = currentUser.isDeviceIdentity != true && Access.canLogInOtherUsers(currentUser),
+                                showLogout = currentUser.isDeviceIdentity != true,
                             )
                     } else {
                         UserUIState.Error(

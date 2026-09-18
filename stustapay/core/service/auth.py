@@ -74,7 +74,7 @@ class AuthService(Service[Config]):
             CurrentUser,
             "select u.*, null as active_role_id, '{}'::text array as privileges "
             "from user_with_tag u join usr_session s on u.id = s.usr "
-            "where u.id = $1 and s.id = $2 ",
+            "where u.id = $1 and s.id = $2 and not u.is_device_identity ",
             token_payload.user_id,
             token_payload.session_id,
         )
@@ -139,6 +139,7 @@ class AuthService(Service[Config]):
             name=terminal.name,
             description=terminal.description,
             mode=terminal.mode,
+            login_mode=terminal.login_mode,
             entry_area_id=terminal.entry_area_id,
             self_service=terminal.self_service,
             app_display_mode=terminal.app_display_mode,

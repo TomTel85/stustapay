@@ -18,6 +18,7 @@ package de.stustapay.api.models
 import de.stustapay.api.models.AppDisplayMode
 import de.stustapay.api.models.EntryAreaConfig
 import de.stustapay.api.models.Privilege
+import de.stustapay.api.models.TerminalLoginMode
 import de.stustapay.api.models.TerminalMode
 import de.stustapay.api.models.TerminalSecrets
 import de.stustapay.api.models.TerminalTillConfig
@@ -45,6 +46,7 @@ import kotlinx.serialization.Contextual
  * @param till 
  * @param testMode 
  * @param testModeMessage 
+ * @param loginMode
  */
 @Serializable
 
@@ -93,10 +95,12 @@ data class TerminalConfig (
     val testMode: kotlin.Boolean,
 
     @SerialName(value = "test_mode_message")
-    val testModeMessage: kotlin.String
+    val testModeMessage: kotlin.String,
+
+    @Contextual @SerialName(value = "login_mode")
+    val loginMode: TerminalLoginMode? = null
 
 ) {
 
 
 }
-

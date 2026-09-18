@@ -190,7 +190,9 @@ export const TerminalList: React.FC = () => {
       headerName: t("till.activeUser"),
       flex: 0.8,
       sortable: false,
-      renderCell: (params) => renderActiveUser(params.row.active_user_id ?? null),
+      renderCell: (params) => params.row.login_mode === "device"
+        ? `${t("terminal.loginMode.device")}: ${params.row.name}`
+        : renderActiveUser(params.row.active_user_id ?? null),
     },
     dataGridNodeColumn,
   ];

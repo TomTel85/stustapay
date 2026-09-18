@@ -104,7 +104,7 @@ async def upsert_node_sumup_link(
     await conn.execute(
         "insert into node_sumup_link (node_id, merchant_code, merchant_name, refresh_token, connected_at, updated_at) "
         "values ($1, $2, $3, $4, now(), now()) "
-        "on conflict (node_id) do update set "
+        "on conflict (node_id, environment) do update set "
         "merchant_code = excluded.merchant_code, "
         "merchant_name = excluded.merchant_name, "
         "refresh_token = excluded.refresh_token, "

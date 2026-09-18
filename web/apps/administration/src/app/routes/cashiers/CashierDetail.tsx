@@ -100,12 +100,13 @@ export const CashierDetail: React.FC = () => {
       actions={[
         {
           label: t("cashier.closeOut"),
-          hidden: cashier.cash_drawer_balance === 0,
+          hidden: cashier.cash_register_id == null,
           onClick: () => navigate(CashierRoutes.detailAction(cashier.id, "close-out")),
           icon: <PointOfSaleIcon />,
         },
         {
           label: t("edit"),
+          hidden: cashier.is_device_identity,
           onClick: () => navigate(UserRoutes.edit(cashier.id, cashier.node_id)),
           color: "primary",
           icon: <EditIcon />,
@@ -113,14 +114,16 @@ export const CashierDetail: React.FC = () => {
       ]}
     >
       <DetailView>
-        <DetailField label={t("cashier.login")} value={cashier.login} />
+        {!cashier.is_device_identity && <DetailField label={t("cashier.login")} value={cashier.login} />}
         <DetailField label={t("cashier.name")} value={cashier.display_name} />
         <DetailField label={t("cashier.description")} value={cashier.description} />
-        <DetailField
-          label={t("cashier.tagId")}
-          value={formatUserTagUid(cashier.user_tag_uid_hex)}
-          linkTo={UserTagRoutes.detail(cashier.user_tag_id)}
-        />
+        {!cashier.is_device_identity && (
+          <DetailField
+            label={t("cashier.tagId")}
+            value={formatUserTagUid(cashier.user_tag_uid_hex)}
+            linkTo={UserTagRoutes.detail(cashier.user_tag_id)}
+          />
+        )}
         {cashier.terminal_ids.length !== 0 ? (
           cashier.terminal_ids.map((id) => (
             <DetailField

@@ -15,6 +15,7 @@ const mockPreventCustomerPayoutMutation = jest.fn();
 const mockDisableAccountMutation = jest.fn();
 const mockUpdateAccountCommentMutation = jest.fn();
 const mockNavigate = jest.fn();
+const mockCurrentNode = { id: 5, event: undefined as { customer_portal_url: string } | undefined };
 
 jest.mock("@/api", () => ({
   useGetCustomerQuery: (...args: unknown[]) => mockUseGetCustomerQuery(...args),
@@ -35,15 +36,20 @@ jest.mock("@/app/layout", () => ({
 
 jest.mock("@/hooks", () => ({
   useCurrentNode: () => ({
-    currentNode: { id: 5 },
+    currentNode: mockCurrentNode,
   }),
   useCurrentUserHasPrivilege: (...args: unknown[]) => mockUseCurrentUserHasPrivilege(...args),
 }));
 
 jest.mock("@/components", () => ({
-  DetailLayout: ({ children, actions }: { actions?: { label: string }[]; children: React.ReactNode }) => (
+  DetailLayout: ({ children, actions }: { actions?: { label?: string; onClick: () => void }[]; children: React.ReactNode }) => (
     <div>
       <div data-testid="customer-detail-actions">{actions?.map((action) => action.label).join("|")}</div>
+      {actions?.map((action) => (
+        <button key={action.label} type="button" onClick={action.onClick}>
+          {action.label}
+        </button>
+      ))}
       {children}
     </div>
   ),
@@ -138,7 +144,7 @@ jest.mock("react-i18next", () => ({
 }));
 
 const { MemoryRouter } = require("react-router-dom");
-const { CustomerDetail } = require("./CustomerDetail");
+const { CustomerDetail, getCustomerPortalQrLoginUrl } = require("./CustomerDetail");
 
 describe("CustomerDetail", () => {
   beforeEach(() => {
@@ -150,6 +156,7 @@ describe("CustomerDetail", () => {
     mockDisableAccountMutation.mockReset();
     mockUpdateAccountCommentMutation.mockReset();
     mockNavigate.mockReset();
+    mockCurrentNode.event = undefined;
 
     mockAllowCustomerPayoutMutation.mockReturnValue([jest.fn()]);
     mockPreventCustomerPayoutMutation.mockReturnValue([jest.fn()]);
@@ -212,5 +219,58 @@ describe("CustomerDetail", () => {
     expect(screen.queryByRole("link", { name: "ABCDEF" })).toBeNull();
     expect(screen.getByText("Support note")).toBeTruthy();
     expect(screen.getByText("customer.payoutExportPrevented")).toBeTruthy();
+  });
+
+  test("opens the customer portal QR login link", () => {
+    const openWindow = jest.spyOn(window, "open").mockImplementation(() => null);
+    mockUseCurrentUserHasPrivilege.mockReturnValue(false);
+    mockUseGetCustomerQuery.mockReturnValue({
+      data: {
+        id: 41,
+        type: "private",
+        user_tag_id: 17,
+        user_tag_uid_hex: "ABCDEF",
+        user_tag_pin: "pin with / and ?",
+        name: "Customer 41",
+        comment: null,
+        balance: 12.5,
+        vouchers: 3,
+        has_entered_info: true,
+        account_name: null,
+        iban: null,
+        email: null,
+        donate_all: false,
+        donation: 0,
+        payout_export: null,
+        payout: null,
+        tag_history: [],
+      },
+      error: undefined,
+      isLoading: false,
+    });
+    mockUseListOrdersQuery.mockReturnValue({ orders: undefined, error: undefined, isLoading: false });
+
+    mockCurrentNode.event = { customer_portal_url: "https://portal.example.test/base/" };
+
+    render(
+      <MemoryRouter initialEntries={["/node/5/customers/41"]}>
+        <CustomerDetail />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("button", { name: "customer.openPortal" })).toBeTruthy();
+    screen.getByRole("button", { name: "customer.openPortal" }).click();
+    expect(openWindow).toHaveBeenCalledWith(
+      "https://portal.example.test/base/login/qr?id=ABCDEF&pin=pin+with+%2F+and+%3F",
+      "_blank",
+      "noopener,noreferrer"
+    );
+    openWindow.mockRestore();
+  });
+
+  test("does not create a customer portal QR login link without all credentials", () => {
+    expect(getCustomerPortalQrLoginUrl(undefined, "ABCDEF", "1234")).toBeUndefined();
+    expect(getCustomerPortalQrLoginUrl("https://portal.example.test", null, "1234")).toBeUndefined();
+    expect(getCustomerPortalQrLoginUrl("https://portal.example.test", "ABCDEF", null)).toBeUndefined();
   });
 });

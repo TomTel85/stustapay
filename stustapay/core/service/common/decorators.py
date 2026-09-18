@@ -357,16 +357,24 @@ def requires_terminal(
             if terminal is None:
                 raise Unauthorized("invalid terminal token")
 
+            func_is_read_only = _is_func_read_only(kwargs, func)
+            if not func_is_read_only:
+                # Serialize terminal mutations with device configuration and shift close-out.
+                row = await conn.fetchrow("select * from terminal where id = $1 for update", terminal.id)
+                if row is None:
+                    raise Unauthorized("Terminal no longer exists")
+                terminal = CurrentTerminal.model_validate({**dict(row), "till": terminal.till})
+
             till = await conn.fetch_maybe_one(
                 Till,
                 "select * from till_with_cash_register where terminal_id = $1",
                 terminal.id,
             )
+            terminal.till = till
             if till is None and requires_till:
                 raise Unauthorized("Terminal does not have an assigned till but one is required")
 
             signature_params = signature(func).parameters
-            func_is_read_only = _is_func_read_only(kwargs, func)
 
             event_node = await fetch_event_node_for_node(conn=conn, node_id=terminal.node_id)
             if event_node is None:
@@ -386,13 +394,17 @@ def requires_terminal(
                 "   $2::bigint as active_role_id, "
                 "   urwp.name as active_role_name "
                 "from usr "
-                "join user_tag ut on usr.user_tag_id = ut.id "
+                "left join user_tag ut on usr.user_tag_id = ut.id "
                 "join user_to_role utr on utr.user_id = usr.id "
                 "join user_role_with_privileges urwp on urwp.id = utr.role_id "
-                "where usr.id = $1 and utr.role_id = $2 and utr.node_id = any($3)",
+                "where usr.id = $1 and utr.role_id = $2 and utr.node_id = any($3) "
+                "and (ut.id is not null or (usr.is_device_identity and exists ("
+                "select 1 from terminal where id = $4 and login_mode = 'device' "
+                "and device_user_id = usr.id and device_role_id = utr.role_id)))",
                 terminal.active_user_id,
                 terminal.active_user_role_id,
                 event_node.ids_to_root if requires_event_privileges else node.ids_to_root,
+                terminal.id,
             )
 
             if "current_user" in signature_params:

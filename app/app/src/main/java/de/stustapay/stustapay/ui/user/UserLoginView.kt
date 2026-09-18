@@ -217,7 +217,7 @@ fun UserLoginView(
             )
         }
 
-        if (userUIStateV is UserUIState.LoggedIn) {
+        if (userUIStateV is UserUIState.LoggedIn && userUIStateV.showLogout) {
             OperatorSecondaryButton(
                 modifier = Modifier.fillMaxWidth(),
                 text = stringResource(R.string.user_logout),

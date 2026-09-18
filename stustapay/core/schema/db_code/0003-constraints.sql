@@ -2,7 +2,10 @@ alter table usr add constraint login_encoding
     check ( login ~ '[a-zA-Z0-9\-_]+' );
 
 alter table usr add constraint password_or_user_tag_id_set
-    check ((user_tag_id is not null) or (password is not null));
+    check (is_device_identity or (user_tag_id is not null) or (password is not null));
+
+alter table usr add constraint device_identity_has_no_credentials
+    check (not is_device_identity or (password is null and user_tag_id is null));
 
 alter table product add constraint product_vouchers_only_with_fixed_price
     check ( price_in_vouchers is not null and fixed_price or price_in_vouchers is null );

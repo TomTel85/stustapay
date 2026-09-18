@@ -21,7 +21,12 @@ import {
 } from "@/components";
 import { OrderTable } from "@/components/features";
 import { useCurrentNode, useCurrentUserHasPrivilege } from "@/hooks";
-import { Edit as EditIcon, RemoveCircle as RemoveCircleIcon, SwapHoriz as SwapHorizIcon } from "@mui/icons-material";
+import {
+  Edit as EditIcon,
+  OpenInNew as OpenInNewIcon,
+  RemoveCircle as RemoveCircleIcon,
+  SwapHoriz as SwapHorizIcon,
+} from "@mui/icons-material";
 import { Alert, Button, Grid, IconButton, Stack } from "@mui/material";
 import { Loading } from "@stustapay/components";
 import * as React from "react";
@@ -38,6 +43,26 @@ const printMaybeNull = (value: string | null | undefined, fallback: string) => {
     return fallback;
   }
   return value;
+};
+
+export const getCustomerPortalQrLoginUrl = (
+  customerPortalUrl: string | undefined,
+  userTagUidHex: string | null,
+  userTagPin: string | null
+): string | undefined => {
+  if (!customerPortalUrl || !userTagUidHex || !userTagPin) {
+    return undefined;
+  }
+
+  try {
+    const portalUrl = new URL(customerPortalUrl.endsWith("/") ? customerPortalUrl : `${customerPortalUrl}/`);
+    const loginUrl = new URL("login/qr", portalUrl);
+    loginUrl.searchParams.set("id", userTagUidHex);
+    loginUrl.searchParams.set("pin", userTagPin);
+    return loginUrl.toString();
+  } catch {
+    return undefined;
+  }
 };
 
 const PayoutDetails: React.FC<{
@@ -129,6 +154,11 @@ export const CustomerDetail = withPrivilegeGuard(CustomerRoutes.privilege, () =>
 
   const [transferModalOpen, setTransferModalOpen] = React.useState(false);
   const [voucherModalOpen, setVoucherModalOpen] = React.useState(false);
+  const customerPortalQrLoginUrl = getCustomerPortalQrLoginUrl(
+    currentNode.event?.customer_portal_url,
+    customer?.user_tag_uid_hex ?? null,
+    customer?.user_tag_pin ?? null
+  );
 
   const {
     orders,
@@ -198,6 +228,14 @@ export const CustomerDetail = withPrivilegeGuard(CustomerRoutes.privilege, () =>
   };
 
   const actions: LayoutAction[] = [];
+
+  if (customerPortalQrLoginUrl) {
+    actions.push({
+      label: t("customer.openPortal"),
+      onClick: () => window.open(customerPortalQrLoginUrl, "_blank", "noopener,noreferrer"),
+      icon: <OpenInNewIcon />,
+    });
+  }
 
   if (canManageAccounts) {
     actions.push(

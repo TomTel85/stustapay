@@ -28,7 +28,7 @@ from stustapay.core.service.user import AuthService
 async def logout_user_from_terminal(conn: Connection, node_id: int, terminal_id: int):
     result = await conn.fetchval(
         "update terminal set active_user_id = null, active_user_role_id = null "
-        "where id = $1 and node_id = $2 returning id",
+        "where id = $1 and node_id = $2 and login_mode = 'personal' returning id",
         terminal_id,
         node_id,
     )
@@ -66,13 +66,21 @@ async def remove_terminal_from_till(conn: Connection, till_id: int):
     )
     if result is None:
         raise InvalidArgument("till does not exist")
+    if result["terminal_id"] is not None:
+        device = await conn.fetchrow(
+            "select t.login_mode, u.cash_register_id from terminal t "
+            "left join usr u on u.id = t.device_user_id where t.id = $1 for update of t",
+            result["terminal_id"],
+        )
+        if device["login_mode"] == "device" and device["cash_register_id"] is not None:
+            raise InvalidArgument("Close the device cashier shift before removing its till")
     await conn.fetchval(
         "update till set terminal_id = null where id = $1 returning id",
         till_id,
     )
     terminal_id = result["terminal_id"]
     terminal_node_id = result["terminal_node_id"]
-    if terminal_id is not None and terminal_node_id is not None:
+    if terminal_id is not None and terminal_node_id is not None and device["login_mode"] == "personal":
         await logout_user_from_terminal(conn=conn, node_id=terminal_node_id, terminal_id=terminal_id)
 
 
@@ -224,6 +232,11 @@ class TillService(Service[Config]):
     @requires_node(object_types=[ObjectType.till])
     @requires_user([Privilege.node_administration])
     async def delete_till(self, *, conn: Connection, node: Node, till_id: int) -> bool:
+        till = await fetch_till(conn=conn, node=node, till_id=till_id)
+        if till is not None and till.terminal_id is not None:
+            terminal = await _fetch_terminal_for_assignment(conn=conn, node=node, terminal_id=till.terminal_id)
+            if terminal is not None and terminal.device_user_id is not None:
+                await remove_terminal_from_till(conn=conn, till_id=till_id)
         result = await conn.execute("delete from till where id = $1 and node_id = $2", till_id, node.id)
         return result != "DELETE 0"
 

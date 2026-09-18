@@ -16,6 +16,10 @@ jest.mock("@/api", () => ({
     entryAreas: [],
   }),
   selectEntryAreaAll: () => [],
+  useListUserRolesQuery: () => ({ data: undefined }),
+  useListCashRegistersAdminQuery: () => ({ data: undefined }),
+  selectUserRoleAll: () => [],
+  selectCashRegisterAll: () => [],
 }));
 
 jest.mock("@stustapay/components", () => ({
@@ -96,12 +100,16 @@ describe("TerminalForm", () => {
     entry_area_id: number | null;
     self_service: boolean;
     app_display_mode: "day" | "night" | null;
+    login_mode?: "personal" | "device";
+    device_role_id?: number | null;
+    device_cash_register_id?: number | null;
   }) =>
     render(
       <Formik initialValues={initialValues} onSubmit={jest.fn()}>
         {(formik) => (
           <Form>
             <TerminalForm {...formik} />
+            <output data-testid="form-values">{JSON.stringify(formik.values)}</output>
           </Form>
         )}
       </Formik>
@@ -154,4 +162,20 @@ describe("TerminalForm", () => {
 
     expect(screen.getByLabelText("terminal.appDisplayMode.label")).toBeTruthy();
   });
+  test("switching back to personal login clears device configuration", async () => {
+    renderForm({ name: "Device", description: null, mode: "till", entry_area_id: null,
+      self_service: false, app_display_mode: null, login_mode: "device",
+      device_role_id: 17, device_cash_register_id: 23 });
+    expect(screen.getByText("terminal.deviceOperationHint")).toBeTruthy();
+    fireEvent.mouseDown(screen.getByLabelText("terminal.loginMode.label"));
+    fireEvent.click(screen.getByRole("option", { name: "terminal.loginMode.personal" }));
+    await waitFor(() => {
+      const values = JSON.parse(screen.getByTestId("form-values").textContent ?? "{}");
+      expect(values.login_mode).toBe("personal");
+      expect(values.device_role_id).toBeNull();
+      expect(values.device_cash_register_id).toBeNull();
+    });
+    expect(screen.queryByText("terminal.deviceOperationHint")).toBeNull();
+  });
+
 });

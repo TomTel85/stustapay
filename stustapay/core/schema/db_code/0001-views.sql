@@ -194,6 +194,7 @@ create or replace view cashier as
         u.user_tag_uid,
         u.transport_account_id,
         u.cash_register_id,
+        u.is_device_identity,
         cr.balance                                           as cash_drawer_balance,
         coalesce(terminals.terminal_ids, '{}'::bigint array) as terminal_ids
     from

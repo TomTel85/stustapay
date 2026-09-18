@@ -135,6 +135,10 @@ export const api = generatedApi.enhanceEndpoints({
     "entry-groups",
   ],
   endpoints: {
+    createTerminal: { invalidatesTags: ["terminals", "cashiers", "user-to-roles"] },
+    updateTerminal: { invalidatesTags: ["terminals", "cashiers", "tills", "till-registers", "user-to-roles"] },
+    deleteTerminal: { invalidatesTags: ["terminals", "cashiers", "tills", "user-to-roles"] },
+    closeOutCashier: { invalidatesTags: ["cashiers", "terminals", "tills", "till-registers"] },
     listUsers: {
       providesTags: (result) => generateCacheKeys("users", result),
     },

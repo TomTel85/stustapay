@@ -16,6 +16,7 @@
 package de.stustapay.api.models
 
 import de.stustapay.api.models.AppDisplayMode
+import de.stustapay.api.models.TerminalLoginMode
 import de.stustapay.api.models.TerminalMode
 
 import kotlinx.serialization.Serializable
@@ -31,11 +32,15 @@ import kotlinx.serialization.Contextual
  * @param tillId 
  * @param sessionUuid 
  * @param registrationUuid 
+ * @param loginMode
+ * @param deviceRoleId
+ * @param deviceCashRegisterId
  * @param description 
  * @param mode 
  * @param entryAreaId 
  * @param selfService 
  * @param appDisplayMode 
+ * @param deviceUserId
  * @param activeUserId 
  * @param activeUserRoleId 
  */
@@ -61,6 +66,15 @@ data class Terminal (
     @Contextual @SerialName(value = "registration_uuid")
     val registrationUuid: java.util.UUID?,
 
+    @Contextual @SerialName(value = "login_mode")
+    val loginMode: TerminalLoginMode? = null,
+
+    @SerialName(value = "device_role_id")
+    val deviceRoleId: @Contextual com.ionspin.kotlin.bignum.integer.BigInteger? = null,
+
+    @SerialName(value = "device_cash_register_id")
+    val deviceCashRegisterId: @Contextual com.ionspin.kotlin.bignum.integer.BigInteger? = null,
+
     @SerialName(value = "description")
     val description: kotlin.String? = null,
 
@@ -76,6 +90,9 @@ data class Terminal (
     @Contextual @SerialName(value = "app_display_mode")
     val appDisplayMode: AppDisplayMode? = null,
 
+    @SerialName(value = "device_user_id")
+    val deviceUserId: @Contextual com.ionspin.kotlin.bignum.integer.BigInteger? = null,
+
     @SerialName(value = "active_user_id")
     val activeUserId: @Contextual com.ionspin.kotlin.bignum.integer.BigInteger? = null,
 
@@ -86,4 +103,3 @@ data class Terminal (
 
 
 }
-

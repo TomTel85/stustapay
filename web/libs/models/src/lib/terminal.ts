@@ -1,6 +1,9 @@
 import { z } from "zod";
 
 export const NewTerminalSchema = z.object({
+  login_mode: z.enum(["personal", "device"]).optional().default("personal"),
+  device_role_id: z.number().int().optional().nullable(),
+  device_cash_register_id: z.number().int().optional().nullable(),
   name: z.string(),
   description: z.string().optional().nullable(),
   mode: z.enum(["till", "entry", "exit"]).default("till"),

@@ -14108,6 +14108,11 @@
       },
       "Cashier": {
         "properties": {
+          "is_device_identity": {
+            "type": "boolean",
+            "title": "Is Device Identity",
+            "default": false
+          },
           "node_id": {
             "type": "integer",
             "title": "Node Id"
@@ -15124,6 +15129,11 @@
               }
             ],
             "title": "Cash Register Id"
+          },
+          "is_device_identity": {
+            "type": "boolean",
+            "title": "Is Device Identity",
+            "default": false
           }
         },
         "type": "object",
@@ -17385,6 +17395,32 @@
       },
       "NewTerminal": {
         "properties": {
+          "login_mode": {
+            "$ref": "#/components/schemas/TerminalLoginMode",
+            "default": "personal"
+          },
+          "device_role_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Role Id"
+          },
+          "device_cash_register_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Cash Register Id"
+          },
           "name": {
             "type": "string",
             "title": "Name"
@@ -21291,6 +21327,32 @@
       },
       "Terminal": {
         "properties": {
+          "login_mode": {
+            "$ref": "#/components/schemas/TerminalLoginMode",
+            "default": "personal"
+          },
+          "device_role_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Role Id"
+          },
+          "device_cash_register_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Cash Register Id"
+          },
           "name": {
             "type": "string",
             "title": "Name"
@@ -21335,6 +21397,17 @@
                 "type": "null"
               }
             ]
+          },
+          "device_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device User Id"
           },
           "id": {
             "type": "integer",
@@ -21412,6 +21485,14 @@
           "registration_uuid"
         ],
         "title": "Terminal"
+      },
+      "TerminalLoginMode": {
+        "type": "string",
+        "enum": [
+          "personal",
+          "device"
+        ],
+        "title": "TerminalLoginMode"
       },
       "TerminalMode": {
         "type": "string",
