@@ -9,6 +9,7 @@ import {
   useRevokePayoutRunMutation,
   useListUsersQuery,
   selectUserById,
+  useLazyPayoutRunPdfQuery,
 } from "@/api";
 import { CustomerRoutes, PayoutRunRoutes, UserRoutes, UserTagRoutes } from "@/app/routes";
 import { DetailField, DetailLayout, DetailNumberField, DetailView } from "@/components";
@@ -38,6 +39,7 @@ export const PayoutRunDetail: React.FC = () => {
   const [previousSepa] = usePreviousPayoutRunSepaXmlMutation();
   const [setAsDone] = useSetPayoutRunAsDoneMutation();
   const [revoke] = useRevokePayoutRunMutation();
+  const [getPayoutRunPdf, { isFetching: isPayoutRunPdfLoading }] = useLazyPayoutRunPdfQuery();
   const { payoutRun, error } = useListPayoutRunsQuery(
     { nodeId: currentNode.id },
     {
@@ -89,6 +91,28 @@ export const PayoutRunDetail: React.FC = () => {
       link.remove();
     } catch {
       toast.error("Error downloading csv");
+    }
+  };
+
+  const downloadPdf = async () => {
+    try {
+      const blob = await getPayoutRunPdf({
+        nodeId: currentNode.id,
+        payoutRunId: Number(payoutRunId),
+      }).unwrap();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      try {
+        link.href = url;
+        link.download = `auszahlungslauf_${payoutRunId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+      } finally {
+        link.remove();
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 100);
+      }
+    } catch {
+      toast.error(t("payoutRun.downloadPdfError"));
     }
   };
 
@@ -195,6 +219,13 @@ export const PayoutRunDetail: React.FC = () => {
       onClick: downloadCsv,
       color: "success",
       icon: <FileDownloadIcon />,
+    },
+    {
+      label: t("payoutRun.downloadPdf"),
+      onClick: downloadPdf,
+      color: "success",
+      icon: <FileDownloadIcon />,
+      disabled: !payoutRun.done || payoutRun.revoked || isPayoutRunPdfLoading,
     },
     {
       label: t("payoutRun.downloadSepa"),

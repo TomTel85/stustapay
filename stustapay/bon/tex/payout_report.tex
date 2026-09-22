@@ -1,0 +1,115 @@
+\documentclass[a4paper]{article}
+\usepackage[PUTF,T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage[table]{xcolor}
+\usepackage{libertine}
+\usepackage{ngerman}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{tabularx}
+\usepackage{geometry}
+\usepackage[xetex,colorlinks=false,bookmarks=true,pdfauthor={TeamFestlichPay},pdftitle={Auszahlungslaufbericht}]{hyperref}
+
+\renewcommand{\familydefault}{\sfdefault}
+\setlength{\parindent}{0pt}
+\setlength{\LTpre}{0pt}
+\setlength{\LTpost}{0pt}
+\renewcommand{\arraystretch}{1.18}
+\geometry{a4paper,left=18mm,right=18mm,top=22mm,bottom=22mm,headheight=16pt,headsep=10pt,footskip=15mm}
+\makeatletter
+\def\qr@writebinarymatrixtoauxfile#1{}%
+\makeatother
+\DeclareFontFamily{PUTF}{pdf}{}%
+\DeclareFontShape{PUTF}{pdf}{m}{n}{ <-> ecrm1000 }{}%
+\DeclareFontSubstitution{PUTF}{pdf}{m}{n}%
+\definecolor{textcolor}{rgb}{0.1,0.12,0.16}
+\definecolor{textmuted}{rgb}{0.43,0.47,0.52}
+\definecolor{linecolor}{rgb}{0.81,0.84,0.88}
+\definecolor{panelbg}{rgb}{0.96,0.97,0.98}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{textmuted}{TeamFestlichPay Auszahlungslaufbericht}}
+\fancyhead[R]{\small\textcolor{textmuted}{\VAR[event_name|latex]}}
+\fancyfoot[C]{\textcolor{textmuted}{Seite \thepage/\pageref*{LastPage}}}
+\renewcommand{\headrulewidth}{0.4pt}
+\newcommand{\EmptyHint}[1]{\textcolor{textmuted}{#1}\par}
+
+\begin{document}
+\color{textcolor}
+{\Huge\textbf{\BLOCK[if is_complete_history]Gesamtbericht Auszahlungsläufe\BLOCK[else]Auszahlungslaufbericht\BLOCK[endif]}}\par
+\vspace{0.35em}
+{\large\textcolor{textmuted}{\VAR[event_name|latex]}}\par
+\vspace{0.8em}
+Erzeugt am: \VAR[generated_at|datetime]\par
+\vspace{1em}
+
+\BLOCK[if not runs]
+\EmptyHint{Es sind keine abgeschlossenen Auszahlungsläufe vorhanden.}
+\BLOCK[endif]
+
+\BLOCK[for run in runs]
+\BLOCK[if not loop.first]\newpage\BLOCK[endif]
+{\LARGE\textbf{Auszahlungslauf \VAR[run.id]}}\par
+\vspace{0.55em}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{4.2cm}X@{}}
+Erstellt am & \VAR[run.created_at|datetime] \\
+Abgeschlossen am & \VAR[run.set_done_at|datetime] \\
+\end{tabularx}
+\vspace{0.8em}
+
+{\Large\textbf{Bankauszahlungen}}\par\vspace{0.4em}
+\BLOCK[if run.payouts]
+\begin{longtable}{>{\raggedright\arraybackslash}p{10.5cm}>{\raggedleft\arraybackslash}p{4.5cm}}
+\rowcolor{panelbg}\textbf{Interne Referenz} & \textbf{Betrag} \\
+\endfirsthead
+\rowcolor{panelbg}\textbf{Interne Referenz} & \textbf{Betrag} \\
+\endhead
+\BLOCK[for position in run.payouts]
+AZ-\VAR[position.reference] & \VAR[position.amount|money] \\
+\BLOCK[endfor]
+\hline
+\textbf{Summe (\VAR[run.payouts|length] Positionen)} & \textbf{\VAR[run.total_payout_amount|money]} \\
+\end{longtable}
+\BLOCK[else]
+\EmptyHint{Keine Bankauszahlungen in diesem Lauf.}
+\BLOCK[endif]
+\vspace{0.7em}
+
+{\Large\textbf{Onlinespenden aus Restguthaben}}\par\vspace{0.4em}
+\BLOCK[if run.donations]
+\begin{longtable}{>{\raggedright\arraybackslash}p{10.5cm}>{\raggedleft\arraybackslash}p{4.5cm}}
+\rowcolor{panelbg}\textbf{Interne Referenz} & \textbf{Betrag} \\
+\endfirsthead
+\rowcolor{panelbg}\textbf{Interne Referenz} & \textbf{Betrag} \\
+\endhead
+\BLOCK[for position in run.donations]
+AZ-\VAR[position.reference] & \VAR[position.amount|money] \\
+\BLOCK[endfor]
+\hline
+\textbf{Summe (\VAR[run.donations|length] Positionen)} & \textbf{\VAR[run.total_donation_amount|money]} \\
+\end{longtable}
+\BLOCK[else]
+\EmptyHint{Keine Onlinespenden in diesem Lauf.}
+\BLOCK[endif]
+\vspace{0.7em}
+\fcolorbox{linecolor}{panelbg}{\parbox{\dimexpr\textwidth-2\fboxsep-2\fboxrule\relax}{
+\textbf{Gesamter Abgang vom Guthabenkonto: \hfill \VAR[run.total_amount|money]}
+}}
+\BLOCK[endfor]
+
+\BLOCK[if is_complete_history]
+\BLOCK[if runs]\newpage\BLOCK[endif]
+{\LARGE\textbf{Gesamtsummen}}\par\vspace{0.7em}
+\begin{tabularx}{\linewidth}{@{}>{\bfseries}X>{\raggedleft\arraybackslash}p{4.5cm}@{}}
+Abgeschlossene Auszahlungsläufe & \VAR[n_runs] \\
+Bankauszahlungspositionen & \VAR[n_payouts] \\
+Onlinespendenpositionen & \VAR[n_donations] \\
+Bankauszahlungen gesamt & \VAR[total_payout_amount|money] \\
+Onlinespenden gesamt & \VAR[total_donation_amount|money] \\
+\hline
+Gesamter Abgang vom Guthabenkonto & \textbf{\VAR[total_amount|money]} \\
+\end{tabularx}
+\BLOCK[endif]
+\end{document}

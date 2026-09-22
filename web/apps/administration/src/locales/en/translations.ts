@@ -994,6 +994,10 @@ export const translations = {
     maxNumPayoutsMustBeSmallerThanEventDefault:
       "Max number of payouts must be smaller than the default configured for an event: {{maxNumPayoutsAtEvent}}",
     downloadCsv: "CSV",
+    downloadPdf: "PDF receipt",
+    downloadPdfError: "The PDF receipt could not be downloaded",
+    downloadCompletePdf: "Complete PDF report",
+    downloadCompletePdfError: "The complete PDF report could not be downloaded",
     createNewSepaXmlInfo: "This will regenerate the sepa xml of this payout run with the given execution date set.",
     downloadPreviousSepa: "Previous SEPA XML",
     downloadSepa: "SEPA XML",

@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from pydantic import BaseModel
 
 from stustapay.core.http.auth_user import CurrentAuthToken
@@ -38,6 +38,42 @@ async def create_payout_run(
 @router.get("/pending-payout-detail", response_model=PendingPayoutDetail)
 async def pending_payout_detail(token: CurrentAuthToken, customer_service: ContextCustomerService, node_id: int):
     return await customer_service.payout.get_pending_payout_detail(token=token, node_id=node_id)
+
+
+@router.get(
+    "/pdf",
+    response_class=Response,
+    responses={
+        "200": {
+            "description": "Complete payout report",
+            "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}},
+        }
+    },
+)
+async def complete_payout_report_pdf(token: CurrentAuthToken, customer_service: ContextCustomerService, node_id: int):
+    mime_type, content = await customer_service.payout.get_complete_payout_report_pdf(token=token, node_id=node_id)
+    headers = {"Content-Disposition": 'attachment; filename="auszahlungslaufe_gesamt.pdf"'}
+    return Response(content, headers=headers, media_type=mime_type)
+
+
+@router.get(
+    "/{payout_run_id}/pdf",
+    response_class=Response,
+    responses={
+        "200": {
+            "description": "Payout run report",
+            "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}},
+        }
+    },
+)
+async def payout_run_pdf(
+    token: CurrentAuthToken, payout_run_id: int, customer_service: ContextCustomerService, node_id: int
+):
+    mime_type, content = await customer_service.payout.get_payout_run_pdf(
+        token=token, payout_run_id=payout_run_id, node_id=node_id
+    )
+    headers = {"Content-Disposition": f'attachment; filename="auszahlungslauf_{payout_run_id}.pdf"'}
+    return Response(content, headers=headers, media_type=mime_type)
 
 
 @router.get("/{payout_run_id}/payouts", response_model=list[Payout])

@@ -4,6 +4,7 @@ import {
   selectUserById,
   useListPayoutRunsQuery,
   useListUsersQuery,
+  useLazyCompletePayoutReportPdfQuery,
 } from "@/api";
 import { PayoutRunRoutes, UserRoutes } from "@/app/routes";
 import { ListLayout } from "@/components";
@@ -12,11 +13,12 @@ import { Link } from "@mui/material";
 import { DataGrid, GridColDef } from "@stustapay/framework";
 import { Loading } from "@stustapay/components";
 import * as React from "react";
-import { Check as CheckIcon, Delete as DeleteIcon } from "@mui/icons-material";
+import { Check as CheckIcon, Delete as DeleteIcon, FileDownload as FileDownloadIcon } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
 import { PendingPayoutDetail } from "./PendingPayoutDetail";
 import { getUserName } from "@stustapay/models";
+import { toast } from "react-toastify";
 
 export const PayoutRunList: React.FC = () => {
   const { t } = useTranslation();
@@ -32,6 +34,26 @@ export const PayoutRunList: React.FC = () => {
     }
   );
   const { data: users } = useListUsersQuery({ nodeId: currentNode.id });
+  const [getCompletePayoutReport, { isFetching: isCompleteReportLoading }] = useLazyCompletePayoutReportPdfQuery();
+
+  const downloadCompleteReport = async () => {
+    try {
+      const blob = await getCompletePayoutReport({ nodeId: currentNode.id }).unwrap();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      try {
+        link.href = url;
+        link.download = "auszahlungslaufe_gesamt.pdf";
+        document.body.appendChild(link);
+        link.click();
+      } finally {
+        link.remove();
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 100);
+      }
+    } catch {
+      toast.error(t("payoutRun.downloadCompletePdfError"));
+    }
+  };
 
   if (isPayoutRunsLoading) {
     return <Loading />;
@@ -111,7 +133,19 @@ export const PayoutRunList: React.FC = () => {
   ];
 
   return (
-    <ListLayout title={t("payoutRun.payoutRuns")} routes={PayoutRunRoutes}>
+    <ListLayout
+      title={t("payoutRun.payoutRuns")}
+      routes={PayoutRunRoutes}
+      additionalActions={[
+        {
+          label: t("payoutRun.downloadCompletePdf"),
+          onClick: downloadCompleteReport,
+          color: "success",
+          icon: <FileDownloadIcon />,
+          disabled: isCompleteReportLoading,
+        },
+      ]}
+    >
       <PendingPayoutDetail />
       <DataGrid
         autoHeight

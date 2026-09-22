@@ -11,6 +11,7 @@ import pytest
 from sftkit.database import Connection
 from sftkit.error import AccessDenied, InvalidArgument, NotFound
 
+from stustapay.bon.payout_report import build_payout_report_context
 from stustapay.core.schema.config import SEPAConfig
 from stustapay.core.schema.customer import Customer
 from stustapay.core.schema.payout import NewPayoutRun, PayoutRunWithStats
@@ -99,6 +100,49 @@ async def customers(
 
 def filter_zero_payout(customers: list[CustomerTestInfo]) -> list[CustomerTestInfo]:
     return [c for c in customers if round(c.balance - c.donation, 2) > 0 or c.donation_all]
+
+
+async def test_payout_report_contains_only_completed_runs(
+    db_connection: Connection,
+    customers: list[CustomerTestInfo],
+    event_node: Node,
+    event_admin_token: str,
+    customer_service: CustomerService,
+    mail_service: MailService,
+):
+    completed_run = await customer_service.payout.create_payout_run(
+        token=event_admin_token,
+        node_id=event_node.id,
+        new_payout_run=NewPayoutRun(max_num_payouts=15, max_payout_sum=15000),
+    )
+    await customer_service.payout.set_payout_run_as_done(
+        token=event_admin_token,
+        node_id=event_node.id,
+        payout_run_id=completed_run.id,
+        mail_service=mail_service,
+    )
+
+    # Make another payout eligible and leave its run open.
+    customer = customers[0]
+    await db_connection.execute("update account set balance = 10 where id = $1", customer.id)
+    await db_connection.execute(
+        "update customer_info set has_entered_info = true, payout_export = true, donation = 2 where customer_account_id = $1",
+        customer.id,
+    )
+    open_run = await customer_service.payout.create_payout_run(
+        token=event_admin_token,
+        node_id=event_node.id,
+        new_payout_run=NewPayoutRun(max_num_payouts=5, max_payout_sum=15000),
+    )
+
+    context = await build_payout_report_context(conn=db_connection, node=event_node)
+    assert [run.id for run in context.runs] == [completed_run.id]
+    assert context.n_payouts == sum(round(customer.balance - customer.donation, 2) > 0 for customer in customers)
+    assert context.n_donations == sum(round(customer.donation, 2) > 0 for customer in customers)
+    assert context.total_amount == context.total_payout_amount + context.total_donation_amount
+
+    with pytest.raises(InvalidArgument, match="only available for completed"):
+        await build_payout_report_context(conn=db_connection, node=event_node, payout_run_id=open_run.id)
 
 
 def _xml_text_at_node(tree: ET.Element | ET.ElementTree, path: str) -> str:

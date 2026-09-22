@@ -32,6 +32,8 @@ import {
   FindCustomerTagSwapCandidatesApiArg,
   SwapCustomerTagApiArg,
   Transaction,
+  CompletePayoutReportPdfApiArg,
+  PayoutRunPdfApiArg,
 } from "./generated/api";
 import { Account, Cashier } from "@stustapay/models";
 import { convertEntityAdaptorSelectors, generateCacheKeys } from "./utils";
@@ -234,6 +236,22 @@ export const api = generatedApi.enhanceEndpoints({
     listPayoutRuns: {
       providesTags: (result) => generateCacheKeys("payouts", result),
     },
+    completePayoutReportPdf: {
+      query: (queryArg: CompletePayoutReportPdfApiArg) => ({
+        url: "/payouts/pdf",
+        params: { node_id: queryArg.nodeId },
+        responseHandler: async (resp: Response) => resp.blob(),
+      }),
+      providesTags: [],
+    },
+    payoutRunPdf: {
+      query: (queryArg: PayoutRunPdfApiArg) => ({
+        url: `/payouts/${queryArg.payoutRunId}/pdf`,
+        params: { node_id: queryArg.nodeId },
+        responseHandler: async (resp: Response) => resp.blob(),
+      }),
+      providesTags: [],
+    },
     generateTestReport: {
       query: (queryArg: GenerateTestReportApiArg) => ({
         url: `/tree/events/${queryArg.nodeId}/generate-test-report`,
@@ -286,7 +304,7 @@ export const api = generatedApi.enhanceEndpoints({
       }),
       invalidatesTags: (result, error, { userTagId }) => [
         { type: "user_tags", id: "LIST" },
-        { type: "user_tags", id: userTagId }
+        { type: "user_tags", id: userTagId },
       ],
     },
     updateUserTagAccountCreationBlocked: {
@@ -308,7 +326,7 @@ export const api = generatedApi.enhanceEndpoints({
     getUserTagDetail: {
       providesTags: (result, error, arg) => [
         { type: "user_tags", id: "LIST" },
-        { type: "user_tags", id: arg.userTagId }
+        { type: "user_tags", id: arg.userTagId },
       ],
     },
     findCustomerTagSwapCandidates: {

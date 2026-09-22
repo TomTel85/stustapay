@@ -11,6 +11,7 @@ from sftkit.database import Connection
 from sftkit.error import InvalidArgument, NotFound
 from sftkit.service import Service, with_db_transaction
 
+from stustapay.bon.payout_report import generate_payout_report
 from stustapay.core.config import Config
 from stustapay.core.schema.account import AccountType
 from stustapay.core.schema.config import SEPAConfig
@@ -184,6 +185,24 @@ class PayoutService(Service[Config]):
             "from customers_without_payout_run c where c.node_id = $1",
             node.id,
         )
+
+    @with_db_transaction(read_only=True)
+    @requires_node(event_only=True)
+    @requires_user(PAYOUT_RUN_PRIVILEGES)
+    async def get_payout_run_pdf(self, *, conn: Connection, node: Node, payout_run_id: int) -> tuple[str, bytes]:
+        report = await generate_payout_report(conn=conn, node=node, payout_run_id=payout_run_id)
+        if not report.success or report.bon is None:
+            raise InvalidArgument(f"Error while generating payout report: {report.msg}")
+        return report.bon.mime_type, report.bon.content
+
+    @with_db_transaction(read_only=True)
+    @requires_node(event_only=True)
+    @requires_user(PAYOUT_RUN_PRIVILEGES)
+    async def get_complete_payout_report_pdf(self, *, conn: Connection, node: Node) -> tuple[str, bytes]:
+        report = await generate_payout_report(conn=conn, node=node)
+        if not report.success or report.bon is None:
+            raise InvalidArgument(f"Error while generating payout report: {report.msg}")
+        return report.bon.mime_type, report.bon.content
 
     @with_db_transaction(read_only=True)
     @requires_node(event_only=True)

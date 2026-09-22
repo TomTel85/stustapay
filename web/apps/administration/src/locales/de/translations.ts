@@ -969,6 +969,10 @@ export const translations: NestedPartialAsStrings<Translations> = {
     maxNumPayoutsMustBeSmallerThanEventDefault:
       "Die maximale Anzahl von Auszahlungen muss kleiner sein als die Standardkonfiguration für ein Ereignis: {{maxNumPayoutsAtEvent}}",
     downloadCsv: "CSV",
+    downloadPdf: "PDF-Beleg",
+    downloadPdfError: "Der PDF-Beleg konnte nicht heruntergeladen werden",
+    downloadCompletePdf: "Gesamtbericht als PDF",
+    downloadCompletePdfError: "Der PDF-Gesamtbericht konnte nicht heruntergeladen werden",
     createNewSepaXmlInfo:
       "Dies wird die SEPA-XML dieser Auszahlung mit dem angegebenen Ausführungsdatum neu generieren.",
     downloadPreviousSepa: "Vorherige SEPA-XML",

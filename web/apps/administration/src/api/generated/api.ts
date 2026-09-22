@@ -1256,6 +1256,24 @@ const injectedRtkApi = api
         }),
         providesTags: ["payouts"],
       }),
+      completePayoutReportPdf: build.query<CompletePayoutReportPdfApiResponse, CompletePayoutReportPdfApiArg>({
+        query: (queryArg) => ({
+          url: `/payouts/pdf`,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        providesTags: ["payouts"],
+      }),
+      payoutRunPdf: build.query<PayoutRunPdfApiResponse, PayoutRunPdfApiArg>({
+        query: (queryArg) => ({
+          url: `/payouts/${queryArg.payoutRunId}/pdf`,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        providesTags: ["payouts"],
+      }),
       payoutRunPayouts: build.query<PayoutRunPayoutsApiResponse, PayoutRunPayoutsApiArg>({
         query: (queryArg) => ({
           url: `/payouts/${queryArg.payoutRunId}/payouts`,
@@ -2733,6 +2751,15 @@ export type CreatePayoutRunApiArg = {
 };
 export type PendingPayoutDetailApiResponse = /** status 200 Successful Response */ PendingPayoutDetail;
 export type PendingPayoutDetailApiArg = {
+  nodeId: number;
+};
+export type CompletePayoutReportPdfApiResponse = /** status 200 Complete payout report */ Blob;
+export type CompletePayoutReportPdfApiArg = {
+  nodeId: number;
+};
+export type PayoutRunPdfApiResponse = /** status 200 Payout run report */ Blob;
+export type PayoutRunPdfApiArg = {
+  payoutRunId: number;
   nodeId: number;
 };
 export type PayoutRunPayoutsApiResponse = /** status 200 Successful Response */ PayoutRead[];
@@ -5222,6 +5249,10 @@ export const {
   useCreatePayoutRunMutation,
   usePendingPayoutDetailQuery,
   useLazyPendingPayoutDetailQuery,
+  useCompletePayoutReportPdfQuery,
+  useLazyCompletePayoutReportPdfQuery,
+  usePayoutRunPdfQuery,
+  useLazyPayoutRunPdfQuery,
   usePayoutRunPayoutsQuery,
   useLazyPayoutRunPayoutsQuery,
   usePayoutRunCsvExportMutation,
