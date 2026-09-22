@@ -17,6 +17,8 @@ ZERO = Decimal("0")
 class PayoutReportPosition(BaseModel):
     reference: int
     amount: Decimal
+    account_name: str | None = None
+    iban: str | None = None
 
 
 class PayoutReportRun(BaseModel):
@@ -76,7 +78,7 @@ async def build_payout_report_context(
     positions_by_run: dict[int, list[asyncpg.Record]] = {run_id: [] for run_id in run_ids}
     if run_ids:
         position_rows = await conn.fetch(
-            "select id, payout_run_id, amount, donation from payout "
+            "select id, payout_run_id, amount, donation, account_name, iban from payout "
             "where payout_run_id = any($1::bigint[]) order by payout_run_id, id",
             run_ids,
         )
@@ -86,7 +88,12 @@ async def build_payout_report_context(
     runs: list[PayoutReportRun] = []
     for row in run_rows:
         payouts = [
-            PayoutReportPosition(reference=position["id"], amount=round(position["amount"], 2))
+            PayoutReportPosition(
+                reference=position["id"],
+                amount=round(position["amount"], 2),
+                account_name=position["account_name"],
+                iban=position["iban"],
+            )
             for position in positions_by_run[row["id"]]
             if round(position["amount"], 2) > 0
         ]

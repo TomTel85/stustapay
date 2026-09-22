@@ -140,6 +140,20 @@ async def test_payout_report_contains_only_completed_runs(
     assert context.n_payouts == sum(round(customer.balance - customer.donation, 2) > 0 for customer in customers)
     assert context.n_donations == sum(round(customer.donation, 2) > 0 for customer in customers)
     assert context.total_amount == context.total_payout_amount + context.total_donation_amount
+    assert all(position.account_name and position.iban for position in context.runs[0].payouts)
+    payout_rows = await db_connection.fetch(
+        "select id, account_name, iban from payout where payout_run_id = $1 and round(amount, 2) > 0",
+        completed_run.id,
+    )
+    payout_details = {row["id"]: (row["account_name"], row["iban"]) for row in payout_rows}
+    assert {
+        position.reference: (position.account_name, position.iban) for position in context.runs[0].payouts
+    } == payout_details
+    assert all(position.account_name is None and position.iban is None for position in context.runs[0].donations)
+    single_run_context = await build_payout_report_context(
+        conn=db_connection, node=event_node, payout_run_id=completed_run.id
+    )
+    assert single_run_context.runs[0].payouts == context.runs[0].payouts
 
     with pytest.raises(InvalidArgument, match="only available for completed"):
         await build_payout_report_context(conn=db_connection, node=event_node, payout_run_id=open_run.id)

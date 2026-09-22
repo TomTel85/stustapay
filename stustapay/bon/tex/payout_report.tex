@@ -3,6 +3,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage{array}
 \usepackage{longtable}
+\usepackage{seqsplit}
 \usepackage[table]{xcolor}
 \usepackage{libertine}
 \usepackage{ngerman}
@@ -61,17 +62,20 @@ Abgeschlossen am & \VAR[run.set_done_at|datetime] \\
 
 {\Large\textbf{Bankauszahlungen}}\par\vspace{0.4em}
 \BLOCK[if run.payouts]
-\begin{longtable}{>{\raggedright\arraybackslash}p{10.5cm}>{\raggedleft\arraybackslash}p{4.5cm}}
-\rowcolor{panelbg}\textbf{Interne Referenz} & \textbf{Betrag} \\
+\begingroup
+\setlength{\tabcolsep}{3pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{1.7cm}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{6.4cm}>{\raggedleft\arraybackslash}p{2.8cm}@{}}
+\rowcolor{panelbg}\textbf{Referenz} & \textbf{Zahlungsempfänger} & \textbf{IBAN} & \textbf{Betrag} \\
 \endfirsthead
-\rowcolor{panelbg}\textbf{Interne Referenz} & \textbf{Betrag} \\
+\rowcolor{panelbg}\textbf{Referenz} & \textbf{Zahlungsempfänger} & \textbf{IBAN} & \textbf{Betrag} \\
 \endhead
 \BLOCK[for position in run.payouts]
-AZ-\VAR[position.reference] & \VAR[position.amount|money] \\
+AZ-\VAR[position.reference] & \VAR[(position.account_name or "Nicht hinterlegt")|latex] & \texttt{\footnotesize\seqsplit{\VAR[(position.iban or "Nicht hinterlegt")|latex]}} & \VAR[position.amount|money] \\
 \BLOCK[endfor]
 \hline
-\textbf{Summe (\VAR[run.payouts|length] Positionen)} & \textbf{\VAR[run.total_payout_amount|money]} \\
+\multicolumn{3}{@{}l}{\textbf{Summe (\VAR[run.payouts|length] Positionen)}} & \textbf{\VAR[run.total_payout_amount|money]} \\
 \end{longtable}
+\endgroup
 \BLOCK[else]
 \EmptyHint{Keine Bankauszahlungen in diesem Lauf.}
 \BLOCK[endif]
