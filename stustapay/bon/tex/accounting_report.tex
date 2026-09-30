@@ -180,6 +180,27 @@ Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_cred
 \end{longtable}
 
 \vspace{0.7em}
+\textbf{Pfand nach Artikel}\par\vspace{0.3em}
+\BLOCK[if monthly_rows|selectattr('deposit_products')|list]
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{4.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}@{}}
+\rowcolor{panelbg}\textbf{Monat} & \textbf{Pfandartikel} & \textbf{Eingenommen} & \textbf{Zurückgezahlt} & \textbf{Netto} \\
+\endfirsthead
+\rowcolor{panelbg}\textbf{Monat} & \textbf{Pfandartikel} & \textbf{Eingenommen} & \textbf{Zurückgezahlt} & \textbf{Netto} \\
+\endhead
+\BLOCK[for row in monthly_rows]
+\BLOCK[for product in row.deposit_products]
+\VAR[row.month|latex] & \VAR[product.product_name|latex] (ID \VAR[product.product_id]) & \VAR[product.received|money] & \VAR[product.refunded|money] & \VAR[product.net|money] \\
+\BLOCK[endfor]
+\BLOCK[if row.deposit_products]
+\rowcolor{panelstrong} & \textbf{Monat gesamt} & \textbf{\VAR[row.deposit_received|money]} & \textbf{\VAR[row.deposit_refunded|money]} & \textbf{\VAR[(row.deposit_received - row.deposit_refunded)|money]} \\
+\BLOCK[endif]
+\BLOCK[endfor]
+\end{longtable}
+\BLOCK[else]
+\EmptyHint{Keine Pfandbuchungen in den angezeigten Monaten.}
+\BLOCK[endif]
+
+\vspace{0.7em}
 \textbf{Spenden nach Buchungsart}\par\vspace{0.3em}
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.1cm}>{\raggedright\arraybackslash}p{3.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}@{}}
 \rowcolor{panelbg}\textbf{Monat} & \textbf{Art} & \textbf{Zugänge} & \textbf{Rückbuchungen} & \textbf{Netto} \\

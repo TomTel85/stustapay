@@ -9,6 +9,7 @@ from sftkit.error import InvalidArgument
 
 from stustapay.bon.accounting_report import (
     AccountingReportQuery,
+    MonthlyDepositProductRow,
     _build_monthly_rows,
     _report_day,
     _resolve_bounds,
@@ -17,8 +18,10 @@ from stustapay.bon.accounting_report import (
 )
 from stustapay.bon.pdflatex import PdfRenderResult
 from stustapay.bon.report_time import ReportDayMode, is_in_ranges, selected_date_ranges
+from stustapay.core.schema.order import OrderType, PaymentMethod
 from stustapay.core.schema.tree import Node, PublicEventSettings
 from stustapay.core.schema.user import User
+from stustapay.core.service.order.booking import NewLineItem, book_order
 
 
 def _make_event_node() -> Node:
@@ -177,6 +180,14 @@ async def test_build_accounting_report_context_aggregates_accounting_sections(mo
     assert any("not exists" in query and "cancels_order" in query for query in conn.queries)
     assert any("p.type = 'user_defined'" not in query for query in conn.queries if "p.is_donation" in query)
 
+    context.monthly_rows[0].deposit_products = [
+        MonthlyDepositProductRow(
+            product_id=1234, product_name="Aufladekarte", received=Decimal("25"), refunded=Decimal("5")
+        )
+    ]
+    context.monthly_rows[0].deposit_received = Decimal("25")
+    context.monthly_rows[0].deposit_refunded = Decimal("5")
+
     captured: dict[str, str] = {}
 
     async def fake_pdflatex(*, file_content: str):
@@ -195,6 +206,8 @@ async def test_build_accounting_report_context_aggregates_accounting_sections(mo
     assert "Kalendertag (00:00 bis 24:00 Uhr)" in captured["tex"]
     assert "anhand ihres Buchungszeitpunkts" in captured["tex"]
     assert "Monatliche Pfand-" in captured["tex"]
+    assert "Pfand nach Artikel" in captured["tex"]
+    assert "Aufladekarte (ID 1234)" in captured["tex"]
 
 
 async def test_monthly_accounting_separates_reversals_and_keeps_historical_credit():
@@ -206,30 +219,48 @@ async def test_monthly_accounting_separates_reversals_and_keeps_historical_credi
                 return [
                     {
                         "booking_day": date(2025, 7, 31),
+                        "product_id": 101,
+                        "product_name": "Aufladekarte",
                         "is_returnable": True,
                         "is_donation": False,
                         "amount": Decimal("10"),
                     },
                     {
                         "booking_day": date(2025, 8, 1),
+                        "product_id": 101,
+                        "product_name": "Aufladekarte",
                         "is_returnable": True,
                         "is_donation": False,
                         "amount": Decimal("-4"),
                     },
                     {
+                        "booking_day": date(2025, 8, 1),
+                        "product_id": 102,
+                        "product_name": "Pfand",
+                        "is_returnable": True,
+                        "is_donation": False,
+                        "amount": Decimal("6"),
+                    },
+                    {
                         "booking_day": date(2025, 8, 2),
+                        "product_id": 103,
+                        "product_name": "Spende",
                         "is_returnable": False,
                         "is_donation": True,
                         "amount": Decimal("5"),
                     },
                     {
                         "booking_day": date(2025, 9, 1),
+                        "product_id": 101,
+                        "product_name": "Aufladekarte",
                         "is_returnable": True,
                         "is_donation": False,
                         "amount": Decimal("-10"),
                     },
                     {
                         "booking_day": date(2025, 9, 1),
+                        "product_id": 103,
+                        "product_name": "Spende",
                         "is_returnable": False,
                         "is_donation": True,
                         "amount": Decimal("-2"),
@@ -260,6 +291,20 @@ async def test_monthly_accounting_separates_reversals_and_keeps_historical_credi
     assert [row.remaining_credit for row in rows] == [Decimal("20"), Decimal("17"), Decimal("7")]
     assert rows[0].deposit_received == Decimal("10")
     assert rows[1].deposit_refunded == Decimal("4")
+    assert rows[1].deposit_received == Decimal("6")
+    assert [(product.product_name, product.received, product.refunded) for product in rows[1].deposit_products] == [
+        ("Aufladekarte", Decimal("0"), Decimal("4")),
+        ("Pfand", Decimal("6"), Decimal("0")),
+    ]
+    assert [product.product_id for product in rows[1].deposit_products] == [101, 102]
+    assert all(
+        sum((product.received for product in row.deposit_products), Decimal("0")) == row.deposit_received
+        for row in rows
+    )
+    assert all(
+        sum((product.refunded for product in row.deposit_products), Decimal("0")) == row.deposit_refunded
+        for row in rows
+    )
     assert rows[2].deposit_refunded == Decimal("10")
     assert rows[1].donations_net == Decimal("8")
     assert rows[2].donations_net == Decimal("-3")
@@ -317,6 +362,73 @@ async def test_monthly_accounting_uses_event_ledger_in_database(
     assert rows[1].remaining_credit == await db_connection.fetchval(
         "select balance from account where id = $1", private_account
     )
+
+
+async def test_monthly_deposit_products_use_booking_month_in_database(
+    db_connection: Connection, event_node: Node, global_admin_user: tuple[User, str]
+):
+    tax_rate_id = await db_connection.fetchval(
+        "select id from tax_rate where node_id = $1 and name = 'none'", event_node.id
+    )
+    till_id = await db_connection.fetchval("select id from till where node_id = $1 and is_virtual", event_node.id)
+    card_product_id = await db_connection.fetchval(
+        "insert into product (type, name, price, fixed_price, is_returnable, tax_rate_id, node_id) "
+        "values ('user_defined', 'Aufladekarte', 5, true, true, $1, $2) returning id",
+        tax_rate_id,
+        event_node.id,
+    )
+    other_product_id = await db_connection.fetchval(
+        "insert into product (type, name, price, fixed_price, is_returnable, tax_rate_id, node_id) "
+        "values ('user_defined', 'Pfand', 2, true, true, $1, $2) returning id",
+        tax_rate_id,
+        event_node.id,
+    )
+    original = await book_order(
+        conn=db_connection,
+        order_type=OrderType.sale,
+        payment_method=PaymentMethod.tag,
+        cashier_id=global_admin_user[0].id,
+        till_id=till_id,
+        line_items=[NewLineItem(quantity=2, product_id=card_product_id, product_price=5, tax_rate_id=tax_rate_id)],
+        bookings={},
+        booked_at=datetime(2025, 7, 31, 21, tzinfo=timezone.utc),
+    )
+    await book_order(
+        conn=db_connection,
+        order_type=OrderType.cancel_sale,
+        payment_method=PaymentMethod.tag,
+        cashier_id=global_admin_user[0].id,
+        till_id=till_id,
+        line_items=[NewLineItem(quantity=-2, product_id=card_product_id, product_price=5, tax_rate_id=tax_rate_id)],
+        bookings={},
+        cancels_order=original.id,
+        booked_at=datetime(2025, 7, 31, 22, 30, tzinfo=timezone.utc),
+    )
+    await book_order(
+        conn=db_connection,
+        order_type=OrderType.sale,
+        payment_method=PaymentMethod.tag,
+        cashier_id=global_admin_user[0].id,
+        till_id=till_id,
+        line_items=[NewLineItem(quantity=3, product_id=other_product_id, product_price=2, tax_rate_id=tax_rate_id)],
+        bookings={},
+        booked_at=datetime(2025, 8, 1, 12, tzinfo=timezone.utc),
+    )
+
+    rows = await _build_monthly_rows(
+        conn=db_connection,
+        event_node_id=event_node.id,
+        selected_dates=["2025-07-31", "2025-08-01"],
+        generated_at=datetime(2025, 9, 1, tzinfo=timezone.utc),
+    )
+    assert [(row.month, row.deposit_received, row.deposit_refunded) for row in rows] == [
+        ("07.2025", Decimal("10"), Decimal("0")),
+        ("08.2025", Decimal("6"), Decimal("10")),
+    ]
+    assert [(product.product_name, product.received, product.refunded) for product in rows[1].deposit_products] == [
+        ("Aufladekarte", Decimal("0"), Decimal("10")),
+        ("Pfand", Decimal("6"), Decimal("0")),
+    ]
 
 
 def test_report_day_uses_event_boundary_in_berlin_timezone():

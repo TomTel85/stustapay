@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import date, datetime, time
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sftkit.database import Connection
 from sftkit.error import InvalidArgument
 
@@ -62,11 +62,23 @@ class DailyOnlineTopUpRow(BaseModel):
     amount: Decimal = ZERO
 
 
+class MonthlyDepositProductRow(BaseModel):
+    product_id: int
+    product_name: str
+    received: Decimal = ZERO
+    refunded: Decimal = ZERO
+
+    @property
+    def net(self) -> Decimal:
+        return self.received - self.refunded
+
+
 class MonthlyAccountingRow(BaseModel):
     month: str
     provisional: bool
     deposit_received: Decimal = ZERO
     deposit_refunded: Decimal = ZERO
+    deposit_products: list[MonthlyDepositProductRow] = Field(default_factory=list)
     donation_products_received: Decimal = ZERO
     donation_products_refunded: Decimal = ZERO
     remaining_credit_donations_received: Decimal = ZERO
@@ -196,12 +208,13 @@ async def _build_monthly_rows(
     # retroactively removing the original sale from a closed month.
     product_movements = await conn.fetch(
         "select date_trunc('month', o.booked_at at time zone 'Europe/Berlin')::date as booking_day, "
-        "p.is_returnable, p.is_donation, sum(li.total_price) as amount "
+        "p.id as product_id, p.name as product_name, p.is_returnable, p.is_donation, "
+        "sum(li.total_price) as amount "
         "from ordr o join till t on t.id = o.till_id join node n on n.id = t.node_id "
         "join line_item li on li.order_id = o.id join product p on p.id = li.product_id "
         "where n.event_node_id = $1 and o.order_type in ('sale', 'cancel_sale') "
         "and (p.is_returnable or p.is_donation) and o.booked_at <= $2 "
-        "group by booking_day, p.is_returnable, p.is_donation, (li.total_price >= 0)",
+        "group by booking_day, p.id, p.name, p.is_returnable, p.is_donation, (li.total_price >= 0)",
         event_node_id,
         generated_at,
     )
@@ -245,21 +258,34 @@ async def _build_monthly_rows(
         for month in sorted(months)
         if month <= _month_start(generated_at.date())
     }
+    deposit_products: dict[tuple[date, int], MonthlyDepositProductRow] = {}
     for movement in product_movements:
-        row = rows.get(_month_start(movement["booking_day"]))
+        month = _month_start(movement["booking_day"])
+        row = rows.get(month)
         if row is None:
             continue
         amount = movement["amount"]
         if movement["is_returnable"]:
+            product_key = (month, movement["product_id"])
+            product_row = deposit_products.setdefault(
+                product_key,
+                MonthlyDepositProductRow(product_id=movement["product_id"], product_name=movement["product_name"]),
+            )
             if amount >= 0:
                 row.deposit_received += amount
+                product_row.received += amount
             else:
                 row.deposit_refunded -= amount
+                product_row.refunded -= amount
         if movement["is_donation"]:
             if amount >= 0:
                 row.donation_products_received += amount
             else:
                 row.donation_products_refunded -= amount
+    for (month, _product_id), product_row in deposit_products.items():
+        rows[month].deposit_products.append(product_row)
+    for row in rows.values():
+        row.deposit_products.sort(key=lambda product: (product.product_name.casefold(), product.product_id))
     for movement in donation_movements:
         row = rows.get(_month_start(movement["booking_day"]))
         if row is not None:
