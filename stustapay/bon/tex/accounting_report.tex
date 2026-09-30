@@ -162,4 +162,42 @@ Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_cred
 \EmptyHint{Keine Produkte im ausgewählten Zeitraum verkauft. Gesamt: \VAR[total_revenue|money]}
 \BLOCK[endif]
 
+\clearpage
+\SectionTitle{6. Monatliche Pfand-, Spenden- und Guthabenübersicht}
+\textcolor{textmuted}{Diese Übersicht umfasst die gesamte Veranstaltung. Ausgewählte Berichtstage bestimmen nur die angezeigten Kalendermonate; die Werte umfassen jeweils den vollständigen Monat. Für den laufenden Monat gilt der Stand zum Erstellungszeitpunkt.}\par
+\textcolor{textmuted}{Stornos erscheinen hier im Monat ihrer Rückbuchung; die übrigen Verkaufsübersichten blenden stornierte Verkäufe vollständig aus.}\par
+\vspace{0.7em}
+\BLOCK[if monthly_rows]
+\textbf{Pfand und verbleibendes Kartenguthaben}\par\vspace{0.3em}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.4cm}>{\raggedleft\arraybackslash}p{4.3cm}>{\raggedleft\arraybackslash}p{4.3cm}>{\raggedleft\arraybackslash}p{4.6cm}@{}}
+\rowcolor{panelbg}\textbf{Monat} & \textbf{Pfand eingenommen} & \textbf{Pfand zurückgezahlt} & \textbf{Guthaben Monatsende} \\
+\endfirsthead
+\rowcolor{panelbg}\textbf{Monat} & \textbf{Pfand eingenommen} & \textbf{Pfand zurückgezahlt} & \textbf{Guthaben Monatsende} \\
+\endhead
+\BLOCK[for row in monthly_rows]
+\VAR[row.month|latex]\BLOCK[if row.provisional] *\BLOCK[endif] & \VAR[row.deposit_received|money] & \VAR[row.deposit_refunded|money] & \VAR[row.remaining_credit|money] \\
+\BLOCK[endfor]
+\end{longtable}
+
+\vspace{0.7em}
+\textbf{Spenden nach Buchungsart}\par\vspace{0.3em}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.1cm}>{\raggedright\arraybackslash}p{3.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}@{}}
+\rowcolor{panelbg}\textbf{Monat} & \textbf{Art} & \textbf{Zugänge} & \textbf{Rückbuchungen} & \textbf{Netto} \\
+\endfirsthead
+\rowcolor{panelbg}\textbf{Monat} & \textbf{Art} & \textbf{Zugänge} & \textbf{Rückbuchungen} & \textbf{Netto} \\
+\endhead
+\BLOCK[for row in monthly_rows]
+\VAR[row.month|latex]\BLOCK[if row.provisional] *\BLOCK[endif] & Spendenprodukte & \VAR[row.donation_products_received|money] & \VAR[row.donation_products_refunded|money] & \VAR[(row.donation_products_received - row.donation_products_refunded)|money] \\
+ & Restguthaben-Spenden & \VAR[row.remaining_credit_donations_received|money] & \VAR[row.remaining_credit_donations_refunded|money] & \VAR[(row.remaining_credit_donations_received - row.remaining_credit_donations_refunded)|money] \\
+\rowcolor{panelstrong} & \textbf{Gesamt} & \textbf{\VAR[row.donations_received|money]} & \textbf{\VAR[row.donations_refunded|money]} & \textbf{\VAR[row.donations_net|money]} \\
+\BLOCK[endfor]
+\end{longtable}
+\BLOCK[if monthly_rows[-1].provisional]
+\textcolor{textmuted}{* Vorläufiger Stand des laufenden Monats zum Erstellungszeitpunkt.}\par
+\BLOCK[endif]
+\textcolor{textmuted}{Pfand umfasst alle als rückgabefähig gekennzeichneten Produkte.}\par
+\BLOCK[else]
+\EmptyHint{Keine Buchungen in den ausgewählten Kalendermonaten.}
+\BLOCK[endif]
+
 \end{document}

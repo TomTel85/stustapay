@@ -1,13 +1,15 @@
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import cast
 
 import pytest
+from sftkit.database import Connection
 from sftkit.error import InvalidArgument
 
 from stustapay.bon.accounting_report import (
     AccountingReportQuery,
+    _build_monthly_rows,
     _report_day,
     _resolve_bounds,
     build_accounting_report_context,
@@ -16,6 +18,7 @@ from stustapay.bon.accounting_report import (
 from stustapay.bon.pdflatex import PdfRenderResult
 from stustapay.bon.report_time import ReportDayMode, is_in_ranges, selected_date_ranges
 from stustapay.core.schema.tree import Node, PublicEventSettings
+from stustapay.core.schema.user import User
 
 
 def _make_event_node() -> Node:
@@ -44,6 +47,12 @@ class FakeConnection:
 
     async def fetch(self, query: str, *_args):
         self.queries.append(query)
+        if "p.is_returnable" in query:
+            return []
+        if "as booking_day" in query and "donation_exit" in query:
+            return []
+        if "as account_id" in query:
+            return []
         if "p.is_donation" in query:
             return [
                 {
@@ -160,6 +169,7 @@ async def test_build_accounting_report_context_aggregates_accounting_sections(mo
     assert context.total_product_donations == Decimal("10.00")
     assert context.total_remaining_credit_donations == Decimal("9.50")
     assert context.total_donations == Decimal("19.50")
+    assert context.monthly_rows[0].month == "08.2025"
     assert context.daily_cash_rows[0].day == "01.08.2025"
     assert [row.product_name for row in context.donation_product_rows] == ["Spende"]
     assert {row.payment_method for row in context.revenue_rows} == {"Bargeld", "Guthaben/Chip", "SumUp Terminal"}
@@ -184,6 +194,129 @@ async def test_build_accounting_report_context_aggregates_accounting_sections(mo
     assert "2025-08-01" in captured["tex"]
     assert "Kalendertag (00:00 bis 24:00 Uhr)" in captured["tex"]
     assert "anhand ihres Buchungszeitpunkts" in captured["tex"]
+    assert "Monatliche Pfand-" in captured["tex"]
+
+
+async def test_monthly_accounting_separates_reversals_and_keeps_historical_credit():
+    class MonthlyConnection:
+        async def fetch(self, query: str, *_args):
+            if "p.is_returnable" in query:
+                assert "'cancel_sale'" in query
+                assert "(li.total_price >= 0)" in query
+                return [
+                    {
+                        "booking_day": date(2025, 7, 31),
+                        "is_returnable": True,
+                        "is_donation": False,
+                        "amount": Decimal("10"),
+                    },
+                    {
+                        "booking_day": date(2025, 8, 1),
+                        "is_returnable": True,
+                        "is_donation": False,
+                        "amount": Decimal("-4"),
+                    },
+                    {
+                        "booking_day": date(2025, 8, 2),
+                        "is_returnable": False,
+                        "is_donation": True,
+                        "amount": Decimal("5"),
+                    },
+                    {
+                        "booking_day": date(2025, 9, 1),
+                        "is_returnable": True,
+                        "is_donation": False,
+                        "amount": Decimal("-10"),
+                    },
+                    {
+                        "booking_day": date(2025, 9, 1),
+                        "is_returnable": False,
+                        "is_donation": True,
+                        "amount": Decimal("-2"),
+                    },
+                ]
+            if "donation_exit" in query:
+                return [
+                    {"booking_day": date(2025, 8, 31), "amount": Decimal("3")},
+                    {"booking_day": date(2025, 9, 1), "amount": Decimal("-1")},
+                ]
+            if "as account_id" in query:
+                return [
+                    {"account_id": 1, "booking_day": date(2025, 7, 31), "amount": Decimal("20")},
+                    {"account_id": 2, "booking_day": date(2025, 8, 1), "amount": Decimal("5")},
+                    {"account_id": 1, "booking_day": date(2025, 8, 31), "amount": Decimal("-8")},
+                    {"account_id": 2, "booking_day": date(2025, 9, 1), "amount": Decimal("-5")},
+                    {"account_id": 1, "booking_day": date(2025, 9, 1), "amount": Decimal("-5")},
+                ]
+            raise AssertionError(query)
+
+    rows = await _build_monthly_rows(
+        conn=cast(Connection, MonthlyConnection()),
+        event_node_id=1,
+        selected_dates=None,
+        generated_at=datetime(2025, 9, 15, tzinfo=timezone.utc),
+    )
+    assert [row.month for row in rows] == ["07.2025", "08.2025", "09.2025"]
+    assert [row.remaining_credit for row in rows] == [Decimal("20"), Decimal("17"), Decimal("7")]
+    assert rows[0].deposit_received == Decimal("10")
+    assert rows[1].deposit_refunded == Decimal("4")
+    assert rows[2].deposit_refunded == Decimal("10")
+    assert rows[1].donations_net == Decimal("8")
+    assert rows[2].donations_net == Decimal("-3")
+    assert rows[2].provisional is True
+
+    selected = await _build_monthly_rows(
+        conn=cast(Connection, MonthlyConnection()),
+        event_node_id=1,
+        selected_dates=["2025-08-01"],
+        generated_at=datetime(2025, 9, 15, tzinfo=timezone.utc),
+    )
+    assert len(selected) == 1
+    assert selected[0].month == "08.2025"
+    assert selected[0].remaining_credit == Decimal("17")
+    assert selected[0].donation_products_received == Decimal("5")
+
+
+async def test_monthly_accounting_uses_event_ledger_in_database(
+    db_connection: Connection, event_node: Node, global_admin_user: tuple[User, str]
+):
+    conducting_user = global_admin_user[0]
+    private_account = await db_connection.fetchval(
+        "insert into account (node_id, type) values ($1, 'private') returning id", event_node.id
+    )
+    topup_source = await db_connection.fetchval(
+        "select id from account where node_id = $1 and type = 'cash_topup_source'", event_node.id
+    )
+    donation_exit = await db_connection.fetchval(
+        "select id from account where node_id = $1 and type = 'donation_exit'", event_node.id
+    )
+    await db_connection.fetchval(
+        "select book_transaction(null, null, $1, $2, 20, 0, $3, $4)",
+        topup_source,
+        private_account,
+        datetime(2025, 7, 31, 21, tzinfo=timezone.utc),
+        conducting_user.id,
+    )
+    await db_connection.fetchval(
+        "select book_transaction(null, null, $1, $2, 5, 0, $3, $4)",
+        private_account,
+        donation_exit,
+        datetime(2025, 7, 31, 22, 30, tzinfo=timezone.utc),
+        conducting_user.id,
+    )
+
+    rows = await _build_monthly_rows(
+        conn=db_connection,
+        event_node_id=event_node.id,
+        selected_dates=["2025-07-01", "2025-08-31"],
+        generated_at=datetime(2025, 9, 1, tzinfo=timezone.utc),
+    )
+    assert [row.month for row in rows] == ["07.2025", "08.2025"]
+    assert [row.remaining_credit for row in rows] == [Decimal("20"), Decimal("15")]
+    assert rows[1].remaining_credit_donations_received == Decimal("5")
+    assert rows[1].remaining_credit == await db_connection.fetchval(
+        "select balance from account where id = $1", private_account
+    )
 
 
 def test_report_day_uses_event_boundary_in_berlin_timezone():

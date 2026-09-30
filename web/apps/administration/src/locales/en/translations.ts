@@ -101,7 +101,7 @@ export const translations = {
     revenueError: "Could not generate revenue report",
     accountingTitle: "Financial report",
     accountingDescription:
-      "Accounting overview with revenue, cash movements, online top-ups, donations, and products for the selected scope.",
+      "Accounting overview with revenue, cash movements, online top-ups, donations, and products for the selected scope. The additional monthly summary shows deposits, donations, and remaining credit for the entire event. Selected days only choose the full calendar months shown there; the current month is provisional.",
     downloadAccounting: "Download financial report",
     accountingError: "Could not generate financial report",
   },

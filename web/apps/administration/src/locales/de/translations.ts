@@ -107,7 +107,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
     revenueError: "Umsatzbericht konnte nicht erstellt werden",
     accountingTitle: "Finanzbericht",
     accountingDescription:
-      "Buchhalterische Übersicht mit Umsätzen, Bargeldbewegungen, Online-Aufladungen, Spenden und Produkten für den ausgewählten Bereich.",
+      "Buchhalterische Übersicht mit Umsätzen, Bargeldbewegungen, Online-Aufladungen, Spenden und Produkten für den ausgewählten Bereich. Die zusätzliche Monatsübersicht zeigt Pfand, Spenden und Restguthaben für die gesamte Veranstaltung. Ausgewählte Tage bestimmen dort nur die angezeigten vollen Kalendermonate; der laufende Monat ist vorläufig.",
     downloadAccounting: "Finanzbericht herunterladen",
     accountingError: "Finanzbericht konnte nicht erstellt werden",
   },

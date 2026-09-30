@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, time
+from datetime import date, datetime, time
 from decimal import Decimal
 
 from pydantic import BaseModel
@@ -62,6 +62,30 @@ class DailyOnlineTopUpRow(BaseModel):
     amount: Decimal = ZERO
 
 
+class MonthlyAccountingRow(BaseModel):
+    month: str
+    provisional: bool
+    deposit_received: Decimal = ZERO
+    deposit_refunded: Decimal = ZERO
+    donation_products_received: Decimal = ZERO
+    donation_products_refunded: Decimal = ZERO
+    remaining_credit_donations_received: Decimal = ZERO
+    remaining_credit_donations_refunded: Decimal = ZERO
+    remaining_credit: Decimal = ZERO
+
+    @property
+    def donations_received(self) -> Decimal:
+        return self.donation_products_received + self.remaining_credit_donations_received
+
+    @property
+    def donations_refunded(self) -> Decimal:
+        return self.donation_products_refunded + self.remaining_credit_donations_refunded
+
+    @property
+    def donations_net(self) -> Decimal:
+        return self.donations_received - self.donations_refunded
+
+
 class AccountingReportContext(BaseModel):
     event_name: str
     scope_name: str
@@ -89,6 +113,7 @@ class AccountingReportContext(BaseModel):
     total_remaining_credit_donations: Decimal
     total_donations: Decimal
     includes_remaining_credit_donations: bool
+    monthly_rows: list[MonthlyAccountingRow]
 
 
 def _resolve_bounds(query: AccountingReportQuery, event: PublicEventSettings) -> tuple[datetime, datetime]:
@@ -147,6 +172,114 @@ async def _fetch_till_name(conn: Connection, scope_node: Node, till_id: int | No
     return till_name
 
 
+def _month_start(value: date) -> date:
+    return value.replace(day=1)
+
+
+def _next_month(value: date) -> date:
+    return date(value.year + (value.month == 12), value.month % 12 + 1, 1)
+
+
+def _selected_months(selected_dates: list[str] | None) -> set[date]:
+    months: set[date] = set()
+    for entry in selected_dates or []:
+        for part in entry.split(","):
+            if part.strip():
+                months.add(_month_start(date.fromisoformat(part.strip())))
+    return months
+
+
+async def _build_monthly_rows(
+    conn: Connection, event_node_id: int, selected_dates: list[str] | None, generated_at: datetime
+) -> list[MonthlyAccountingRow]:
+    # Product reversals are separate orders. Use their own booking date instead of
+    # retroactively removing the original sale from a closed month.
+    product_movements = await conn.fetch(
+        "select date_trunc('month', o.booked_at at time zone 'Europe/Berlin')::date as booking_day, "
+        "p.is_returnable, p.is_donation, sum(li.total_price) as amount "
+        "from ordr o join till t on t.id = o.till_id join node n on n.id = t.node_id "
+        "join line_item li on li.order_id = o.id join product p on p.id = li.product_id "
+        "where n.event_node_id = $1 and o.order_type in ('sale', 'cancel_sale') "
+        "and (p.is_returnable or p.is_donation) and o.booked_at <= $2 "
+        "group by booking_day, p.is_returnable, p.is_donation, (li.total_price >= 0)",
+        event_node_id,
+        generated_at,
+    )
+    donation_movements = await conn.fetch(
+        "select date_trunc('month', tr.booked_at at time zone 'Europe/Berlin')::date as booking_day, "
+        "sum(case when sa.type = 'private' then tr.amount else -tr.amount end) as amount "
+        "from transaction tr join account sa on sa.id = tr.source_account "
+        "join account ta on ta.id = tr.target_account "
+        "join node sn on sn.id = sa.node_id join node tn on tn.id = ta.node_id "
+        "where tr.booked_at <= $2 and ((sa.type = 'private' and ta.type = 'donation_exit' "
+        "and sn.event_node_id = $1 and tn.event_node_id = $1) "
+        "or (sa.type = 'donation_exit' and ta.type = 'private' "
+        "and sn.event_node_id = $1 and tn.event_node_id = $1)) "
+        "group by booking_day, sa.type",
+        event_node_id,
+        generated_at,
+    )
+    # Accounts start at zero, and book_transaction records every balance change.
+    # Include both sides so transfers between private accounts net to zero.
+    account_movements = await conn.fetch(
+        "select a.id as account_id, date_trunc('month', tr.booked_at at time zone 'Europe/Berlin')::date "
+        "as booking_day, sum(case when tr.target_account = a.id and tr.source_account = a.id then 0 "
+        "when tr.target_account = a.id then tr.amount else -tr.amount end) as amount "
+        "from account a join node n on n.id = a.node_id "
+        "join transaction tr on tr.source_account = a.id or tr.target_account = a.id "
+        "where a.type = 'private' and n.event_node_id = $1 and tr.booked_at <= $2 "
+        "group by a.id, booking_day order by booking_day, a.id",
+        event_node_id,
+        generated_at,
+    )
+
+    months = _selected_months(selected_dates)
+    if not selected_dates:
+        months.update(_month_start(row["booking_day"]) for row in product_movements)
+        months.update(_month_start(row["booking_day"]) for row in donation_movements)
+        months.update(_month_start(row["booking_day"]) for row in account_movements)
+    rows = {
+        month: MonthlyAccountingRow(
+            month=month.strftime("%m.%Y"), provisional=month == _month_start(generated_at.date())
+        )
+        for month in sorted(months)
+        if month <= _month_start(generated_at.date())
+    }
+    for movement in product_movements:
+        row = rows.get(_month_start(movement["booking_day"]))
+        if row is None:
+            continue
+        amount = movement["amount"]
+        if movement["is_returnable"]:
+            if amount >= 0:
+                row.deposit_received += amount
+            else:
+                row.deposit_refunded -= amount
+        if movement["is_donation"]:
+            if amount >= 0:
+                row.donation_products_received += amount
+            else:
+                row.donation_products_refunded -= amount
+    for movement in donation_movements:
+        row = rows.get(_month_start(movement["booking_day"]))
+        if row is not None:
+            amount = movement["amount"]
+            if amount >= 0:
+                row.remaining_credit_donations_received += amount
+            else:
+                row.remaining_credit_donations_refunded -= amount
+
+    account_balances: dict[int, Decimal] = defaultdict(lambda: ZERO)
+    movements = iter(account_movements)
+    movement = next(movements, None)
+    for month in sorted(rows):
+        while movement is not None and movement["booking_day"] < _next_month(month):
+            account_balances[movement["account_id"]] += movement["amount"]
+            movement = next(movements, None)
+        rows[month].remaining_credit = sum((balance for balance in account_balances.values() if balance > 0), ZERO)
+    return list(rows.values())
+
+
 async def build_accounting_report_context(
     conn: Connection, node: Node, query: AccountingReportQuery
 ) -> AccountingReportContext:
@@ -159,6 +292,10 @@ async def build_accounting_report_context(
     assert event_node is not None
     till_name = await _fetch_till_name(conn=conn, scope_node=scope_node, till_id=query.till_id)
     from_time, to_time = _resolve_bounds(query=query, event=event)
+    generated_at = datetime.now(tz=REPORT_TIMEZONE)
+    monthly_rows = await _build_monthly_rows(
+        conn=conn, event_node_id=node.event_node_id, selected_dates=query.selected_dates, generated_at=generated_at
+    )
     selected_ranges = selected_date_ranges(
         query.selected_dates,
         day_mode=query.day_mode,
@@ -304,7 +441,7 @@ async def build_accounting_report_context(
         event_name=event_node.name,
         scope_name=scope_node.name,
         till_name=till_name,
-        generated_at=datetime.now(tz=REPORT_TIMEZONE),
+        generated_at=generated_at,
         from_time=normalize_datetime(from_time).astimezone(REPORT_TIMEZONE),
         to_time=normalize_datetime(to_time).astimezone(REPORT_TIMEZONE),
         includes_all_event_bookings=(not query.selected_dates and query.from_time is None and query.to_time is None),
@@ -332,6 +469,7 @@ async def build_accounting_report_context(
         total_remaining_credit_donations=total_remaining_credit_donations,
         total_donations=total_product_donations + total_remaining_credit_donations,
         includes_remaining_credit_donations=includes_remaining_credit_donations,
+        monthly_rows=monthly_rows,
     )
 
 
