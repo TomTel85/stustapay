@@ -8,7 +8,9 @@ from sftkit.database import Connection
 from sftkit.error import InvalidArgument
 
 from stustapay.bon.accounting_report import (
+    AccountingReportContext,
     AccountingReportQuery,
+    MonthlyAccountingRow,
     MonthlyDepositProductRow,
     _build_monthly_rows,
     _report_day,
@@ -136,6 +138,47 @@ class FakeConnection:
     async def fetchval(self, query: str, *_args):
         self.queries.append(query)
         raise AssertionError(f"Unexpected query: {query}")
+
+
+def test_monthly_totals_sum_movements_by_product_and_keep_latest_credit():
+    rows = [
+        MonthlyAccountingRow(
+            month="07.2026",
+            provisional=False,
+            deposit_received=Decimal("25"),
+            deposit_products=[MonthlyDepositProductRow(product_id=1, product_name="Karte", received=Decimal("25"))],
+            donation_products_received=Decimal("10"),
+            remaining_credit_donations_received=Decimal("4"),
+            remaining_credit=Decimal("100"),
+        ),
+        MonthlyAccountingRow(
+            month="08.2026",
+            provisional=True,
+            deposit_received=Decimal("5"),
+            deposit_refunded=Decimal("15"),
+            deposit_products=[
+                MonthlyDepositProductRow(product_id=1, product_name="Karte", refunded=Decimal("15")),
+                MonthlyDepositProductRow(product_id=2, product_name="Karte", received=Decimal("5")),
+            ],
+            donation_products_refunded=Decimal("3"),
+            remaining_credit_donations_received=Decimal("6"),
+            remaining_credit_donations_refunded=Decimal("2"),
+            remaining_credit=Decimal("40"),
+        ),
+    ]
+    totals = AccountingReportContext.model_construct(monthly_rows=rows).monthly_totals
+    assert (totals.deposit_received, totals.deposit_refunded) == (Decimal("30"), Decimal("15"))
+    assert [(product.product_id, product.net) for product in totals.deposit_products] == [
+        (1, Decimal("10")),
+        (2, Decimal("5")),
+    ]
+    assert (totals.donations_received, totals.donations_refunded, totals.donations_net) == (
+        Decimal("20"),
+        Decimal("5"),
+        Decimal("15"),
+    )
+    assert totals.remaining_credit == Decimal("40")
+    assert totals.provisional is True
 
 
 async def test_build_accounting_report_context_aggregates_accounting_sections(monkeypatch):

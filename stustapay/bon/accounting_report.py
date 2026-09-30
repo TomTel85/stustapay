@@ -127,6 +127,34 @@ class AccountingReportContext(BaseModel):
     includes_remaining_credit_donations: bool
     monthly_rows: list[MonthlyAccountingRow]
 
+    @property
+    def monthly_totals(self) -> MonthlyAccountingRow:
+        totals = MonthlyAccountingRow(
+            month="Gesamt",
+            provisional=any(row.provisional for row in self.monthly_rows),
+            remaining_credit=self.monthly_rows[-1].remaining_credit if self.monthly_rows else ZERO,
+        )
+        products: dict[int, MonthlyDepositProductRow] = {}
+        for row in self.monthly_rows:
+            totals.deposit_received += row.deposit_received
+            totals.deposit_refunded += row.deposit_refunded
+            totals.donation_products_received += row.donation_products_received
+            totals.donation_products_refunded += row.donation_products_refunded
+            totals.remaining_credit_donations_received += row.remaining_credit_donations_received
+            totals.remaining_credit_donations_refunded += row.remaining_credit_donations_refunded
+            for product in row.deposit_products:
+                total = products.setdefault(
+                    product.product_id,
+                    MonthlyDepositProductRow(product_id=product.product_id, product_name=product.product_name),
+                )
+                total.product_name = product.product_name
+                total.received += product.received
+                total.refunded += product.refunded
+        totals.deposit_products = sorted(
+            products.values(), key=lambda product: (product.product_name, product.product_id)
+        )
+        return totals
+
 
 def _resolve_bounds(query: AccountingReportQuery, event: PublicEventSettings) -> tuple[datetime, datetime]:
     ranges = selected_date_ranges(
@@ -500,7 +528,9 @@ async def build_accounting_report_context(
 
 
 async def render_accounting_report(context: AccountingReportContext) -> PdfRenderResult:
-    rendered = await render_template("accounting_report.tex", context, context.currency_symbol)
+    rendered = await render_template(
+        "accounting_report.tex", {**dict(context), "monthly_totals": context.monthly_totals}, context.currency_symbol
+    )
     return await pdflatex(file_content=rendered)
 
 

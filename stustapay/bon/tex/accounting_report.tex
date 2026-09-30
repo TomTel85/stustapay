@@ -15,6 +15,9 @@
 \setlength{\parindent}{0pt}
 \setlength{\LTpre}{0pt}
 \setlength{\LTpost}{0pt}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\setlength{\tabcolsep}{4pt}
 \renewcommand{\arraystretch}{1.18}
 \geometry{a4paper,left=15mm,right=15mm,top=22mm,bottom=22mm,headheight=16pt,headsep=10pt,footskip=15mm}
 
@@ -70,7 +73,7 @@ Erzeugt am & \VAR[generated_at|datetime] \\
 \textcolor{textmuted}{Enthalten sind nicht stornierte Produktverkäufe.}\par
 \vspace{0.5em}
 \BLOCK[if revenue_rows]
-\begin{longtable}{>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{4.6cm}>{\raggedright\arraybackslash}p{3.1cm}>{\raggedleft\arraybackslash}p{3.0cm}}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.7cm}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{3.5cm}>{\raggedleft\arraybackslash}p{3.9cm}@{}}
 \rowcolor{panelbg}\textbf{Knoten} & \textbf{Kasse} & \textbf{Zahlungsart} & \textbf{Betrag} \\
 \endfirsthead
 \rowcolor{panelbg}\textbf{Knoten} & \textbf{Kasse} & \textbf{Zahlungsart} & \textbf{Betrag} \\
@@ -87,7 +90,7 @@ Erzeugt am & \VAR[generated_at|datetime] \\
 \vspace{0.9em}
 \SectionTitle{2. Tagesübersicht Bargeld}
 \BLOCK[if daily_cash_rows]
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}@{}}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{3.5cm}>{\raggedleft\arraybackslash}p{3.5cm}>{\raggedleft\arraybackslash}p{3.5cm}>{\raggedleft\arraybackslash}p{3.5cm}@{}}
 \rowcolor{panelbg}\textbf{Tag} & \textbf{Aufladungen} & \textbf{Barverkäufe} & \textbf{Auszahlungen} & \textbf{Endbetrag} \\
 \endfirsthead
 \rowcolor{panelbg}\textbf{Tag} & \textbf{Aufladungen} & \textbf{Barverkäufe} & \textbf{Auszahlungen} & \textbf{Endbetrag} \\
@@ -104,7 +107,7 @@ Erzeugt am & \VAR[generated_at|datetime] \\
 \clearpage
 \SectionTitle{3. Online-Aufladungen}
 \BLOCK[if daily_online_topup_rows]
-\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X>{\raggedleft\arraybackslash}p{4cm}}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}X>{\raggedleft\arraybackslash}p{4cm}@{}}
 \rowcolor{panelbg}\textbf{Tag} & \textbf{SumUp online} \\
 \BLOCK[for row in daily_online_topup_rows]
 \VAR[row.day|latex] & \VAR[row.amount|money] \\
@@ -117,13 +120,13 @@ Erzeugt am & \VAR[generated_at|datetime] \\
 
 \vspace{1.2em}
 \SectionTitle{4. Spendenübersicht}
-\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X>{\raggedleft\arraybackslash}p{4cm}}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}X>{\raggedleft\arraybackslash}p{4cm}@{}}
 \rowcolor{panelbg}\textbf{Kategorie} & \textbf{Betrag} \\
 Verkaufte Spendenprodukte im Berichtszeitraum & \VAR[total_product_donations|money] \\
 Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_credit_donations]\VAR[total_remaining_credit_donations|money]\BLOCK[else]Nicht im berechtigten Bereich verfügbar\BLOCK[endif] \\
 \rowcolor{panelstrong}\textbf{Spenden gesamt} & \textbf{\VAR[total_donations|money]} \\
 \end{tabularx}
-\vspace{0.45em}
+\par\vspace{0.6em}
 \BLOCK[if includes_remaining_credit_donations]
 \textcolor{textmuted}{Restguthaben-Spenden werden anhand ihres Buchungszeitpunkts dem ausgewählten Berichtszeitraum zugeordnet.}\par
 \BLOCK[else]
@@ -132,13 +135,17 @@ Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_cred
 
 \vspace{0.9em}
 \BLOCK[if donation_product_rows]
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.4cm}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{3.7cm}>{\raggedleft\arraybackslash}p{1.3cm}>{\raggedleft\arraybackslash}p{2.4cm}@{}}
-\rowcolor{panelbg}\textbf{Knoten} & \textbf{Kasse} & \textbf{Spendenprodukt} & \textbf{Menge} & \textbf{Betrag} \\
+\textbf{Spendenprodukte nach Kasse}\par\vspace{0.3em}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{12.0cm}>{\raggedleft\arraybackslash}p{2.0cm}>{\raggedleft\arraybackslash}p{3.0cm}@{}}
+\rowcolor{panelbg}\textbf{Spendenprodukt} & \textbf{Menge} & \textbf{Betrag} \\
 \endfirsthead
-\rowcolor{panelbg}\textbf{Knoten} & \textbf{Kasse} & \textbf{Spendenprodukt} & \textbf{Menge} & \textbf{Betrag} \\
+\rowcolor{panelbg}\textbf{Spendenprodukt} & \textbf{Menge} & \textbf{Betrag} \\
 \endhead
 \BLOCK[for row in donation_product_rows]
-\VAR[row.node_name|latex] & \VAR[row.till_name|latex] & \VAR[row.product_name|latex] & \VAR[row.quantity] & \VAR[row.amount|money] \\
+\BLOCK[if loop.first or row.node_name != loop.previtem.node_name or row.till_name != loop.previtem.till_name]
+\rowcolor{panelstrong}\multicolumn{3}{@{}p{17.56cm}@{}}{\textbf{\VAR[row.node_name|latex] · \VAR[row.till_name|latex]}} \\*
+\BLOCK[endif]
+\VAR[row.product_name|latex] & \VAR[row.quantity] & \VAR[row.amount|money] \\
 \BLOCK[endfor]
 \end{longtable}
 \BLOCK[else]
@@ -148,16 +155,26 @@ Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_cred
 \clearpage
 \SectionTitle{5. Produktübersicht zur Abstimmung}
 \BLOCK[if product_rows]
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{3.5cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedleft\arraybackslash}p{1.2cm}>{\raggedleft\arraybackslash}p{2.2cm}@{}}
-\rowcolor{panelbg}\textbf{Knoten} & \textbf{Kasse} & \textbf{Produkt} & \textbf{Zahlungsart} & \textbf{Menge} & \textbf{Betrag} \\
+\textcolor{textmuted}{Produkte sind nach Knoten und Kasse gruppiert.}\par\vspace{0.5em}
+\BLOCK[for node_name, node_rows in product_rows|groupby('node_name')]
+\BLOCK[for till_name, till_rows in node_rows|groupby('till_name')]
+\vspace{0.35em}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{9.0cm}>{\raggedright\arraybackslash}p{4.0cm}>{\raggedleft\arraybackslash}p{1.4cm}>{\raggedleft\arraybackslash}p{2.6cm}@{}}
+\rowcolor{panelstrong}\multicolumn{4}{@{}p{17.84cm}@{}}{\textbf{\VAR[node_name|latex] · \VAR[till_name|latex]}} \\
+\rowcolor{panelbg}\textbf{Produkt} & \textbf{Zahlungsart} & \textbf{Menge} & \textbf{Betrag} \\
 \endfirsthead
-\rowcolor{panelbg}\textbf{Knoten} & \textbf{Kasse} & \textbf{Produkt} & \textbf{Zahlungsart} & \textbf{Menge} & \textbf{Betrag} \\
+\rowcolor{panelstrong}\multicolumn{4}{@{}p{17.84cm}@{}}{\textbf{\VAR[node_name|latex] · \VAR[till_name|latex] (Fortsetzung)}} \\
+\rowcolor{panelbg}\textbf{Produkt} & \textbf{Zahlungsart} & \textbf{Menge} & \textbf{Betrag} \\
 \endhead
-\BLOCK[for row in product_rows]
-\VAR[row.node_name|latex] & \VAR[row.till_name|latex] & \VAR[row.product_name|latex] & \VAR[row.payment_method|latex] & \VAR[row.quantity] & \VAR[row.amount|money] \\
+\BLOCK[for row in till_rows]
+\VAR[row.product_name|latex] & \VAR[row.payment_method|latex] & \VAR[row.quantity] & \VAR[row.amount|money] \\
 \BLOCK[endfor]
-\rowcolor{panelstrong}\multicolumn{5}{r}{\textbf{Gesamt}} & \textbf{\VAR[total_revenue|money]} \\
 \end{longtable}
+\BLOCK[endfor]
+\BLOCK[endfor]
+\begin{tabularx}{\textwidth}{@{}Xr@{}}
+\rowcolor{panelstrong}\textbf{Gesamt} & \textbf{\VAR[total_revenue|money]} \\
+\end{tabularx}
 \BLOCK[else]
 \EmptyHint{Keine Produkte im ausgewählten Zeitraum verkauft. Gesamt: \VAR[total_revenue|money]}
 \BLOCK[endif]
@@ -168,21 +185,24 @@ Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_cred
 \textcolor{textmuted}{Stornos erscheinen hier im Monat ihrer Rückbuchung; die übrigen Verkaufsübersichten blenden stornierte Verkäufe vollständig aus.}\par
 \vspace{0.7em}
 \BLOCK[if monthly_rows]
-\textbf{Pfand und verbleibendes Kartenguthaben}\par\vspace{0.3em}
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.4cm}>{\raggedleft\arraybackslash}p{4.3cm}>{\raggedleft\arraybackslash}p{4.3cm}>{\raggedleft\arraybackslash}p{4.6cm}@{}}
-\rowcolor{panelbg}\textbf{Monat} & \textbf{Pfand eingenommen} & \textbf{Pfand zurückgezahlt} & \textbf{Guthaben Monatsende} \\
+\BLOCK[set totals = monthly_totals]
+\textbf{Guthaben auf den ausgegebenen Karten zum Monatsende}\par\vspace{0.3em}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{11.0cm}>{\raggedleft\arraybackslash}p{6.7cm}@{}}
+\rowcolor{panelbg}\textbf{Monat} & \textbf{Kartenguthaben zum Monatsende} \\
 \endfirsthead
-\rowcolor{panelbg}\textbf{Monat} & \textbf{Pfand eingenommen} & \textbf{Pfand zurückgezahlt} & \textbf{Guthaben Monatsende} \\
+\rowcolor{panelbg}\textbf{Monat} & \textbf{Kartenguthaben zum Monatsende} \\
 \endhead
 \BLOCK[for row in monthly_rows]
-\VAR[row.month|latex]\BLOCK[if row.provisional] *\BLOCK[endif] & \VAR[row.deposit_received|money] & \VAR[row.deposit_refunded|money] & \VAR[row.remaining_credit|money] \\
+\VAR[row.month|latex]\BLOCK[if row.provisional] *\BLOCK[endif] & \VAR[row.remaining_credit|money] \\
 \BLOCK[endfor]
+\rowcolor{panelstrong}\textbf{Letzter Monatsstand} & \textbf{\VAR[totals.remaining_credit|money]}\BLOCK[if monthly_rows[-1].provisional] *\BLOCK[endif] \\
 \end{longtable}
+\textcolor{textmuted}{Summe der positiven Restguthaben aller privaten Veranstaltungskonten. Spätere Auszahlungsläufe verändern frühere Monatsstände nicht. Monatsstände werden nicht addiert.}\par
 
 \vspace{0.7em}
 \textbf{Pfand nach Artikel}\par\vspace{0.3em}
 \BLOCK[if monthly_rows|selectattr('deposit_products')|list]
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{4.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}@{}}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{5.3cm}>{\raggedleft\arraybackslash}p{3.1cm}>{\raggedleft\arraybackslash}p{3.1cm}>{\raggedleft\arraybackslash}p{3.1cm}@{}}
 \rowcolor{panelbg}\textbf{Monat} & \textbf{Pfandartikel} & \textbf{Eingenommen} & \textbf{Zurückgezahlt} & \textbf{Netto} \\
 \endfirsthead
 \rowcolor{panelbg}\textbf{Monat} & \textbf{Pfandartikel} & \textbf{Eingenommen} & \textbf{Zurückgezahlt} & \textbf{Netto} \\
@@ -191,18 +211,19 @@ Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_cred
 \BLOCK[for product in row.deposit_products]
 \VAR[row.month|latex] & \VAR[product.product_name|latex] (ID \VAR[product.product_id]) & \VAR[product.received|money] & \VAR[product.refunded|money] & \VAR[product.net|money] \\
 \BLOCK[endfor]
-\BLOCK[if row.deposit_products]
-\rowcolor{panelstrong} & \textbf{Monat gesamt} & \textbf{\VAR[row.deposit_received|money]} & \textbf{\VAR[row.deposit_refunded|money]} & \textbf{\VAR[(row.deposit_received - row.deposit_refunded)|money]} \\
-\BLOCK[endif]
+\BLOCK[endfor]
+\BLOCK[for product in totals.deposit_products]
+\rowcolor{panelstrong}\textbf{Gesamt} & \textbf{\VAR[product.product_name|latex] (ID \VAR[product.product_id])} & \textbf{\VAR[product.received|money]} & \textbf{\VAR[product.refunded|money]} & \textbf{\VAR[product.net|money]} \\
 \BLOCK[endfor]
 \end{longtable}
+\textcolor{textmuted}{Gesamt je Pfandartikel umfasst alle angezeigten Monate.}\par
 \BLOCK[else]
 \EmptyHint{Keine Pfandbuchungen in den angezeigten Monaten.}
 \BLOCK[endif]
 
 \vspace{0.7em}
 \textbf{Spenden nach Buchungsart}\par\vspace{0.3em}
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.1cm}>{\raggedright\arraybackslash}p{3.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}>{\raggedleft\arraybackslash}p{2.8cm}@{}}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{5.3cm}>{\raggedleft\arraybackslash}p{3.1cm}>{\raggedleft\arraybackslash}p{3.1cm}>{\raggedleft\arraybackslash}p{3.1cm}@{}}
 \rowcolor{panelbg}\textbf{Monat} & \textbf{Art} & \textbf{Zugänge} & \textbf{Rückbuchungen} & \textbf{Netto} \\
 \endfirsthead
 \rowcolor{panelbg}\textbf{Monat} & \textbf{Art} & \textbf{Zugänge} & \textbf{Rückbuchungen} & \textbf{Netto} \\
@@ -212,6 +233,9 @@ Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_cred
  & Restguthaben-Spenden & \VAR[row.remaining_credit_donations_received|money] & \VAR[row.remaining_credit_donations_refunded|money] & \VAR[(row.remaining_credit_donations_received - row.remaining_credit_donations_refunded)|money] \\
 \rowcolor{panelstrong} & \textbf{Gesamt} & \textbf{\VAR[row.donations_received|money]} & \textbf{\VAR[row.donations_refunded|money]} & \textbf{\VAR[row.donations_net|money]} \\
 \BLOCK[endfor]
+\rowcolor{panelstrong}\textbf{Gesamt} & \textbf{Spendenprodukte} & \textbf{\VAR[totals.donation_products_received|money]} & \textbf{\VAR[totals.donation_products_refunded|money]} & \textbf{\VAR[(totals.donation_products_received - totals.donation_products_refunded)|money]} \\
+\rowcolor{panelstrong} & \textbf{Restguthaben-Spenden} & \textbf{\VAR[totals.remaining_credit_donations_received|money]} & \textbf{\VAR[totals.remaining_credit_donations_refunded|money]} & \textbf{\VAR[(totals.remaining_credit_donations_received - totals.remaining_credit_donations_refunded)|money]} \\
+\rowcolor{panelstrong} & \textbf{Alle Spenden} & \textbf{\VAR[totals.donations_received|money]} & \textbf{\VAR[totals.donations_refunded|money]} & \textbf{\VAR[totals.donations_net|money]} \\
 \end{longtable}
 \BLOCK[if monthly_rows[-1].provisional]
 \textcolor{textmuted}{* Vorläufiger Stand des laufenden Monats zum Erstellungszeitpunkt.}\par
