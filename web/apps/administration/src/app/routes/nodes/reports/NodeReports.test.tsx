@@ -31,7 +31,7 @@ jest.mock("@/hooks", () => ({
 }));
 
 jest.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "de" } }),
 }));
 
 jest.mock("react-toastify", () => ({
@@ -85,6 +85,7 @@ describe("NodeReports", () => {
 
     render(<NodeReports />);
 
+    fireEvent.click(screen.getByRole("button", { name: "reports.individualDays" }));
     fireEvent.click(screen.getByRole("button", { name: "reports.eventDay" }));
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "reports.selectDates" }));
     fireEvent.click(screen.getAllByRole("option")[0]);
@@ -111,6 +112,7 @@ describe("NodeReports", () => {
 
     render(<NodeReports />);
 
+    fireEvent.click(screen.getByRole("button", { name: "reports.individualDays" }));
     fireEvent.click(screen.getByText("reports.last7Days"));
     fireEvent.click(screen.getByRole("button", { name: "reports.downloadRevenue" }));
 
@@ -126,9 +128,9 @@ describe("NodeReports", () => {
     mockDailyEndTime = undefined;
 
     render(<NodeReports />);
+    fireEvent.click(screen.getByRole("button", { name: "reports.individualDays" }));
 
     expect((screen.getByRole("button", { name: "reports.eventDay" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("reports.eventDayUnavailable")).not.toBeNull();
   });
 
   test.each([
@@ -138,8 +140,14 @@ describe("NodeReports", () => {
     const click = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     mockGenerateAccountingReport.mockReturnValue({ unwrap: jest.fn().mockResolvedValue("blob:accounting") });
     render(<NodeReports />);
+    fireEvent.click(screen.getByRole("button", { name: "reports.individualDays" }));
     fireEvent.click(screen.getByRole("button", { name: "reports.eventDay" }));
-    fireEvent.change(screen.getByLabelText("reports.selectMonth"), { target: { value: month } });
+    fireEvent.click(screen.getByRole("button", { name: "reports.month" }));
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "reports.month" }));
+    fireEvent.click(screen.getAllByRole("option")[Number(month.slice(5)) - 1]);
+    fireEvent.change(screen.getByRole("spinbutton", { name: "reports.year" }), {
+      target: { value: month.slice(0, 4) },
+    });
     fireEvent.click(screen.getByRole("button", { name: "reports.downloadAccounting" }));
     await waitFor(() => expect(mockGenerateAccountingReport).toHaveBeenCalledTimes(1));
     const args = mockGenerateAccountingReport.mock.calls[0][0];
@@ -154,6 +162,7 @@ describe("NodeReports", () => {
     const click = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     mockGenerateAccountingReport.mockReturnValue({ unwrap: jest.fn().mockResolvedValue("blob:accounting") });
     render(<NodeReports />);
+    fireEvent.click(screen.getByRole("button", { name: "reports.individualDays" }));
     fireEvent.change(screen.getByLabelText("reports.additionalDate"), { target: { value: "2026-09-15" } });
     fireEvent.click(screen.getByRole("button", { name: "reports.addDate" }));
     fireEvent.click(screen.getByRole("button", { name: "reports.downloadAccounting" }));
@@ -165,5 +174,34 @@ describe("NodeReports", () => {
       })
     );
     click.mockRestore();
+  });
+
+  test("shows only the fields for the chosen period mode", () => {
+    render(<NodeReports />);
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByLabelText("reports.additionalDate")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "reports.month" }));
+    expect(screen.getByRole("combobox", { name: "reports.month" })).not.toBeNull();
+    expect(screen.queryByRole("combobox", { name: "reports.selectDates" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "reports.eventDay" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "reports.individualDays" }));
+    expect(screen.queryByRole("combobox", { name: "reports.month" })).toBeNull();
+    expect(screen.getByRole("combobox", { name: "reports.selectDates" })).not.toBeNull();
+    expect((screen.getByRole("button", { name: "reports.downloadAccounting" }) as HTMLButtonElement).disabled).toBe(
+      true
+    );
+  });
+
+  test("does not download all bookings when the month year is invalid", () => {
+    render(<NodeReports />);
+    fireEvent.click(screen.getByRole("button", { name: "reports.month" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "reports.year" }), { target: { value: "" } });
+    expect(screen.getByText("reports.validYear")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "reports.downloadAccounting" }));
+    expect(mockGenerateAccountingReport).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "reports.allBookings" }));
+    expect((screen.getByRole("button", { name: "reports.downloadAccounting" }) as HTMLButtonElement).disabled).toBe(
+      false
+    );
   });
 });
