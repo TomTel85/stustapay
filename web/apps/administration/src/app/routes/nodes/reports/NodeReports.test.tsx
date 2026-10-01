@@ -130,4 +130,40 @@ describe("NodeReports", () => {
     expect((screen.getByRole("button", { name: "reports.eventDay" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("reports.eventDayUnavailable")).not.toBeNull();
   });
+
+  test.each([
+    ["2026-09", 30, "2026-09-30"],
+    ["2024-02", 29, "2024-02-29"],
+  ])("downloads the full calendar month %s outside operating days", async (month, days, lastDay) => {
+    const click = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    mockGenerateAccountingReport.mockReturnValue({ unwrap: jest.fn().mockResolvedValue("blob:accounting") });
+    render(<NodeReports />);
+    fireEvent.click(screen.getByRole("button", { name: "reports.eventDay" }));
+    fireEvent.change(screen.getByLabelText("reports.selectMonth"), { target: { value: month } });
+    fireEvent.click(screen.getByRole("button", { name: "reports.downloadAccounting" }));
+    await waitFor(() => expect(mockGenerateAccountingReport).toHaveBeenCalledTimes(1));
+    const args = mockGenerateAccountingReport.mock.calls[0][0];
+    expect(args.dayMode).toBe("calendar_day");
+    expect(args.selectedDates).toHaveLength(days);
+    expect(args.selectedDates[0]).toBe(`${month}-01`);
+    expect(args.selectedDates[args.selectedDates.length - 1]).toBe(lastDay);
+    click.mockRestore();
+  });
+
+  test("allows adding a payout day absent from operating days", async () => {
+    const click = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    mockGenerateAccountingReport.mockReturnValue({ unwrap: jest.fn().mockResolvedValue("blob:accounting") });
+    render(<NodeReports />);
+    fireEvent.change(screen.getByLabelText("reports.additionalDate"), { target: { value: "2026-09-15" } });
+    fireEvent.click(screen.getByRole("button", { name: "reports.addDate" }));
+    fireEvent.click(screen.getByRole("button", { name: "reports.downloadAccounting" }));
+    await waitFor(() =>
+      expect(mockGenerateAccountingReport).toHaveBeenCalledWith({
+        nodeId: 7,
+        selectedDates: ["2026-09-15"],
+        dayMode: "calendar_day",
+      })
+    );
+    click.mockRestore();
+  });
 });

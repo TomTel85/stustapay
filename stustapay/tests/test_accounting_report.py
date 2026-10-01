@@ -52,6 +52,8 @@ class FakeConnection:
 
     async def fetch(self, query: str, *_args):
         self.queries.append(query)
+        if "sepa_exit" in query:
+            return []
         if "p.is_returnable" in query:
             return []
         if "as booking_day" in query and "donation_exit" in query:
@@ -161,6 +163,8 @@ def test_monthly_totals_sum_movements_by_product_and_keep_latest_credit():
                 MonthlyDepositProductRow(product_id=2, product_name="Karte", received=Decimal("5")),
             ],
             donation_products_refunded=Decimal("3"),
+            online_payouts_paid=Decimal("60"),
+            online_payouts_reversed=Decimal("5"),
             remaining_credit_donations_received=Decimal("6"),
             remaining_credit_donations_refunded=Decimal("2"),
             remaining_credit=Decimal("40"),
@@ -178,6 +182,7 @@ def test_monthly_totals_sum_movements_by_product_and_keep_latest_credit():
         Decimal("15"),
     )
     assert totals.remaining_credit == Decimal("40")
+    assert totals.online_payouts_net == Decimal("55")
     assert totals.provisional is True
 
 
@@ -250,12 +255,19 @@ async def test_build_accounting_report_context_aggregates_accounting_sections(mo
     assert "anhand ihres Buchungszeitpunkts" in captured["tex"]
     assert "Monatliche Pfand-" in captured["tex"]
     assert "Pfand nach Artikel" in captured["tex"]
+    assert "Online-Auszahlungen" in captured["tex"]
     assert "Aufladekarte (ID 1234)" in captured["tex"]
 
 
 async def test_monthly_accounting_separates_reversals_and_keeps_historical_credit():
     class MonthlyConnection:
         async def fetch(self, query: str, *_args):
+            if "sepa_exit" in query:
+                return [
+                    {"booking_day": date(2025, 8, 31), "amount": Decimal("8")},
+                    {"booking_day": date(2025, 9, 1), "amount": Decimal("5")},
+                    {"booking_day": date(2025, 9, 1), "amount": Decimal("-1")},
+                ]
             if "p.is_returnable" in query:
                 assert "'cancel_sale'" in query
                 assert "(li.total_price >= 0)" in query
@@ -352,6 +364,9 @@ async def test_monthly_accounting_separates_reversals_and_keeps_historical_credi
     assert rows[1].donations_net == Decimal("8")
     assert rows[2].donations_net == Decimal("-3")
     assert rows[2].provisional is True
+    assert rows[1].online_payouts_paid == Decimal("8")
+    assert rows[2].online_payouts_reversed == Decimal("1")
+    assert rows[2].online_payouts_net == Decimal("4")
 
     selected = await _build_monthly_rows(
         conn=cast(Connection, MonthlyConnection()),
@@ -363,6 +378,18 @@ async def test_monthly_accounting_separates_reversals_and_keeps_historical_credi
     assert selected[0].month == "08.2025"
     assert selected[0].remaining_credit == Decimal("17")
     assert selected[0].donation_products_received == Decimal("5")
+
+    september = await _build_monthly_rows(
+        conn=cast(Connection, MonthlyConnection()),
+        event_node_id=1,
+        selected_dates=["2025-09-30"],
+        generated_at=datetime(2025, 10, 1, tzinfo=timezone.utc),
+    )
+    assert len(september) == 1
+    assert september[0].month == "09.2025"
+    assert september[0].remaining_credit == Decimal("7")
+    assert september[0].online_payouts_net == Decimal("4")
+    assert september[0].provisional is False
 
 
 async def test_monthly_accounting_uses_event_ledger_in_database(
@@ -403,6 +430,37 @@ async def test_monthly_accounting_uses_event_ledger_in_database(
     assert [row.remaining_credit for row in rows] == [Decimal("20"), Decimal("15")]
     assert rows[1].remaining_credit_donations_received == Decimal("5")
     assert rows[1].remaining_credit == await db_connection.fetchval(
+        "select balance from account where id = $1", private_account
+    )
+
+    sepa_exit = await db_connection.fetchval(
+        "select id from account where node_id = $1 and type = 'sepa_exit'", event_node.id
+    )
+    await db_connection.fetchval(
+        "select book_transaction(null, null, $1, $2, 10, 0, $3, $4)",
+        private_account,
+        sepa_exit,
+        datetime(2025, 8, 31, 22, 30, tzinfo=timezone.utc),
+        conducting_user.id,
+    )
+    await db_connection.fetchval(
+        "select book_transaction(null, null, $1, $2, 2, 0, $3, $4)",
+        sepa_exit,
+        private_account,
+        datetime(2025, 9, 30, 22, 30, tzinfo=timezone.utc),
+        conducting_user.id,
+    )
+    rows = await _build_monthly_rows(
+        conn=db_connection,
+        event_node_id=event_node.id,
+        selected_dates=None,
+        generated_at=datetime(2025, 10, 2, tzinfo=timezone.utc),
+    )
+    assert [row.month for row in rows] == ["07.2025", "08.2025", "09.2025", "10.2025"]
+    assert [row.remaining_credit for row in rows] == [Decimal("20"), Decimal("15"), Decimal("5"), Decimal("7")]
+    assert rows[2].online_payouts_paid == Decimal("10")
+    assert rows[3].online_payouts_reversed == Decimal("2")
+    assert rows[3].remaining_credit == await db_connection.fetchval(
         "select balance from account where id = $1", private_account
     )
 

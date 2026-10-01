@@ -200,6 +200,20 @@ Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_cred
 \textcolor{textmuted}{Summe der positiven Restguthaben aller privaten Veranstaltungskonten. Spätere Auszahlungsläufe verändern frühere Monatsstände nicht. Monatsstände werden nicht addiert.}\par
 
 \vspace{0.7em}
+\textbf{Online-Auszahlungen}\par\vspace{0.3em}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedleft\arraybackslash}p{4.9cm}>{\raggedleft\arraybackslash}p{4.9cm}>{\raggedleft\arraybackslash}p{4.3cm}@{}}
+\rowcolor{panelbg}\textbf{Monat} & \textbf{Ausgezahlt} & \textbf{Rückbuchungen} & \textbf{Netto} \\
+\endfirsthead
+\rowcolor{panelbg}\textbf{Monat} & \textbf{Ausgezahlt} & \textbf{Rückbuchungen} & \textbf{Netto} \\
+\endhead
+\BLOCK[for row in monthly_rows]
+\VAR[row.month|latex]\BLOCK[if row.provisional] *\BLOCK[endif] & \VAR[row.online_payouts_paid|money] & \VAR[row.online_payouts_reversed|money] & \VAR[row.online_payouts_net|money] \\
+\BLOCK[endfor]
+\rowcolor{panelstrong}\textbf{Gesamt} & \textbf{\VAR[totals.online_payouts_paid|money]} & \textbf{\VAR[totals.online_payouts_reversed|money]} & \textbf{\VAR[totals.online_payouts_net|money]} \\
+\end{longtable}
+\textcolor{textmuted}{Enthalten sind gebuchte Online-Auszahlungen abgeschlossener Auszahlungsläufe im Monat ihrer Buchung. Diese mindern bereits das oben ausgewiesene Kartenguthaben. Beantragte oder nur exportierte Auszahlungen sind noch nicht enthalten.}\par
+
+\vspace{0.7em}
 \textbf{Pfand nach Artikel}\par\vspace{0.3em}
 \BLOCK[if monthly_rows|selectattr('deposit_products')|list]
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{5.3cm}>{\raggedleft\arraybackslash}p{3.1cm}>{\raggedleft\arraybackslash}p{3.1cm}>{\raggedleft\arraybackslash}p{3.1cm}@{}}

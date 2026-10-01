@@ -84,6 +84,12 @@ class MonthlyAccountingRow(BaseModel):
     remaining_credit_donations_received: Decimal = ZERO
     remaining_credit_donations_refunded: Decimal = ZERO
     remaining_credit: Decimal = ZERO
+    online_payouts_paid: Decimal = ZERO
+    online_payouts_reversed: Decimal = ZERO
+
+    @property
+    def online_payouts_net(self) -> Decimal:
+        return self.online_payouts_paid - self.online_payouts_reversed
 
     @property
     def donations_received(self) -> Decimal:
@@ -142,6 +148,8 @@ class AccountingReportContext(BaseModel):
             totals.donation_products_refunded += row.donation_products_refunded
             totals.remaining_credit_donations_received += row.remaining_credit_donations_received
             totals.remaining_credit_donations_refunded += row.remaining_credit_donations_refunded
+            totals.online_payouts_paid += row.online_payouts_paid
+            totals.online_payouts_reversed += row.online_payouts_reversed
             for product in row.deposit_products:
                 total = products.setdefault(
                     product.product_id,
@@ -260,6 +268,20 @@ async def _build_monthly_rows(
         event_node_id,
         generated_at,
     )
+    payout_movements = await conn.fetch(
+        "select date_trunc('month', tr.booked_at at time zone 'Europe/Berlin')::date as booking_day, "
+        "sum(case when sa.type = 'private' then tr.amount else -tr.amount end) as amount "
+        "from transaction tr join account sa on sa.id = tr.source_account "
+        "join account ta on ta.id = tr.target_account "
+        "join node sn on sn.id = sa.node_id join node tn on tn.id = ta.node_id "
+        "where tr.booked_at <= $2 and ((sa.type = 'private' and ta.type = 'sepa_exit' "
+        "and sn.event_node_id = $1 and tn.event_node_id = $1) "
+        "or (sa.type = 'sepa_exit' and ta.type = 'private' "
+        "and sn.event_node_id = $1 and tn.event_node_id = $1)) "
+        "group by booking_day, sa.type, (tr.amount >= 0)",
+        event_node_id,
+        generated_at,
+    )
     # Accounts start at zero, and book_transaction records every balance change.
     # Include both sides so transfers between private accounts net to zero.
     account_movements = await conn.fetch(
@@ -278,6 +300,7 @@ async def _build_monthly_rows(
     if not selected_dates:
         months.update(_month_start(row["booking_day"]) for row in product_movements)
         months.update(_month_start(row["booking_day"]) for row in donation_movements)
+        months.update(_month_start(row["booking_day"]) for row in payout_movements)
         months.update(_month_start(row["booking_day"]) for row in account_movements)
     rows = {
         month: MonthlyAccountingRow(
@@ -322,6 +345,15 @@ async def _build_monthly_rows(
                 row.remaining_credit_donations_received += amount
             else:
                 row.remaining_credit_donations_refunded -= amount
+
+    for movement in payout_movements:
+        row = rows.get(_month_start(movement["booking_day"]))
+        if row is not None:
+            amount = movement["amount"]
+            if amount >= 0:
+                row.online_payouts_paid += amount
+            else:
+                row.online_payouts_reversed -= amount
 
     account_balances: dict[int, Decimal] = defaultdict(lambda: ZERO)
     movements = iter(account_movements)
