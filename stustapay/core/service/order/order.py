@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Dict, Optional, Set
 from uuid import UUID
@@ -210,6 +211,10 @@ class BookedButton(BaseModel):
     is_product: bool
 
 
+class _ButtonProduct(Product):
+    booked_button_id: int
+
+
 class BookedProduct(BaseModel):
     product: Product
     quantity: Optional[int] = None
@@ -300,29 +305,43 @@ class OrderService(Service[Config]):
         buttons: list[BookedButton],
     ) -> list[BookedProduct]:
         # TODO: check if the till making this sale has these buttons as part of its layout
+        products_by_button: dict[int, list[Product]] = defaultdict(list)
+        button_ids = list({button.id for button in buttons if not button.is_product})
+        if button_ids:
+            button_products = await conn.fetch_many(
+                _ButtonProduct,
+                "select tbp.button_id as booked_button_id, p.* from till_button_product tbp "
+                "join product_with_tax_and_restrictions p on tbp.product_id = p.id "
+                "join till_layout_to_button tltp on tltp.button_id = tbp.button_id "
+                "join till_profile tp on tp.layout_id = tltp.layout_id "
+                "where tbp.button_id = any($1) and tp.id = $2",
+                button_ids,
+                till_profile_id,
+            )
+            for product in button_products:
+                products_by_button[product.booked_button_id].append(Product(**product.model_dump()))
+
+        product_ids = list({button.id for button in buttons if button.is_product})
+        products_by_id: dict[int, Product] = {}
+        if product_ids:
+            direct_products = await conn.fetch_many(
+                Product,
+                "select p.* from product_with_tax_and_restrictions p where p.id = any($1) and p.node_id = any($2)",
+                product_ids,
+                node.ids_to_event_node,
+            )
+            products_by_id = {product.id: product for product in direct_products}
+
         booked_products = []
         for button in buttons:
             if not button.is_product:
-                products = await conn.fetch_many(
-                    Product,
-                    "select p.* from till_button_product tbp "
-                    "join product_with_tax_and_restrictions p on tbp.product_id = p.id "
-                    "join till_layout_to_button tltp on tltp.button_id = tbp.button_id "
-                    "join till_profile tp on tp.layout_id = tltp.layout_id "
-                    "where tbp.button_id = $1 and tp.id = $2",
-                    button.id,
-                    till_profile_id,
-                )
+                products = products_by_button[button.id]
                 assert node.ids_to_event_node is not None
                 if any(product.node_id not in node.ids_to_event_node for product in products):
                     raise InvalidArgument("this till profile is not allowed to use these buttons")
             else:
-                products = await conn.fetch_many(
-                    Product,
-                    "select p.* from product_with_tax_and_restrictions p where p.id = $1 and p.node_id = any($2)",
-                    button.id,
-                    node.ids_to_event_node,
-                )
+                product = products_by_id.get(button.id)
+                products = [product] if product is not None else []
             if len(products) == 0:
                 raise InvalidArgument("this till profile is not allowed to use these buttons")
 

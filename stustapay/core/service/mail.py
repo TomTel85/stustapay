@@ -26,6 +26,7 @@ class MailService(Service[Config]):
     MAIL_SEND_CHECK_INTERVAL = timedelta(seconds=1)
     MAIL_SEND_INTERVAL = timedelta(seconds=0.05)
     MAIL_PROCESSING_LEASE = timedelta(minutes=5)
+    SMTP_TIMEOUT_SECONDS = 60
     MAX_RETRY_COUNT = 5
     # Doubling backoff pattern for retries: 1sec, 2sec, 4sec, 8sec, 16sec
     BASE_RETRY_DELAY = timedelta(seconds=1)
@@ -182,6 +183,7 @@ class MailService(Service[Config]):
                   )
                   and retry_count < retry_max
                 order by scheduled_send_date, id
+                limit 1
                 for update skip locked
             ),
             claimed_mails as (
@@ -189,12 +191,15 @@ class MailService(Service[Config]):
                 set retry_next_attempt = $2
                 from due_mails d
                 where m.id = d.id
-                returning m.id
+                returning m.*
             )
-            select mwa.*
-            from mail_with_attachments mwa
-            join claimed_mails cm on cm.id = mwa.id
-            order by mwa.scheduled_send_date, mwa.id
+            select cm.*,
+                   coalesce(
+                       (select json_agg(a) from mail_attachments a where a.mail_id = cm.id),
+                       json_build_array()
+                   ) as attachments
+            from claimed_mails cm
+            order by cm.scheduled_send_date, cm.id
             """,
             now,
             lease_until,
@@ -204,26 +209,47 @@ class MailService(Service[Config]):
         self.logger.info("Starting periodic job to send mails.")
         while True:
             try:
-                await asyncio.sleep(self.MAIL_SEND_CHECK_INTERVAL.seconds)
-                mails = await self._fetch_mail()
-                for mail in mails:
-                    await self._send_mail(mail=mail)
-                    await asyncio.sleep(self.MAIL_SEND_INTERVAL.seconds)
+                await asyncio.sleep(self.MAIL_SEND_CHECK_INTERVAL.total_seconds())
+                while mails := await self._fetch_mail():
+                    await self._send_mail(mail=mails[0])
+                    await asyncio.sleep(self.MAIL_SEND_INTERVAL.total_seconds())
             except Exception as e:
                 self.logger.exception(f"Failed to send mail with error {e}")
 
     def _calculate_next_retry_time(self, retry_count: int) -> datetime:
         """Calculate the next retry time using doubling backoff pattern"""
-        delay = self.BASE_RETRY_DELAY * (self.BACKOFF_FACTOR ** retry_count)
+        delay = self.BASE_RETRY_DELAY * (self.BACKOFF_FACTOR**retry_count)
         return datetime.now() + delay
 
     @with_db_transaction
-    async def _send_mail(
+    async def _fetch_mail_settings(
+        self, *, conn: Connection, node_id: int
+    ) -> tuple[bool, str | None, str | None, int | None, str | None, str | None]:
+        return await self._resolve_mail_settings(conn=conn, node_id=node_id)
+
+    @with_db_transaction
+    async def _mark_mail_sent(self, *, conn: Connection, mail_id: int) -> None:
+        await conn.execute("update mails set send_date = $1 where id = $2", datetime.now(), mail_id)
+
+    @with_db_transaction
+    async def _mark_mail_failed(
         self,
         *,
         conn: Connection,
-        mail: Mail,
+        mail_id: int,
+        retry_count: int,
+        failure_reason: str,
+        retry_next_attempt: datetime | None = None,
     ) -> None:
+        await conn.execute(
+            "update mails set retry_count = $1, failure_reason = $2, retry_next_attempt = $3 where id = $4",
+            retry_count,
+            failure_reason,
+            retry_next_attempt,
+            mail_id,
+        )
+
+    async def _send_mail(self, *, mail: Mail) -> None:
         self.logger.debug(f"Sending mail to {mail.to_addr}, attempt {mail.retry_count + 1}/{mail.retry_max}")
         (
             mail_enabled,
@@ -232,21 +258,14 @@ class MailService(Service[Config]):
             smtp_port,
             smtp_username,
             smtp_password,
-        ) = await self._resolve_mail_settings(conn=conn, node_id=mail.node_id)
+        ) = await self._fetch_mail_settings(node_id=mail.node_id)
         if not mail_enabled:
-            self.logger.info(
-                f"The mail was not sent because mail sending is deactivated for node id {mail.node_id}"
-            )
+            self.logger.info(f"The mail was not sent because mail sending is deactivated for node id {mail.node_id}")
             # Mark as failed without retry - configuration issue
-            await conn.execute(
-                """
-                update mails
-                set retry_count = retry_max, 
-                    failure_reason = $1
-                where id = $2
-                """,
-                "Mail sending deactivated (selected settings)",
-                mail.id,
+            await self._mark_mail_failed(
+                mail_id=mail.id,
+                retry_count=mail.retry_max,
+                failure_reason="Mail sending deactivated (selected settings)",
             )
             return
 
@@ -280,65 +299,43 @@ class MailService(Service[Config]):
 
         try:
             assert smtp_host is not None and smtp_port is not None
-            await aiosmtplib.send(
-                message,
-                hostname=smtp_host,
-                port=smtp_port,
-                username=smtp_username,
-                password=smtp_password,
-                start_tls=True,
-            )
-            self.logger.debug(f"Mail sent to {mail.to_addr}")
-            
-            # Mark as successfully sent
-            await conn.execute(
-                """
-                update mails
-                set send_date = $1
-                where id = $2
-                """,
-                datetime.now(),
-                mail.id,
+            await asyncio.wait_for(
+                aiosmtplib.send(
+                    message,
+                    hostname=smtp_host,
+                    port=smtp_port,
+                    username=smtp_username,
+                    password=smtp_password,
+                    start_tls=True,
+                    timeout=self.SMTP_TIMEOUT_SECONDS,
+                ),
+                timeout=self.SMTP_TIMEOUT_SECONDS,
             )
         except Exception as e:
-            error_message = str(e)
+            error_message = str(e) or type(e).__name__
             self.logger.exception(f"Failed to send mail to {mail.to_addr} with error {error_message}")
-            
+
             # Update retry information
             new_retry_count = mail.retry_count + 1
-            
+
             if new_retry_count >= mail.retry_max:
                 # Max retries reached, mark as permanently failed
                 self.logger.warning(
                     f"Mail to {mail.to_addr} (ID {mail.id}) failed permanently after {new_retry_count} attempts: {error_message}"
                 )
-                await conn.execute(
-                    """
-                    update mails
-                    set retry_count = $1,
-                        failure_reason = $2
-                    where id = $3
-                    """,
-                    new_retry_count,
-                    error_message,
-                    mail.id,
-                )
+                await self._mark_mail_failed(mail_id=mail.id, retry_count=new_retry_count, failure_reason=error_message)
             else:
                 # Schedule next retry with doubling backoff pattern
                 next_retry = self._calculate_next_retry_time(new_retry_count - 1)
                 self.logger.info(
                     f"Scheduling retry {new_retry_count}/{mail.retry_max} for mail to {mail.to_addr} (ID {mail.id}) at {next_retry}"
                 )
-                await conn.execute(
-                    """
-                    update mails
-                    set retry_count = $1,
-                        retry_next_attempt = $2,
-                        failure_reason = $3
-                    where id = $4
-                    """,
-                    new_retry_count,
-                    next_retry,
-                    error_message,
-                    mail.id,
+                await self._mark_mail_failed(
+                    mail_id=mail.id,
+                    retry_count=new_retry_count,
+                    retry_next_attempt=next_retry,
+                    failure_reason=error_message,
                 )
+        else:
+            self.logger.debug(f"Mail sent to {mail.to_addr}")
+            await self._mark_mail_sent(mail_id=mail.id)

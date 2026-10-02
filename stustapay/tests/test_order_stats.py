@@ -1,6 +1,8 @@
 # pylint: disable=redefined-outer-name
+import logging
 from datetime import UTC, datetime, time
 
+import pytest
 from sftkit.database import Connection
 
 from stustapay.core.schema.account import AccountType
@@ -645,9 +647,9 @@ async def test_revenue_stats_apply_expected_cancellation_scope(
     )
 
     assert overview.total_revenue == 15.0
-    assert [(interval.from_time.hour, interval.count, interval.revenue) for interval in product_stats.hourly_intervals] == [
-        (10, 3, 15.0)
-    ]
+    assert [
+        (interval.from_time.hour, interval.count, interval.revenue) for interval in product_stats.hourly_intervals
+    ] == [(10, 3, 15.0)]
     assert len(product_stats.daily_intervals) == 1
     assert product_stats.daily_intervals[0].count == 3
     assert product_stats.daily_intervals[0].revenue == 15.0
@@ -859,3 +861,23 @@ async def test_revenue_prediction_excludes_cancelled_sales(
     assert prediction.actual_visitors_today == 0
     assert prediction.historical_revenue_per_visitor is None
     assert prediction.visitor_based_prediction is None
+
+
+@pytest.mark.parametrize("fails", [False, True])
+async def test_stats_query_logs_duration_without_changing_result(caplog, fails):
+    from stustapay.core.service.order.stats import _timed_stats_query  # pylint: disable=import-outside-toplevel
+
+    async def query():
+        if fails:
+            raise RuntimeError("query failed")
+        return ["result"]
+
+    with caplog.at_level(logging.DEBUG, logger="stustapay.core.service.order.stats"):
+        if fails:
+            with pytest.raises(RuntimeError, match="query failed"):
+                await _timed_stats_query(query_name="test-stats", query_coro=query(), node_id=123)
+        else:
+            result = await _timed_stats_query(query_name="test-stats", query_coro=query(), node_id=123)
+            assert result == ["result"]
+    assert "Stats query test-stats" in caplog.text
+    assert "node=123" in caplog.text

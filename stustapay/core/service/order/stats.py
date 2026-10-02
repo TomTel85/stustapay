@@ -1,4 +1,6 @@
+import logging
 from datetime import datetime, timedelta, timezone
+from time import perf_counter
 from typing import Optional
 
 import asyncpg
@@ -20,6 +22,8 @@ from stustapay.core.service.common.decorators import (
 )
 from stustapay.core.service.product import fetch_pay_out_product, fetch_top_up_product
 from stustapay.core.service.tree.common import fetch_event_for_node, fetch_node
+
+logger = logging.getLogger(__name__)
 
 REVENUE_PREDICTION_MAX_HISTORY_DAYS = 365
 
@@ -276,8 +280,19 @@ async def _timed_stats_query(
     from_time: Optional[datetime] = None,
     to_time: Optional[datetime] = None,
 ):
-    del query_name, node_id, till_id, from_time, to_time
-    return await query_coro
+    started_at = perf_counter()
+    try:
+        return await query_coro
+    finally:
+        logger.debug(
+            "Stats query %s completed in %.3fs (node=%s, till=%s, from=%s, to=%s)",
+            query_name,
+            perf_counter() - started_at,
+            node_id,
+            till_id,
+            from_time,
+            to_time,
+        )
 
 
 async def get_hourly_entry_stats(

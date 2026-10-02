@@ -20,7 +20,6 @@ import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -146,59 +145,44 @@ class InfallibleRepository @Inject constructor(
 
                 _response.update { null }
 
-                var response: InfallibleApiResponse? = null
-                var success = false
-
-                // we do the retries in the lower http layer now for every request!
-                val maxAttempts = 1
-                for (attempt in 1..maxAttempts) {
-                    Log.i("infallible", "attempt ${attempt} to send")
-                    response = try {
-                        when (request) {
-                            is InfallibleApiRequest.TopUp -> {
-                                val repoResponse = topUpApi.bookTopUp(request.topUp)
-                                success = repoResponse.submitSuccess()
-                                InfallibleApiResponse.TopUp(repoResponse)
-                            }
-
-                            is InfallibleApiRequest.TicketSale -> {
-                                val repoResponse = ticketApi.bookTicketSale(request.ticketSale)
-                                success = repoResponse.submitSuccess()
-                                InfallibleApiResponse.TicketSale(repoResponse)
-                            }
-
-                            is InfallibleApiRequest.Sale -> {
-                                val repoResponse = saleApi.bookSale(request.sale)
-                                success = repoResponse.submitSuccess()
-                                InfallibleApiResponse.Sale(repoResponse)
-                            }
+                // The HTTP layer handles retries; publish the final result immediately.
+                var success: Boolean
+                val response = try {
+                    when (request) {
+                        is InfallibleApiRequest.TopUp -> {
+                            val repoResponse = topUpApi.bookTopUp(request.topUp)
+                            success = repoResponse.submitSuccess()
+                            InfallibleApiResponse.TopUp(repoResponse)
                         }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Log.e("infallible", "unexpected exception while sending request", e)
-                        success = false
-                        when (request) {
-                            is InfallibleApiRequest.TopUp -> InfallibleApiResponse.TopUp(
-                                Response.Error.Request(throwable = e)
-                            )
-                            is InfallibleApiRequest.TicketSale -> InfallibleApiResponse.TicketSale(
-                                Response.Error.Request(throwable = e)
-                            )
-                            is InfallibleApiRequest.Sale -> InfallibleApiResponse.Sale(
-                                Response.Error.Request(throwable = e)
-                            )
+
+                        is InfallibleApiRequest.TicketSale -> {
+                            val repoResponse = ticketApi.bookTicketSale(request.ticketSale)
+                            success = repoResponse.submitSuccess()
+                            InfallibleApiResponse.TicketSale(repoResponse)
+                        }
+
+                        is InfallibleApiRequest.Sale -> {
+                            val repoResponse = saleApi.bookSale(request.sale)
+                            success = repoResponse.submitSuccess()
+                            InfallibleApiResponse.Sale(repoResponse)
                         }
                     }
-
-                    if (success) {
-                        break
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("infallible", "unexpected exception while sending request", e)
+                    success = false
+                    when (request) {
+                        is InfallibleApiRequest.TopUp -> InfallibleApiResponse.TopUp(
+                            Response.Error.Request(throwable = e)
+                        )
+                        is InfallibleApiRequest.TicketSale -> InfallibleApiResponse.TicketSale(
+                            Response.Error.Request(throwable = e)
+                        )
+                        is InfallibleApiRequest.Sale -> InfallibleApiResponse.Sale(
+                            Response.Error.Request(throwable = e)
+                        )
                     }
-
-                    // retry delay
-                    Log.i("infallible", "fail to send - waiting 1s")
-                    delay(1000)
-                    Log.i("infallible", "done waiting")
                 }
 
                 if (success) {
@@ -212,7 +196,7 @@ class InfallibleRepository @Inject constructor(
                 }
 
                 // response can be ok or error!
-                _response.update { response!! }
+                _response.update { response }
                 _active.update { false }
             }
         }

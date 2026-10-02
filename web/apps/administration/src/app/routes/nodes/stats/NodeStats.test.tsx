@@ -247,11 +247,11 @@ describe("NodeStats", () => {
         fromTimestamp: expectedFromTimestamp,
         toTimestamp: expectedToTimestamp,
       }),
-      expect.objectContaining({ skip: false, pollingInterval: 30000 })
+      expect.objectContaining({ skip: false, pollingInterval: 30000, skipPollingIfUnfocused: true })
     );
     expect(mockUseGetRevenueByCounterQuery).toHaveBeenCalledWith(
       expect.any(Object),
-      expect.objectContaining({ skip: false, pollingInterval: 30000 })
+      expect.objectContaining({ skip: false, pollingInterval: 30000, skipPollingIfUnfocused: true })
     );
     expect(screen.getByTestId("kpis").textContent).toContain("enabled");
     expect(screen.getByTestId("product-chart").textContent).toContain("enabled");

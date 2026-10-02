@@ -123,18 +123,16 @@ async def book_order(
     )
     order_id = order_row["id"]
 
-    for i, line_item in enumerate(line_items):
-        await conn.fetchval(
+    if line_items:
+        await conn.executemany(
             "insert into line_item (order_id, item_id, product_id, product_price, quantity, tax_rate_id, "
             "   tax_name, tax_rate) "
             "select $1, $2, $3, $4, $5, $6, t.name, t.rate "
             "from tax_rate t where t.id = $6",
-            order_id,
-            i,
-            line_item.product_id,
-            line_item.product_price,
-            line_item.quantity,
-            line_item.tax_rate_id,
+            [
+                (order_id, i, item.product_id, item.product_price, item.quantity, item.tax_rate_id)
+                for i, item in enumerate(line_items)
+            ],
         )
     await book_prepared_bookings(conn=conn, order_id=order_id, bookings=bookings)
     return OrderInfo(id=order_id, uuid=uuid, booked_at=booked_at)

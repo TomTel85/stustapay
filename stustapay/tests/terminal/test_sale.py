@@ -1,6 +1,7 @@
-# pylint: disable=attribute-defined-outside-init,unexpected-keyword-arg,missing-kwoa,redefined-outer-name
+# pylint: disable=attribute-defined-outside-init,unexpected-keyword-arg,missing-kwoa,redefined-outer-name,protected-access
 import uuid
 from dataclasses import dataclass
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sftkit.database import Connection
@@ -33,7 +34,7 @@ from stustapay.core.service.cashier import (
     InvalidCloseOutException,
 )
 from stustapay.core.service.order import NotEnoughVouchersException, OrderService
-from stustapay.core.service.order.order import InvalidSaleException
+from stustapay.core.service.order.order import BookedButton, InvalidSaleException
 from stustapay.core.service.product import ProductService
 from stustapay.core.service.till.common import fetch_till
 from stustapay.core.service.till.till import TillService
@@ -799,3 +800,27 @@ async def test_transport_and_cashier_account_management(
     )
     await assert_account_balance(finanzorga.transport_account_id, 0)
     await assert_system_account_balance(AccountType.cash_vault, -30)
+
+
+async def test_bulk_button_lookup_preserves_repeated_and_direct_positions(
+    db_connection: Connection, event_node: Node, till: Till, sale_products: SaleProducts
+):
+    connection = Mock(spec=Connection)
+    connection.fetch_many = AsyncMock(wraps=db_connection.fetch_many)
+    buttons = [
+        BookedButton(id=sale_products.beer_button.id, quantity=2, is_product=False),
+        BookedButton(id=sale_products.deposit_product.id, quantity=-1, is_product=True),
+        BookedButton(id=sale_products.beer_button.id, quantity=3, is_product=False),
+    ]
+    products = await OrderService._get_products_from_buttons(
+        conn=connection, node=event_node, till_profile_id=till.active_profile_id, buttons=buttons
+    )
+    assert connection.fetch_many.await_count == 2
+    assert len(products) == 5
+    assert {item.product.id for item in products[:2]} == {
+        sale_products.beer_product.id,
+        sale_products.deposit_product.id,
+    }
+    assert [item.quantity for item in products] == [2, 2, -1, 3, 3]
+    assert products[2].product.id == sale_products.deposit_product.id
+    assert [item.product.id for item in products[:2]] == [item.product.id for item in products[3:]]
