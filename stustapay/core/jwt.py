@@ -2,6 +2,8 @@ import base64
 import hashlib
 import hmac
 import json
+import math
+import re
 from datetime import datetime, timezone
 from typing import Iterable
 
@@ -22,8 +24,13 @@ def _b64url_encode(data: bytes) -> str:
 
 
 def _b64url_decode(data: str) -> bytes:
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", data):
+        raise InvalidTokenError("Malformed JWT encoding")
     padding = "=" * (-len(data) % 4)
-    return base64.urlsafe_b64decode(data + padding)
+    try:
+        return base64.b64decode(data + padding, altchars=b"-_", validate=True)
+    except ValueError as exc:
+        raise InvalidTokenError("Malformed JWT encoding") from exc
 
 
 def _get_digest(algorithm: str):
@@ -37,10 +44,12 @@ def _validate_claim_times(payload: dict):
     now = datetime.now(timezone.utc).timestamp()
 
     for claim in ("exp", "nbf", "iat"):
-        if claim in payload and not isinstance(payload[claim], (int, float)):
-            raise InvalidTokenError(f"Invalid JWT claim type for {claim}")
+        if claim in payload:
+            value = payload[claim]
+            if type(value) not in (int, float) or (isinstance(value, float) and not math.isfinite(value)):
+                raise InvalidTokenError(f"Invalid JWT claim type for {claim}")
 
-    if "exp" in payload and payload["exp"] < now:
+    if "exp" in payload and payload["exp"] <= now:
         raise InvalidTokenError("JWT expired")
     if "nbf" in payload and payload["nbf"] > now:
         raise InvalidTokenError("JWT not yet valid")
@@ -59,6 +68,8 @@ def encode(payload: dict, key: str, algorithm: str) -> str:
 
 
 def decode(token: str, key: str, algorithms: Iterable[str]) -> dict:
+    if not isinstance(token, str) or len(token) > 16_384:
+        raise InvalidTokenError("Malformed JWT")
     try:
         encoded_header, encoded_payload, encoded_signature = token.split(".")
     except ValueError as exc:
@@ -67,7 +78,7 @@ def decode(token: str, key: str, algorithms: Iterable[str]) -> dict:
     try:
         header = json.loads(_b64url_decode(encoded_header))
         payload = json.loads(_b64url_decode(encoded_payload))
-    except (json.JSONDecodeError, ValueError) as exc:
+    except (ValueError, RecursionError) as exc:
         raise InvalidTokenError("Malformed JWT payload") from exc
 
     if not isinstance(header, dict):

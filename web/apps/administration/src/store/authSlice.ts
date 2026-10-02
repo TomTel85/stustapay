@@ -40,6 +40,16 @@ export const authSlice = createSlice({
       state.user = null;
       state.token = null;
     });
+    builder.addMatcher(api.endpoints.changePassword.matchFulfilled, (state) => {
+      state.user = null;
+      state.token = null;
+    });
+    builder.addMatcher(api.endpoints.changeUserPassword.matchFulfilled, (state, action) => {
+      if (action.payload?.id === state.user?.id) {
+        state.user = null;
+        state.token = null;
+      }
+    });
   },
 });
 

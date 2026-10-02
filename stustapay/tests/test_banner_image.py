@@ -57,7 +57,7 @@ def test_http_response_sniffs_mime_for_valid_png() -> None:
     assert meta is not None
     assert meta["mime_type"] == "image/png"
     assert meta["image"] == raw
-    assert meta["headers"] == {"Cache-Control": "public, max-age=3600"}
+    assert meta["headers"] == {"Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff"}
 
 
 def test_http_response_octet_stream_for_junk() -> None:
@@ -67,3 +67,29 @@ def test_http_response_octet_stream_for_junk() -> None:
     headers = meta["headers"]
     assert isinstance(headers, dict)
     assert "Content-Disposition" in headers
+    assert headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_validate_rejects_high_pixel_count_before_loading(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("stustapay.core.banner_image.BANNER_MAX_PIXELS", 0)
+    with pytest.raises(InvalidArgument):
+        validate_and_prepare_banner_upload(_tiny_png_bytes())
+
+
+def test_stored_high_pixel_count_is_served_as_attachment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("stustapay.core.banner_image.BANNER_MAX_PIXELS", 0)
+    meta = http_response_for_stored_banner(_tiny_png_bytes())
+    assert meta is not None
+    assert meta["mime_type"] == "application/octet-stream"
+    headers = meta["headers"]
+    assert isinstance(headers, dict)
+    assert "Content-Disposition" in headers
+
+
+def test_validate_handles_decompression_bomb(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 0)
+    with pytest.raises(InvalidArgument):
+        validate_and_prepare_banner_upload(_tiny_png_bytes())
+    meta = http_response_for_stored_banner(_tiny_png_bytes())
+    assert meta is not None
+    assert meta["mime_type"] == "application/octet-stream"

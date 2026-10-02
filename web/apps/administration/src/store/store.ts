@@ -6,6 +6,7 @@ import { FLUSH, PAUSE, PERSIST, PURGE, REGISTER, REHYDRATE, persistReducer, pers
 import storage from "redux-persist/lib/storage";
 import { authSlice } from "./authSlice";
 import { errorMiddleware } from "./errorMiddleware";
+import { sessionMiddleware } from "./sessionMiddleware";
 import { uiSlice } from "./uiSlice";
 
 const authPersistConfig = {
@@ -29,7 +30,8 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({ serializableCheck: { ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER] } })
       .concat(api.middleware)
-      .concat(errorMiddleware),
+      .concat(errorMiddleware)
+      .concat(sessionMiddleware),
 });
 
 export const persistor = persistStore(store);

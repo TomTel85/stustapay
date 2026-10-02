@@ -10,6 +10,7 @@ from sftkit.error import InvalidArgument
 
 # Upper bound for uploaded banner payloads (decoded image bytes).
 BANNER_MAX_BYTES: Final[int] = 5 * 1024 * 1024
+BANNER_MAX_PIXELS: Final[int] = 16_000_000
 
 _WHITELIST_FORMAT_TO_MIME: Final[dict[str, str]] = {
     "PNG": "image/png",
@@ -18,6 +19,11 @@ _WHITELIST_FORMAT_TO_MIME: Final[dict[str, str]] = {
     "WEBP": "image/webp",
 }
 _ALLOWED_PIL_FORMATS: Final[tuple[str, ...]] = tuple(_WHITELIST_FORMAT_TO_MIME)
+
+
+def _check_dimensions(image: Image.Image) -> None:
+    if image.width * image.height > BANNER_MAX_PIXELS:
+        raise ValueError("Banner image dimensions exceed the pixel limit")
 
 
 def canonical_mime_for_pil_format(pil_format: str | None) -> str | None:
@@ -41,17 +47,19 @@ def validate_and_prepare_banner_upload(image_data: bytes) -> tuple[bytes, str]:
 
     try:
         with Image.open(BytesIO(image_data), formats=_ALLOWED_PIL_FORMATS) as im:
+            _check_dimensions(im)
             im.verify()
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
         raise InvalidArgument("Banner must be a valid PNG, JPEG, GIF, or WebP image") from exc
 
     try:
         with Image.open(BytesIO(image_data), formats=_ALLOWED_PIL_FORMATS) as im:
+            _check_dimensions(im)
             im.load()
             mime = canonical_mime_for_pil_format(im.format)
             if mime is None:
                 raise InvalidArgument("Banner must be a PNG, JPEG, GIF, or WebP image")
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
         raise InvalidArgument("Banner must be a valid PNG, JPEG, GIF, or WebP image") from exc
 
     return image_data, mime
@@ -69,18 +77,23 @@ def http_response_for_stored_banner(image_data: bytes | None) -> dict[str, objec
     headers: dict[str, str] = {
         "Cache-Control": "public, max-age=3600",
         "Content-Disposition": 'attachment; filename="banner"',
+        "X-Content-Type-Options": "nosniff",
     }
 
     try:
+        if len(image_data) > BANNER_MAX_BYTES:
+            raise ValueError("Banner exceeds byte limit")
         with Image.open(BytesIO(image_data), formats=_ALLOWED_PIL_FORMATS) as im:
+            _check_dimensions(im)
             im.verify()
         with Image.open(BytesIO(image_data), formats=_ALLOWED_PIL_FORMATS) as im:
+            _check_dimensions(im)
             im.load()
             mime = canonical_mime_for_pil_format(im.format)
             if mime is not None:
                 media_type = mime
-                headers = {"Cache-Control": "public, max-age=3600"}
-    except (UnidentifiedImageError, OSError, ValueError):
+                headers = {"Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff"}
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
         pass
 
     return {

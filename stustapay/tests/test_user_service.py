@@ -1,4 +1,5 @@
 # pylint: disable=attribute-defined-outside-init,unexpected-keyword-arg,missing-kwoa
+import asyncio
 import secrets
 from typing import Any
 
@@ -30,6 +31,71 @@ async def test_change_password(user_service: UserService, event_admin_user, even
     await user_service.change_password(token=event_admin_token, old_password=password, new_password="rofl")
 
     await user_service.login_user(username=usr.login, password="rofl")
+    assert await user_service.auth_service.get_user_from_token(token=event_admin_token) is None
+
+
+@pytest.mark.parametrize("password", ["", "a" * 73, "é" * 37, "abc\x00def"])
+def test_password_hash_rejects_unrepresentable_passwords(user_service: UserService, password: str):
+    with pytest.raises(InvalidArgument):
+        user_service._hash_password(password)  # pylint: disable=protected-access
+
+
+def test_password_verification_rejects_truncation_and_missing_hash(user_service: UserService):
+    hashed = user_service._hash_password("a" * 72)  # pylint: disable=protected-access
+    assert user_service._check_password("a" * 72, hashed)  # pylint: disable=protected-access
+    assert not user_service._check_password("a" * 72 + "different", hashed)  # pylint: disable=protected-access
+    assert not user_service._check_password("password", None)  # pylint: disable=protected-access
+    assert not user_service._check_password("abc\x00def", hashed)  # pylint: disable=protected-access
+
+
+async def test_admin_password_reset_revokes_sessions_and_invitations(
+    user_service: UserService,
+    event_admin_token: str,
+    cashier: Any,
+    event_node: Node,
+    mail_service: MailService,
+):
+    await user_service.update_current_user_profile(
+        token=cashier.token, profile=UpdateCurrentUserProfilePayload(email="cashier@example.com")
+    )
+    invitation = await user_service.invite_user(
+        token=event_admin_token, node_id=event_node.id, user_id=cashier.id, mail_service=mail_service
+    )
+    await user_service.change_user_password(
+        token=event_admin_token, node_id=event_node.id, user_id=cashier.id, new_password="reset-password"
+    )
+    assert await user_service.auth_service.get_user_from_token(token=cashier.token) is None
+    with pytest.raises(AccessDenied):
+        await user_service.accept_invitation(
+            payload=AcceptInvitationPayload(token=invitation.token, password="obsolete-invitation")
+        )
+
+
+async def test_invitation_can_only_be_accepted_once_concurrently(
+    user_service: UserService,
+    event_admin_token: str,
+    event_node: Node,
+    mail_service: MailService,
+):
+    user = await user_service.create_user(
+        token=event_admin_token,
+        node_id=event_node.id,
+        new_user=NewUser(
+            login=f"invitation-race-{secrets.token_hex(8)}", display_name="Invited", email="test@example.test"
+        ),
+    )
+    invitation = await user_service.invite_user(
+        token=event_admin_token, node_id=event_node.id, user_id=user.id, mail_service=mail_service
+    )
+    results = await asyncio.gather(
+        *[
+            user_service.accept_invitation(payload=AcceptInvitationPayload(token=invitation.token, password=password))
+            for password in ("first-password", "second-password")
+        ],
+        return_exceptions=True,
+    )
+    assert sum(not isinstance(result, BaseException) for result in results) == 1
+    assert sum(isinstance(result, InvalidArgument) for result in results) == 1
 
 
 async def test_get_current_user_profile_returns_fresh_email(

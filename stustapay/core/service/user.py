@@ -207,7 +207,9 @@ class UserService(Service[Config]):
     @staticmethod
     def _validate_role_privileges(role_node_id: int, privileges: list[Privilege]) -> None:
         if role_node_id != ROOT_NODE_ID and Privilege.global_email_management in privileges:
-            raise InvalidArgument("The global_email_management privilege can only be assigned to roles at the root node")
+            raise InvalidArgument(
+                "The global_email_management privilege can only be assigned to roles at the root node"
+            )
 
     @staticmethod
     def _get_invitation_template_context(
@@ -223,10 +225,20 @@ class UserService(Service[Config]):
         }
 
     def _hash_password(self, password: str) -> str:
+        if not password or "\x00" in password or len(password.encode("utf-8")) > 72:
+            raise InvalidArgument("Password must contain 1 to 72 UTF-8 bytes and no null characters")
         return self.pwd_context.hash(password)
 
-    def _check_password(self, password: str, hashed_password: str) -> bool:
+    def _check_password(self, password: str, hashed_password: str | None) -> bool:
+        if not hashed_password or not password or "\x00" in password or len(password.encode("utf-8")) > 72:
+            return False
         return self.pwd_context.verify(password, hashed_password)
+
+    @staticmethod
+    async def _revoke_password_credentials(*, conn: Connection, user_id: int) -> None:
+        # Password resets must also invalidate previously stolen sessions and pending invitations.
+        await conn.execute("delete from usr_session where usr = $1", user_id)
+        await conn.execute("delete from user_invitation where user_id = $1 and accepted_at is null", user_id)
 
     @classmethod
     def _hash_invitation_token(cls, token: str) -> str:
@@ -533,7 +545,7 @@ class UserService(Service[Config]):
     ) -> Optional[User]:
         new_password_hashed = self._hash_password(new_password)
 
-        ret = await conn.execute(
+        ret = await conn.fetchval(
             "update usr set password = $2 where id = $1 and node_id = $3 returning id",
             user_id,
             new_password_hashed,
@@ -541,6 +553,7 @@ class UserService(Service[Config]):
         )
         if ret is None:
             raise InvalidArgument("User not found")
+        await self._revoke_password_credentials(conn=conn, user_id=user_id)
         return await fetch_user(conn=conn, node=node, user_id=user_id)
 
     @with_db_transaction
@@ -611,9 +624,11 @@ class UserService(Service[Config]):
         self, *, conn: Connection, username: str, password: str, node_id: int | None = None
     ) -> UserLoginResult:
         if node_id is None:
-            potential_users = await conn.fetch("select * from usr where login = $1", username)
+            potential_users = await conn.fetch("select * from usr where login = $1 order by id for update", username)
         else:
-            potential_users = await conn.fetch("select * from usr where login = $1 and node_id = $2", username, node_id)
+            potential_users = await conn.fetch(
+                "select * from usr where login = $1 and node_id = $2 order by id for update", username, node_id
+            )
         if len(potential_users) == 0:
             raise AccessDenied("Invalid username or password")
 
@@ -653,7 +668,7 @@ class UserService(Service[Config]):
     async def change_password(
         self, *, conn: Connection, current_user: CurrentUser, old_password: str, new_password: str
     ):
-        old_password_hashed = await conn.fetchval("select password from usr where id = $1", current_user.id)
+        old_password_hashed = await conn.fetchval("select password from usr where id = $1 for update", current_user.id)
         assert old_password_hashed is not None
         if not self._check_password(old_password, old_password_hashed):
             raise AccessDenied("Invalid password")
@@ -661,6 +676,7 @@ class UserService(Service[Config]):
         new_password_hashed = self._hash_password(new_password)
 
         await conn.execute("update usr set password = $2 where id = $1", current_user.id, new_password_hashed)
+        await self._revoke_password_credentials(conn=conn, user_id=current_user.id)
 
     @with_db_transaction
     @requires_user(node_required=False)
@@ -802,19 +818,25 @@ class UserService(Service[Config]):
         )
 
     @with_db_transaction
-    async def accept_invitation(
-        self, *, conn: Connection, payload: AcceptInvitationPayload
-    ) -> AcceptInvitationResult:
+    async def accept_invitation(self, *, conn: Connection, payload: AcceptInvitationPayload) -> AcceptInvitationResult:
         if payload.token.startswith(self.INVITATION_TOKEN_HASH_PREFIX):
             # Do not allow using already-hashed tokens directly; the raw token must be provided.
             raise AccessDenied("Invalid invitation token")
 
         token_hash = self._hash_invitation_token(payload.token)
+        # Match the lock order used by login and password resets: user first, invitation second.
+        # This also prevents an old-password login from creating a session after revocation.
+        await conn.fetchval(
+            "select id from usr where id = ("
+            "select user_id from user_invitation where token = $1 "
+            "or (token = $2 and token not like $3)) for update",
+            token_hash,
+            payload.token,
+            f"{self.INVITATION_TOKEN_HASH_PREFIX}%",
+        )
         # Find invitation by token
         invitation = await conn.fetchrow(
-            "select * from user_invitation "
-            "where token = $1 "
-            "   or (token = $2 and token not like $3)",
+            "select * from user_invitation where token = $1    or (token = $2 and token not like $3) for update",
             token_hash,
             payload.token,
             f"{self.INVITATION_TOKEN_HASH_PREFIX}%",
@@ -849,6 +871,7 @@ class UserService(Service[Config]):
             datetime.now(),
             invitation["id"],
         )
+        await self._revoke_password_credentials(conn=conn, user_id=user_id)
 
         return AcceptInvitationResult(
             status="success",
