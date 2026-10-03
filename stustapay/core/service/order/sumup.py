@@ -1,3 +1,4 @@
+# pylint: disable=missing-kwoa
 import asyncio
 import logging
 import re
@@ -40,7 +41,11 @@ from stustapay.core.service.order.pending_order import (
     make_topup_bookings,
     save_pending_topup,
 )
-from stustapay.core.service.sumup_link import create_sumup_api_for_node
+from stustapay.core.service.sumup_link import (
+    create_sumup_api_for_access,
+    create_sumup_api_for_node,
+    resolve_sumup_access,
+)
 from stustapay.core.service.till.common import fetch_till, fetch_virtual_till
 from stustapay.core.service.tree.common import (
     fetch_event_node_for_node,
@@ -270,63 +275,83 @@ class SumupService(Service[Config]):
 
         raise InvalidArgument("Invalid pending order type")
 
+    @with_db_transaction
+    async def _apply_pending_checkout(
+        self, *, conn: Connection, pending_order: PendingOrder, checkout: SumUpCheckout | None
+    ) -> CompletedSale | CompletedTicketSale | CompletedTopUp | None:
+        # Re-read and lock local state after provider I/O; competing workers/terminal checks
+        # must serialize the booking, and serialization retries need a fresh transaction.
+        current = await conn.fetch_maybe_one(
+            PendingOrder,
+            "select * from pending_sumup_order where uuid = $1 and status = 'pending' for update",
+            pending_order.uuid,
+        )
+        if current is None:
+            return None
+        existing_order = await conn.fetchrow("select id from ordr where uuid = $1", current.uuid)
+        if existing_order is not None:
+            await conn.execute("update pending_sumup_order set status = 'booked' where uuid = $1", current.uuid)
+            return None
+        if checkout is None:
+            if self._has_pending_order_timed_out(current):
+                await self._mark_pending_order_cancelled(conn=conn, order_uuid=current.uuid)
+            return None
+        if checkout.status == SumUpCheckoutStatus.PAID:
+            return await self._book_paid_pending_order(conn=conn, pending_order=current)
+        if checkout.status == SumUpCheckoutStatus.FAILED:
+            await self._mark_pending_order_cancelled(conn=conn, order_uuid=current.uuid)
+        return None
+
     async def process_pending_order(
         self, conn: Connection, pending_order: PendingOrder
     ) -> CompletedSale | CompletedTicketSale | CompletedTopUp | None:
-        # Number of retry attempts for serialization errors
-        max_retries = 3
-        retry_count = 0
+        try:
+            if await conn.fetchval("select exists(select from ordr where uuid = $1)", pending_order.uuid):
+                return await self._apply_pending_checkout(conn=conn, pending_order=pending_order, checkout=None)
+            checkout = await self._fetch_checkout_for_pending_order(conn=conn, pending_order=pending_order)
+            return await self._apply_pending_checkout(conn=conn, pending_order=pending_order, checkout=checkout)
+        except (asyncpg.exceptions.SerializationError, asyncpg.exceptions.DeadlockDetectedError):
+            # The caller owns this transaction and must retry it in full.
+            raise
+        except SumUpError:
+            self.logger.exception("SumUp API error for pending order %s", pending_order.uuid)
+            return None
+        except Exception:
+            self.logger.exception("Error processing pending order %s", pending_order.uuid)
+            return None
 
-        while retry_count <= max_retries:
-            try:
-                self.logger.debug(f"Processing pending order {pending_order.uuid} (attempt {retry_count + 1})")
+    @with_db_transaction(read_only=True)
+    async def _resolve_worker_sumup_access(self, *, conn: Connection, pending_order: PendingOrder):
+        return await resolve_sumup_access(conn=conn, node_id=pending_order.node_id)
 
-                existing_order = await conn.fetchrow("SELECT id FROM ordr WHERE uuid = $1", pending_order.uuid)
-                if existing_order is not None:
-                    self.logger.info(f"Order {pending_order.uuid} has already been processed")
-                    await conn.execute(
-                        "UPDATE pending_sumup_order SET status = 'booked' WHERE uuid = $1", pending_order.uuid
-                    )
-                    return None
+    @with_db_transaction
+    async def _reconcile_booked_pending_order(self, *, conn: Connection, pending_order: PendingOrder) -> bool:
+        reconciled = await conn.fetchval(
+            "update pending_sumup_order pso set status = 'booked' "
+            "where pso.uuid = $1 and pso.status = 'pending' "
+            "and exists (select from ordr where uuid = pso.uuid) returning pso.uuid",
+            pending_order.uuid,
+        )
+        return reconciled is not None
 
-                try:
-                    sumup_checkout = await self._fetch_checkout_for_pending_order(conn=conn, pending_order=pending_order)
-                    if not sumup_checkout:
-                        self.logger.debug(f"Order {pending_order.uuid} not found in sumup")
-                        if self._has_pending_order_timed_out(pending_order):
-                            await self._mark_pending_order_cancelled(conn=conn, order_uuid=pending_order.uuid)
-                        return None
-
-                    self.logger.info(f"Found checkout for order {pending_order.uuid} with status {sumup_checkout.status}")
-                    if sumup_checkout.status == SumUpCheckoutStatus.PAID:
-                        return await self._book_paid_pending_order(conn=conn, pending_order=pending_order)
-                    elif sumup_checkout.status == SumUpCheckoutStatus.FAILED:
-                        # For failed checkouts, mark as cancelled
-                        await self._mark_pending_order_cancelled(conn=conn, order_uuid=pending_order.uuid)
-                except SumUpError as e:
-                    self.logger.error(f"SumUp API error while finding checkout for order {pending_order.uuid}: {e}")
-                    return None
-                except Exception as e:
-                    self.logger.exception(f"Unexpected error finding checkout for order {pending_order.uuid}: {e}")
-                    return None
-
-                return None
-
-            except asyncpg.exceptions.SerializationError as e:
-                retry_count += 1
-                if retry_count <= max_retries:
-                    # Exponential backoff: wait 0.1s, 0.2s, 0.4s...
-                    wait_time = 0.1 * (2 ** (retry_count - 1))
-                    self.logger.warning(f"Serialization error processing order {pending_order.uuid}, retrying in {wait_time}s (attempt {retry_count}/{max_retries}): {e}")
-                    await asyncio.sleep(wait_time)
-                else:
-                    self.logger.error(f"Failed to process order {pending_order.uuid} after {max_retries} retries due to serialization errors")
-                    return None
-            except Exception as e:
-                self.logger.exception(f"Error processing pending order {pending_order.uuid}: {e}")
-                return None
-
-        return None
+    async def _process_pending_order_in_worker(self, pending_order: PendingOrder) -> None:
+        # Recover stale pending rows from the local ledger even when merchant access
+        # or the payment provider is unavailable. Unbooked orders still need provider I/O.
+        if await self._reconcile_booked_pending_order(pending_order=pending_order):
+            return
+        access = await self._resolve_worker_sumup_access(pending_order=pending_order)
+        if access is None:
+            self.logger.error("Missing merchant connection for pending order %s", pending_order.uuid)
+            return
+        # OAuth token requests also run after the settings transaction has ended.
+        resolved = await create_sumup_api_for_access(access=access, api_factory=self._create_sumup_api)
+        if resolved is None:
+            self.logger.error("Missing merchant connection for pending order %s", pending_order.uuid)
+            return
+        api, _ = resolved
+        checkout = await api.find_checkout(pending_order.uuid)
+        # No database connection is held while talking to the payment provider.
+        await self._apply_pending_checkout(pending_order=pending_order, checkout=checkout)
 
     @with_db_transaction
     @requires_customer
@@ -709,28 +734,23 @@ class SumupService(Service[Config]):
             return
 
         self.logger.info("Starting periodic job to check pending sumup transactions")
-        
+
         while True:
             try:
                 async with self.db_pool.acquire() as conn:
                     pending_orders = await fetch_pending_orders(conn=conn)
-                    self.logger.info(f"Found {len(pending_orders)} pending SumUp orders to process")
-
-                    for pending_order in pending_orders:
-                        self.logger.info(f"Checking pending order uuid = {pending_order.uuid}")
-                        try:
-                            self.logger.info(f"Processing pending order {pending_order.uuid}")
-                            async with conn.transaction(isolation="serializable"):
-                                await self.process_pending_order(conn=conn, pending_order=pending_order)
-                        except Exception as order_err:
-                            self.logger.exception(f"Error processing individual order {pending_order.uuid}: {order_err}")
-                            # Continue with other orders
+                self.logger.info("Found %s pending SumUp orders to process", len(pending_orders))
+                for pending_order in pending_orders:
+                    try:
+                        await self._process_pending_order_in_worker(pending_order)
+                    except Exception:
+                        self.logger.exception("Error processing pending order %s", pending_order.uuid)
             except asyncpg.exceptions.PostgresError as db_err:
                 self.logger.exception(f"Database error in payment processor: {db_err}")
             except Exception as e:
                 self.logger.exception(f"Process pending orders threw an error: {e}")
                 # Sleep a bit longer after an error to avoid hammering the system
                 await asyncio.sleep(10)
-                
+
             # Sleep before checking again
             await asyncio.sleep(SUMUP_CHECKOUT_POLL_INTERVAL.seconds)

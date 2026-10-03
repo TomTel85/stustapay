@@ -1,7 +1,7 @@
 import { useGetProfileQuery, useGetTreeForCurrentUserQuery, useLogoutMutation } from "@/api";
 import { config } from "@/api/common";
 import { HelpRoutes, getNodeIdFromPath } from "@/app/routes";
-import { AppBar, DrawerHeader, Main, LanguageSelect} from "@/components";
+import { AppBar, DrawerHeader, Main, LanguageSelect } from "@/components";
 import { drawerWidth } from "@/components/layouts/constants";
 import { selectCurrentUser, setCurrentUser, useAppDispatch, useAppSelector } from "@/store";
 import {
@@ -34,11 +34,28 @@ import { Navigate, Outlet, Link as RouterLink, useLocation, useNavigate } from "
 import { getCurrentNodePath } from "./currentNodePath";
 import { NavigationTree } from "./navigation-tree";
 
+const sidebarWidthKey = "administration.sidebarWidth";
+const minSidebarWidth = 220;
+const getMaxSidebarWidth = () => Math.max(minSidebarWidth, Math.min(600, window.innerWidth - 400));
+const clampSidebarWidth = (width: number) => Math.round(Math.max(minSidebarWidth, Math.min(getMaxSidebarWidth(), width)));
+
+const readSidebarWidth = () => {
+  try {
+    const saved = Number(window.localStorage.getItem(sidebarWidthKey));
+    return saved > 0 && Number.isFinite(saved) ? clampSidebarWidth(saved) : drawerWidth;
+  } catch {
+    return drawerWidth;
+  }
+};
+
 export const AuthenticatedRoot: React.FC = () => {
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [open, setOpen] = React.useState(!isMobile);
+  const [sidebarWidth, setSidebarWidth] = React.useState(readSidebarWidth);
+  const [resizing, setResizing] = React.useState(false);
+  const resizeStart = React.useRef<{ x: number; width: number } | null>(null);
   const location = useLocation();
   const [logout] = useLogoutMutation();
   const navigate = useNavigate();
@@ -62,8 +79,24 @@ export const AuthenticatedRoot: React.FC = () => {
   React.useEffect(() => {
     if (isMobile) {
       setOpen(false);
+      resizeStart.current = null;
+      setResizing(false);
     }
   }, [isMobile]);
+
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(sidebarWidthKey, String(sidebarWidth));
+    } catch {
+      // Resizing still works when browser storage is unavailable.
+    }
+  }, [sidebarWidth]);
+
+  React.useEffect(() => {
+    const handleResize = () => setSidebarWidth((width) => clampSidebarWidth(width));
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   React.useEffect(() => {
     if (currentProfile) {
@@ -94,7 +127,15 @@ export const AuthenticatedRoot: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: "flex" }}>
+    <Box sx={{
+      display: "flex",
+      "--sidebar-width": `${isMobile ? drawerWidth : sidebarWidth}px`,
+      ...(resizing && {
+        cursor: "col-resize",
+        userSelect: "none",
+        "& .MuiAppBar-root, & main": { transition: "none" },
+      }),
+    }}>
       <CssBaseline />
       <AppBar position="fixed" open={open}>
         <Toolbar sx={{ gap: { xs: 0.5, sm: 1 } }}>
@@ -174,10 +215,10 @@ export const AuthenticatedRoot: React.FC = () => {
       </AppBar>
       <Drawer
         sx={{
-          width: drawerWidth,
+          width: "var(--sidebar-width)",
           flexShrink: 0,
           "& .MuiDrawer-paper": {
-            width: drawerWidth,
+            width: "var(--sidebar-width)",
             boxSizing: "border-box",
           },
         }}
@@ -202,6 +243,70 @@ export const AuthenticatedRoot: React.FC = () => {
           <NavigationTree />
         )}
       </Drawer>
+      {open && !isMobile && (
+        <Box
+          role="separator"
+          aria-label={t("auth.resizeSidebar")}
+          aria-orientation="vertical"
+          aria-valuemin={minSidebarWidth}
+          aria-valuemax={getMaxSidebarWidth()}
+          aria-valuenow={sidebarWidth}
+          tabIndex={0}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.currentTarget.focus();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            resizeStart.current = { x: event.clientX, width: sidebarWidth };
+            setResizing(true);
+          }}
+          onPointerMove={(event) => {
+            if (resizeStart.current) {
+              setSidebarWidth(clampSidebarWidth(resizeStart.current.width + event.clientX - resizeStart.current.x));
+            }
+          }}
+          onLostPointerCapture={() => {
+            resizeStart.current = null;
+            setResizing(false);
+          }}
+          onPointerUp={(event) => event.currentTarget.releasePointerCapture(event.pointerId)}
+          onPointerCancel={() => {
+            resizeStart.current = null;
+            setResizing(false);
+          }}
+          onDoubleClick={() => setSidebarWidth(clampSidebarWidth(drawerWidth))}
+          onKeyDown={(event) => {
+            const step = event.shiftKey ? 50 : 10;
+            const widths: Record<string, number> = {
+              ArrowLeft: sidebarWidth - step,
+              ArrowRight: sidebarWidth + step,
+              Home: minSidebarWidth,
+              End: getMaxSidebarWidth(),
+            };
+            if (event.key in widths) {
+              event.preventDefault();
+              setSidebarWidth(clampSidebarWidth(widths[event.key]));
+            }
+          }}
+          sx={{
+            position: "fixed",
+            top: 0,
+            bottom: 0,
+            left: sidebarWidth - 4,
+            width: 8,
+            zIndex: theme.zIndex.drawer + 1,
+            cursor: "col-resize",
+            touchAction: "none",
+            "&::after": {
+              content: '""',
+              position: "absolute",
+              inset: "0 3px",
+              bgcolor: resizing ? "primary.main" : "transparent",
+            },
+            "&:hover::after, &:focus-visible::after": { bgcolor: "primary.main" },
+          }}
+        />
+      )}
       <Main open={open}>
         <DrawerHeader />
         <TestModeDisclaimer testMode={config.testMode} testModeMessage={config.testModeMessage} />

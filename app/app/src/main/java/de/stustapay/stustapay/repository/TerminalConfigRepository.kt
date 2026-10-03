@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.update
 import java.time.OffsetDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.random.Random
 
 
 /**
@@ -95,6 +96,11 @@ private fun staleOrErrorResult(
     }
 }
 
+internal fun terminalConfigRetryDelayMillis(attempt: Int, jitter: Double = Random.nextDouble()): Long {
+    val ceiling = 1000L * (1L shl (attempt - 1).coerceIn(0, 5))
+    return (ceiling * (0.5 + jitter.coerceIn(0.0, 1.0) * 0.5)).toLong()
+}
+
 @Singleton
 class TerminalConfigRepository @Inject constructor(
     private val registrationRepository: RegistrationRepository,
@@ -125,6 +131,7 @@ class TerminalConfigRepository @Inject constructor(
         }
 
         var ok: Boolean
+        var retryAttempt = 0
         while (true) {
             val result = terminalConfigFetchResult(
                 currentState = _terminalConfigState.value,
@@ -135,7 +142,8 @@ class TerminalConfigRepository @Inject constructor(
             ok = result.ok
 
             if (!ok && keepTrying && result.shouldRetry) {
-                delay(1000)
+                retryAttempt = (retryAttempt + 1).coerceAtMost(6)
+                delay(terminalConfigRetryDelayMillis(retryAttempt))
                 continue
             }
             break

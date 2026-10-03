@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { TextDecoder, TextEncoder } from "util";
 
 (globalThis as typeof globalThis & { TextEncoder: typeof TextEncoder; TextDecoder: typeof TextDecoder }).TextEncoder =
@@ -79,6 +79,10 @@ const { MemoryRouter, Route, Routes } = require("react-router-dom");
 const { AuthenticatedRoot } = require("./AuthenticatedRoot");
 
 describe("AuthenticatedRoot", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   beforeAll(() => {
     Object.defineProperty(window, "matchMedia", {
       writable: true,
@@ -124,5 +128,67 @@ describe("AuthenticatedRoot", () => {
     expect(screen.getByText("Festival > Bar 1")).toBeTruthy();
     expect(screen.getByRole("link", { name: "auth.profile" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "logout" })).toBeTruthy();
+  });
+
+  const renderLayout = () => render(
+    <MemoryRouter initialEntries={["/node/42/products"]}>
+      <Routes>
+        <Route element={<AuthenticatedRoot />}>
+          <Route path="*" element={<div>Outlet</div>} />
+        </Route>
+      </Routes>
+    </MemoryRouter>
+  );
+
+  test("resizes by keyboard, limits the width, and restores the saved preference", () => {
+    const view = renderLayout();
+    const handle = screen.getByRole("separator", { name: "auth.resizeSidebar" });
+    fireEvent.keyDown(handle, { key: "ArrowRight", shiftKey: true });
+    expect(handle.getAttribute("aria-valuenow")).toBe("330");
+    expect(window.localStorage.getItem("administration.sidebarWidth")).toBe("330");
+    view.unmount();
+    renderLayout();
+    const restored = screen.getByRole("separator", { name: "auth.resizeSidebar" });
+    expect(restored.getAttribute("aria-valuenow")).toBe("330");
+    fireEvent.keyDown(restored, { key: "Home" });
+    fireEvent.keyDown(restored, { key: "ArrowLeft" });
+    expect(restored.getAttribute("aria-valuenow")).toBe("220");
+    fireEvent.keyDown(restored, { key: "End" });
+    fireEvent.keyDown(restored, { key: "ArrowRight" });
+    expect(restored.getAttribute("aria-valuenow")).toBe(restored.getAttribute("aria-valuemax"));
+    fireEvent.doubleClick(restored);
+    expect(restored.getAttribute("aria-valuenow")).toBe("280");
+  });
+
+  test("drags the sidebar edge and stops resizing when pointer capture is lost", () => {
+    // JSDOM does not implement pointer events or pointer capture.
+    window.PointerEvent = MouseEvent as typeof PointerEvent;
+    renderLayout();
+    const handle = screen.getByRole("separator", { name: "auth.resizeSidebar" });
+    handle.setPointerCapture = jest.fn();
+    fireEvent.pointerDown(handle, { button: 0, clientX: 280 });
+    fireEvent.pointerMove(handle, { clientX: 380 });
+    expect(handle.getAttribute("aria-valuenow")).toBe("380");
+    fireEvent.lostPointerCapture(handle);
+    fireEvent.pointerMove(handle, { clientX: 480 });
+    expect(handle.getAttribute("aria-valuenow")).toBe("380");
+  });
+
+  test("keeps the fixed mobile sidebar without a resize handle", () => {
+    const matchMedia = jest.spyOn(window, "matchMedia");
+    matchMedia.mockImplementation((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: jest.fn(),
+      removeListener: jest.fn(),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+    }));
+    renderLayout();
+    fireEvent.click(screen.getByRole("button", { name: "open drawer" }));
+    expect(screen.queryByRole("separator", { name: "auth.resizeSidebar" })).toBeNull();
+    matchMedia.mockRestore();
   });
 });

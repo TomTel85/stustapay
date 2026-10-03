@@ -6,7 +6,9 @@ import asyncio
 import logging
 import os
 import re
+import signal
 import subprocess
+from asyncio.subprocess import Process
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -39,6 +41,9 @@ LatexEncoder = UnicodeToLatexEncoder(
     unknown_char_policy="unihex",
     # unknown_char_policy="keep",
 )
+
+PDF_RENDER_TIMEOUT_SECONDS = 120
+_pdf_render_slots = asyncio.Semaphore(2)
 
 TEX_PATH = os.path.join(os.path.abspath(os.path.dirname(__file__)), "tex")
 
@@ -98,7 +103,24 @@ class PdfRenderResult(BaseModel):
     bon: RenderedPdf | None = None
 
 
+async def _terminate_compiler(proc: Process) -> None:
+    try:
+        if os.name == "posix":
+            os.killpg(proc.pid, signal.SIGKILL)
+        elif proc.returncode is None:
+            proc.kill()
+    except ProcessLookupError:
+        pass
+    await proc.communicate()
+
+
 async def pdflatex(file_content: str) -> PdfRenderResult:
+    # Limit active compilers per service process; queued requests create no subprocesses.
+    async with _pdf_render_slots:
+        return await _compile_pdf(file_content)
+
+
+async def _compile_pdf(file_content: str) -> PdfRenderResult:
     """
     renders the given latex template with the context and saves the resulting pdf to out_file
     returns <True, ""> if the pdf was compiled successfully
@@ -122,14 +144,22 @@ async def pdflatex(file_content: str) -> PdfRenderResult:
                 cwd=tmp_dir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                start_new_session=os.name == "posix",
             )
-            stdout, _ = await proc.communicate()
+            try:
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=PDF_RENDER_TIMEOUT_SECONDS)
+            except TimeoutError:
+                await _terminate_compiler(proc)
+                return PdfRenderResult(success=False, msg="PDF compilation timed out")
+            except asyncio.CancelledError:
+                await _terminate_compiler(proc)
+                raise
             # latex failed
             if proc.returncode != 0:
                 msg = stdout.decode("utf-8")[-800:]
                 logger.debug(f"Error generating latex pdf: {msg}")
                 return PdfRenderResult(success=False, msg=msg)
-        except subprocess.SubprocessError as e:
+        except (subprocess.SubprocessError, OSError) as e:
             logger.debug(f"Error generating latex pdf: {e}")
             return PdfRenderResult(success=False, msg=f"latex failed with error {e}")
 

@@ -187,6 +187,14 @@ async def create_sumup_api_for_node(
     access = await resolve_sumup_access(conn=conn, node_id=node_id)
     if access is None:
         return None
+    return await create_sumup_api_for_access(access=access, api_factory=api_factory)
+
+
+async def create_sumup_api_for_access(
+    access: ResolvedSumUpAccess,
+    api_factory: Callable[[str, str], SumUpApi] | None = None,
+) -> tuple[SumUpApi, ResolvedSumUpAccess] | None:
+    """Create a provider client from resolved settings without requiring a database connection."""
     create_api = api_factory or (lambda merchant_code, api_key: SumUpApi(api_key=api_key, merchant_code=merchant_code))
     if access.api_key is not None:
         return create_api(access.merchant_code, access.api_key), access

@@ -244,6 +244,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
     key1: "Hex-codierter key1 dieses Secrets",
   },
   auth: {
+    resizeSidebar: "Seitenleistenbreite ändern",
     signIn: "Anmelden",
     username: "Benutzername",
     password: "Passwort",

@@ -16,6 +16,15 @@ import org.junit.Test
 
 class TerminalConfigRepositoryTest {
     @Test
+    fun `configuration retries back off with bounded jitter`() {
+        assertEquals(500L, terminalConfigRetryDelayMillis(1, 0.0))
+        assertEquals(1000L, terminalConfigRetryDelayMillis(1, 1.0))
+        assertEquals(2000L, terminalConfigRetryDelayMillis(2, 1.0))
+        assertEquals(16000L, terminalConfigRetryDelayMillis(100, 0.0))
+        assertEquals(32000L, terminalConfigRetryDelayMillis(100, 1.0))
+    }
+
+    @Test
     fun `initial fetch failure without prior config emits error and keeps retrying`() {
         val result = terminalConfigFetchResult(
             currentState = TerminalConfigState.NoConfig,

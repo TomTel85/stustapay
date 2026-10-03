@@ -47,20 +47,19 @@ async def fetch_pending_order(conn: Connection, uuid: UUID) -> PendingOrder:
 
 
 async def fetch_pending_online_topup_for_customer(conn: Connection, customer_account_id: int) -> PendingOrder | None:
-    pending_orders = await conn.fetch_many(
+    # The database codec stores model_dump_json() as a JSON string; unwrap it before filtering.
+    return await conn.fetch_maybe_one(
         PendingOrder,
         "select pso.* from pending_sumup_order pso "
         "where pso.status = 'pending' "
         "  and pso.order_type = 'topup' "
         "  and pso.cashier_id is null "
+        "  and (pso.order_content #>> '{}')::json ->> 'payment_method' = 'sumup_online' "
+        "  and (pso.order_content #>> '{}')::json ->> 'customer_account_id' = $1 "
         "  and not exists (select 1 from shared_topup_order sto where sto.order_uuid = pso.uuid) "
-        "order by pso.created_at desc",
+        "order by pso.created_at desc limit 1",
+        str(customer_account_id),
     )
-    for pending_order in pending_orders:
-        topup = load_pending_topup(pending_order)
-        if topup.payment_method == PaymentMethod.sumup_online and topup.customer_account_id == customer_account_id:
-            return pending_order
-    return None
 
 
 async def is_shared_topup_order(conn: Connection, order_uuid: UUID) -> bool:
@@ -68,15 +67,11 @@ async def is_shared_topup_order(conn: Connection, order_uuid: UUID) -> bool:
 
 
 async def fetch_order_by_uuid(conn: Connection, uuid: UUID) -> PendingOrder:
-    return await conn.fetch_one(
-        PendingOrder, "select * from pending_sumup_order where uuid = $1", uuid
-    )
+    return await conn.fetch_one(PendingOrder, "select * from pending_sumup_order where uuid = $1", uuid)
 
 
 async def fetch_order_by_uuid_for_update(conn: Connection, uuid: UUID) -> PendingOrder:
-    return await conn.fetch_one(
-        PendingOrder, "select * from pending_sumup_order where uuid = $1 for update", uuid
-    )
+    return await conn.fetch_one(PendingOrder, "select * from pending_sumup_order where uuid = $1 for update", uuid)
 
 
 SUMUP_INITIAL_CHECK_TIMEOUT = timedelta(seconds=20)
@@ -115,9 +110,7 @@ def load_pending_ticket_sale(pending_order: PendingOrder) -> CompletedTicketSale
     return ticket_sale
 
 
-async def save_pending_sale(
-    conn: Connection, till_id: int, node_id: int, cashier_id: int | None, sale: PendingSale
-):
+async def save_pending_sale(conn: Connection, till_id: int, node_id: int, cashier_id: int | None, sale: PendingSale):
     await conn.execute(
         "insert into pending_sumup_order "
         "(uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content) "
@@ -181,7 +174,9 @@ async def make_sale_bookings(
                 conn=conn, node=node, cash_register_id=current_till.active_cash_register_id
             )
             bookings[
-                BookingIdentifier(source_account_id=cash_entry_acc.id, target_account_id=active_cash_register_account_id)
+                BookingIdentifier(
+                    source_account_id=cash_entry_acc.id, target_account_id=active_cash_register_account_id
+                )
             ] += float(line_item.total_price)
             source_acc_id = get_source_account(OrderType.sale, cash_topup_acc.id)
             target_acc_id = get_target_account(OrderType.sale, product, sale_exit_acc.id)

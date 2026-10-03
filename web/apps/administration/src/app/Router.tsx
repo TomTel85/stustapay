@@ -7,8 +7,6 @@ import { AccountDetail, AccountPageLayout, FindAccounts, SystemAccountList } fro
 import { AcceptInvitation, Login, Profile } from "./routes/auth";
 import { CashierCloseOut, CashierDetail, CashierList, CashierShiftDetail } from "./routes/cashiers";
 import { EventCreate, NodeOverview, MoneyOverview, NodePageLayout, NodeSettings, NodeCreate } from "./routes/nodes";
-import { NodeStats } from "./routes/nodes/stats";
-import { NodeReports } from "./routes/nodes/reports";
 import { OrderBon, OrderDetail, SaleEdit, TransactionDetail } from "./routes/orders";
 import { PayoutRunCreate, PayoutRunDetail, PayoutRunList } from "./routes/payouts";
 import { ProductCreate, ProductDetail, ProductList, ProductUpdate } from "./routes/products";
@@ -66,7 +64,6 @@ import {
   UserToRoleUpdate,
 } from "./routes/users";
 import { SumUpCheckoutList, SumUpPageLayout, SumUpTransactionList, SumUpTransactionDetail } from "./routes/sumup";
-import { DsfinvkExport } from "./routes/nodes/DsfinvkExport";
 import {
   CustomerDetail,
   CustomerOverview,
@@ -77,8 +74,6 @@ import {
 import { TerminalCreate, TerminalDetail, TerminalList, TerminalUpdate } from "./routes/terminals";
 import { SumupOauthCallback } from "./routes/nodes/SumupOauthCallback";
 import { NodeProvider } from "./provider";
-import { HeadwindDevicesPage } from "./routes/mdm";
-import { HelpPage } from "./routes/help";
 import {
   EntryAreaCreate,
   EntryAreaDetail,
@@ -91,6 +86,22 @@ import {
   EntryLogs,
   EntryPageLayout,
 } from "./routes/entry";
+
+const NodeStats = React.lazy(() =>
+  import("./routes/nodes/stats/NodeStats").then((module) => ({ default: module.NodeStats }))
+);
+const NodeReports = React.lazy(() =>
+  import("./routes/nodes/reports/NodeReports").then((module) => ({ default: module.NodeReports }))
+);
+const DsfinvkExport = React.lazy(() =>
+  import("./routes/nodes/DsfinvkExport").then((module) => ({ default: module.DsfinvkExport }))
+);
+const HeadwindDevicesPage = React.lazy(() =>
+  import("./routes/mdm/HeadwindDevicesPage").then((module) => ({ default: module.HeadwindDevicesPage }))
+);
+const HelpPage = React.lazy(() =>
+  import("./routes/help/HelpPage").then((module) => ({ default: module.HelpPage }))
+);
 
 const router = createBrowserRouter([
   {

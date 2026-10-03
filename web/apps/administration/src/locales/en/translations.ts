@@ -236,6 +236,7 @@ export const translations = {
     key1: "Hex encoded key1 of this secret",
   },
   auth: {
+    resizeSidebar: "Resize sidebar",
     signIn: "Sign In",
     username: "Username",
     password: "Password",

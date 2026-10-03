@@ -5,12 +5,13 @@ export const Main = styled("main", { shouldForwardProp: (prop) => prop !== "open
   open?: boolean;
 }>(({ theme, open }) => ({
   flexGrow: 1,
+  minWidth: 0,
   padding: theme.spacing(3),
   transition: theme.transitions.create("margin", {
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
   }),
-  marginLeft: `-${drawerWidth}px`,
+  marginLeft: `calc(-1 * var(--sidebar-width, ${drawerWidth}px))`,
   ...(open && {
     transition: theme.transitions.create("margin", {
       easing: theme.transitions.easing.easeOut,
