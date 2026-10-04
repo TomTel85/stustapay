@@ -253,6 +253,10 @@ export const api = generatedApi.enhanceEndpoints({
       query: (queryArg: GenerateRevenueReportApiArg) => ({
         url: `/tree/nodes/${queryArg.nodeId}/generate-revenue-report`,
         method: "POST",
+        params: {
+          selected_dates: queryArg.selectedDates,
+          day_mode: queryArg.dayMode,
+        },
         responseHandler: async (resp: Response) => window.URL.createObjectURL(await resp.blob()),
       }),
       invalidatesTags: [],
@@ -267,6 +271,7 @@ export const api = generatedApi.enhanceEndpoints({
           till_id: queryArg.tillId,
           subnode_id: queryArg.subnodeId,
           selected_dates: queryArg.selectedDates,
+          day_mode: queryArg.dayMode,
         },
         responseHandler: async (resp: Response) => window.URL.createObjectURL(await resp.blob()),
       }),

@@ -8,7 +8,7 @@ from sftkit.error import AccessDenied, InvalidArgument, NotFound
 
 from stustapay.core.schema.product import NewProduct
 from stustapay.core.schema.tax_rate import TaxRate
-from stustapay.core.schema.terminal import NewTerminal, Terminal, TerminalMode
+from stustapay.core.schema.terminal import NewTerminal, Terminal, TerminalLoginMode, TerminalMode
 from stustapay.core.schema.ticket import NewTicket
 from stustapay.core.schema.till import (
     NewCashRegisterStocking,
@@ -91,12 +91,22 @@ async def _create_node_local_till_setup(
     first_terminal = await terminal_service.create_terminal(
         token=event_admin_token,
         node_id=child_node.id,
-        terminal=NewTerminal(name="Child Terminal 1", description="", mode=TerminalMode.till),
+        terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
+            name="Child Terminal 1",
+            description="",
+            mode=TerminalMode.till,
+        ),
     )
     second_terminal = await terminal_service.create_terminal(
         token=event_admin_token,
         node_id=child_node.id,
-        terminal=NewTerminal(name="Child Terminal 2", description="", mode=TerminalMode.till),
+        terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
+            name="Child Terminal 2",
+            description="",
+            mode=TerminalMode.till,
+        ),
     )
     layout = await till_service.layout.create_layout(
         token=event_admin_token,
@@ -133,7 +143,12 @@ async def _create_other_event_till_setup(
     terminal = await terminal_service.create_terminal(
         token=global_admin_token,
         node_id=other_event.id,
-        terminal=NewTerminal(name="Other Event Terminal", description="", mode=TerminalMode.till),
+        terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
+            name="Other Event Terminal",
+            description="",
+            mode=TerminalMode.till,
+        ),
     )
     layout = await till_service.layout.create_layout(
         token=global_admin_token,

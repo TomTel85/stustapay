@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from stustapay.core.http.auth_user import CurrentAuthToken
 from stustapay.core.http.context import ContextTerminalService
 from stustapay.core.http.normalize_data import NormalizedList, normalize_list
-from stustapay.core.schema.terminal import NewTerminal, Terminal
+from stustapay.core.schema.terminal import NewTerminal, Terminal, UpdateTerminal
 
 router = APIRouter(
     prefix="/terminal",
@@ -42,7 +42,7 @@ async def get_terminal(
 @router.post("/{terminal_id}", response_model=Terminal)
 async def update_terminal(
     terminal_id: int,
-    terminal: NewTerminal,
+    terminal: UpdateTerminal,
     token: CurrentAuthToken,
     terminal_service: ContextTerminalService,
     node_id: int,
@@ -109,10 +109,10 @@ async def login_user(
 ):
     """Login a user to a terminal"""
     await terminal_service.login_user_to_terminal(
-        token=token, 
+        token=token,
         terminal_id=terminal_id,
         node_id=node_id,
-        user_id=login_payload.user_id, 
-        role_id=login_payload.role_id
+        user_id=login_payload.user_id,
+        role_id=login_payload.role_id,
     )
     return {"success": True}

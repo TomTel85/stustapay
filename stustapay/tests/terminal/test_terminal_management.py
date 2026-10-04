@@ -2,7 +2,7 @@ from collections import namedtuple
 
 from sftkit.database import Connection
 
-from stustapay.core.schema.terminal import NewTerminal
+from stustapay.core.schema.terminal import NewTerminal, TerminalLoginMode
 from stustapay.core.schema.till import CashRegister, CashRegisterStocking, NewTill, NewTillProfile, Till, TillProfile
 from stustapay.core.schema.tree import Node
 from stustapay.core.schema.user import NewUser, NewUserToRoles
@@ -66,7 +66,7 @@ async def create_registered_terminal_with_till(
     terminal = await terminal_service.create_terminal(
         token=event_admin_token,
         node_id=event_node.id,
-        terminal=NewTerminal(name=f"{name}-terminal", description=""),
+        terminal=NewTerminal(login_mode=TerminalLoginMode.personal, name=f"{name}-terminal", description=""),
     )
     till = await till_service.create_till(
         token=event_admin_token,

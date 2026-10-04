@@ -9,7 +9,7 @@ import { TerminalForm } from "./TerminalForm";
 import { withPrivilegeGuard } from "@/app/layout";
 
 const initialValues: NewTerminal = {
-  login_mode: "personal",
+  login_mode: "device",
   device_role_id: null,
   device_cash_register_id: null,
   name: "",

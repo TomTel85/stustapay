@@ -7,7 +7,7 @@ import pytest
 from sftkit.database import Connection
 
 from stustapay.core.schema.account import AccountType
-from stustapay.core.schema.terminal import NewTerminal, Terminal
+from stustapay.core.schema.terminal import NewTerminal, Terminal, TerminalLoginMode
 from stustapay.core.schema.till import (
     CashRegister,
     CashRegisterStocking,
@@ -314,7 +314,7 @@ async def create_terminal_token(
         terminal = await terminal_service.create_terminal(
             token=event_admin_token,
             node_id=event_node.id,
-            terminal=NewTerminal(name=secrets.token_hex(16), description=""),
+            terminal=NewTerminal(login_mode=TerminalLoginMode.personal, name=secrets.token_hex(16), description=""),
         )
         await till_service.create_till(
             token=event_admin_token,

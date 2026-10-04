@@ -1570,7 +1570,7 @@ const injectedRtkApi = api
         query: (queryArg) => ({
           url: `/terminal/${queryArg.terminalId}`,
           method: "POST",
-          body: queryArg.newTerminal,
+          body: queryArg.updateTerminal,
           params: {
             node_id: queryArg.nodeId,
           },
@@ -2923,7 +2923,7 @@ export type UpdateTerminalApiResponse = /** status 200 Successful Response */ Te
 export type UpdateTerminalApiArg = {
   terminalId: number;
   nodeId: number;
-  newTerminal: NewTerminal;
+  updateTerminal: UpdateTerminal;
 };
 export type DeleteTerminalApiResponse = /** status 200 Successful Response */ any;
 export type DeleteTerminalApiArg = {
@@ -4838,6 +4838,17 @@ export type NormalizedListTerminalInt = {
 };
 export type NewTerminal = {
   login_mode?: TerminalLoginMode;
+  device_role_id?: number | null;
+  device_cash_register_id?: number | null;
+  name: string;
+  description?: string | null;
+  mode?: TerminalMode;
+  entry_area_id?: number | null;
+  self_service?: boolean;
+  app_display_mode?: AppDisplayMode | null;
+};
+export type UpdateTerminal = {
+  login_mode?: TerminalLoginMode | null;
   device_role_id?: number | null;
   device_cash_register_id?: number | null;
   name: string;

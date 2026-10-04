@@ -1,5 +1,5 @@
 -- migration: 92f445c4
--- requires: 13c7b823
+-- requires: a6f94d21
 
 alter table event add column if not exists tap_to_pay_enabled boolean not null default false;
 

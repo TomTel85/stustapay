@@ -5,7 +5,8 @@ import pytest
 from sftkit.error import AccessDenied, InvalidArgument, NotFound
 
 from stustapay.core.schema.order import Button, NewSale, PaymentMethod
-from stustapay.core.schema.terminal import NewTerminal, TerminalLoginMode
+from stustapay.core.schema.terminal import NewTerminal, TerminalLoginMode, UpdateTerminal
+from stustapay.core.schema.tree import CopyEventOptions, CopyEventRequest
 from stustapay.core.schema.user import UserTag
 from stustapay.core.service.cashier import CloseOut
 from stustapay.tests.terminal.test_sale import sale_products  # noqa: F401
@@ -209,13 +210,58 @@ async def test_device_role_required_and_creation(terminal_service, event_admin_t
         await terminal_service.create_terminal(
             token=event_admin_token,
             node_id=event_node.id,
-            terminal=NewTerminal(name="Missing role", login_mode="device"),
+            terminal=NewTerminal(name="Missing role"),
         )
     created = await terminal_service.create_terminal(
         token=event_admin_token,
         node_id=event_node.id,
-        terminal=NewTerminal(name="Device", login_mode="device", device_role_id=cashier.cashier_role.id),
+        terminal=NewTerminal(name="Device", device_role_id=cashier.cashier_role.id),
     )
+    assert created.login_mode == TerminalLoginMode.device
     registration = await terminal_service.register_terminal(registration_uuid=created.registration_uuid)
     user = await terminal_service.get_current_user(token=registration.token)
     assert user.id == created.device_user_id
+
+
+@pytest.mark.parametrize("payload_type", [NewTerminal, UpdateTerminal])
+@pytest.mark.parametrize("device_mode", [False, True])
+async def test_edit_without_login_mode_preserves_identity(
+    terminal_service, terminal, event_node, event_admin_token, cashier, cash_register, till, payload_type, device_mode
+):
+    assert till.terminal_id == terminal.id
+    original = terminal
+    if device_mode:
+        original = await configure(
+            terminal_service, event_admin_token, event_node, terminal, cashier.cashier_role.id, cash_register.id
+        )
+    updated = await terminal_service.update_terminal(
+        token=event_admin_token,
+        node_id=event_node.id,
+        terminal_id=terminal.id,
+        terminal=payload_type(name="Renamed terminal"),
+    )
+    assert updated.name == "Renamed terminal"
+    assert updated.login_mode == original.login_mode
+    assert updated.device_user_id == original.device_user_id
+    assert updated.active_user_id == original.active_user_id
+    assert updated.device_role_id == original.device_role_id
+    assert updated.device_cash_register_id == original.device_cash_register_id
+
+
+async def test_copy_event_excludes_device_identities(
+    terminal_service, tree_service, db_connection, terminal, event_node, event_admin_token, global_admin_token, cashier
+):
+    managed = await configure(terminal_service, event_admin_token, event_node, terminal, cashier.cashier_role.id)
+    personal_users = await db_connection.fetchval(
+        "select count(*) from usr where node_id = $1 and not is_device_identity", event_node.id
+    )
+    copied = await tree_service.copy_event(
+        token=global_admin_token,
+        node_id=event_node.id,
+        request=CopyEventRequest(name="Device event copy", description="", options=CopyEventOptions()),
+    )
+    assert await db_connection.fetchval("select count(*) from usr where node_id = $1", copied.id) == personal_users
+    copied_terminals = await terminal_service.list_terminals(token=global_admin_token, node_id=copied.id)
+    assert copied_terminals
+    assert all(t.login_mode == TerminalLoginMode.personal and t.device_user_id is None for t in copied_terminals)
+    assert await db_connection.fetchval("select is_device_identity from usr where id = $1", managed.device_user_id)

@@ -12,7 +12,7 @@ from stustapay.core.config import Config
 from stustapay.core.database import get_database, reset_schema
 from stustapay.core.schema.product import NewProduct, ProductRestriction
 from stustapay.core.schema.tax_rate import NewTaxRate, TaxRate
-from stustapay.core.schema.terminal import NewTerminal
+from stustapay.core.schema.terminal import NewTerminal, TerminalLoginMode
 from stustapay.core.schema.ticket import NewTicket
 from stustapay.core.schema.till import (
     NewCashRegister,
@@ -195,7 +195,9 @@ async def _create_admin_tills(
     tills = [NewTill(name=f"Admin {i}", active_profile_id=admin_profile.id) for i in range(n_admin_tills)]
     for till in tills:
         terminal = await terminal_service.create_terminal(
-            token=admin_token, node_id=event_node_id, terminal=NewTerminal(name=till.name, description="")
+            token=admin_token,
+            node_id=event_node_id,
+            terminal=NewTerminal(name=till.name, description="", login_mode=TerminalLoginMode.personal),
         )
         till.terminal_id = terminal.id
         await till_service.create_till(
@@ -420,7 +422,9 @@ async def _create_beverage_tills(
     )
     for node_id, till in tills:
         terminal = await terminal_service.create_terminal(
-            token=admin_token, node_id=event_node_id, terminal=NewTerminal(name=till.name, description="")
+            token=admin_token,
+            node_id=event_node_id,
+            terminal=NewTerminal(name=till.name, description="", login_mode=TerminalLoginMode.personal),
         )
         till.terminal_id = terminal.id
         await till_service.create_till(
@@ -484,7 +488,9 @@ async def _create_ticket_tills(
     tills = [NewTill(name=f"Eintrittskasse {i}", active_profile_id=profile.id) for i in range(n_tills)]
     for till in tills:
         terminal = await terminal_service.create_terminal(
-            token=admin_token, node_id=event_node_id, terminal=NewTerminal(name=till.name, description="")
+            token=admin_token,
+            node_id=event_node_id,
+            terminal=NewTerminal(name=till.name, description="", login_mode=TerminalLoginMode.personal),
         )
         till.terminal_id = terminal.id
         await till_service.create_till(
@@ -532,7 +538,9 @@ async def _create_topup_tills(
     tills = [NewTill(name=f"Aufladekasse {i}", active_profile_id=profile.id) for i in range(n_tills)]
     for till in tills:
         terminal = await terminal_service.create_terminal(
-            token=admin_token, node_id=event_node_id, terminal=NewTerminal(name=till.name, description="")
+            token=admin_token,
+            node_id=event_node_id,
+            terminal=NewTerminal(name=till.name, description="", login_mode=TerminalLoginMode.personal),
         )
         till.terminal_id = terminal.id
         await till_service.create_till(

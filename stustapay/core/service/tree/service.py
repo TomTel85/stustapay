@@ -1321,9 +1321,11 @@ class TreeService(Service[Config]):
                     privilege["privilege"],
                 )
 
+        # Device identities belong to the source terminals; copied terminals start in personal mode.
         users = await conn.fetch(
             "SELECT id, login, password, display_name, description, user_tag_id, transport_account_id, cashier_account_id, "
-            "customer_account_id, cash_register_id, created_by, email FROM usr WHERE node_id = $1",
+            "customer_account_id, cash_register_id, created_by, email FROM usr "
+            "WHERE node_id = $1 AND NOT is_device_identity",
             source_node_id,
         )
         user_mapping: dict[int, int] = {}

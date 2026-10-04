@@ -41,7 +41,7 @@ export const TerminalUpdate: React.FC = withPrivilegeGuard("node_administration"
       initialValues={terminal}
       form={TerminalForm}
       validationSchema={UpdateTerminalSchema}
-      onSubmit={(t) => updateTerminal({ nodeId: terminal.node_id, terminalId: terminal.id, newTerminal: t })}
+      onSubmit={(t) => updateTerminal({ nodeId: terminal.node_id, terminalId: terminal.id, updateTerminal: t })}
     />
   );
 });

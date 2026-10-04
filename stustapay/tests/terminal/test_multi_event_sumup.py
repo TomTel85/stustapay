@@ -13,7 +13,7 @@ from sftkit.error import InvalidArgument
 
 from stustapay.core.schema.account import AccountType
 from stustapay.core.schema.order import NewTicketSale, NewTopUp, PaymentMethod, UserTagScan
-from stustapay.core.schema.terminal import NewTerminal
+from stustapay.core.schema.terminal import NewTerminal, TerminalLoginMode
 from stustapay.core.schema.ticket import NewTicket, NewTicketScan, Ticket
 from stustapay.core.schema.till import NewTill, NewTillLayout, NewTillProfile
 from stustapay.core.schema.tree import ROOT_NODE_ID, NewEvent, Node
@@ -225,7 +225,7 @@ async def _create_event_context(
     terminal = await terminal_service.create_terminal(
         token=admin_token,
         node_id=node.id,
-        terminal=NewTerminal(name=f"{name}-terminal", description=""),
+        terminal=NewTerminal(login_mode=TerminalLoginMode.personal, name=f"{name}-terminal", description=""),
     )
     till = await till_service.create_till(
         token=admin_token,

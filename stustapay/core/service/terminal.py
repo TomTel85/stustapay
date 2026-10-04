@@ -26,6 +26,7 @@ from stustapay.core.schema.terminal import (
     TerminalSecrets,
     TerminalSumupSecrets,
     TerminalTillConfig,
+    UpdateTerminal,
     UserTagSecret,
 )
 from stustapay.core.schema.till import Till, TillProfile, UserInfo, UserRoleInfo
@@ -267,11 +268,24 @@ class TerminalService(Service[Config]):
     @requires_node(object_types=[ObjectType.terminal])
     @requires_user([Privilege.node_administration])
     async def update_terminal(
-        self, *, conn: Connection, node: Node, current_user: CurrentUser, terminal_id: int, terminal: NewTerminal
+        self,
+        *,
+        conn: Connection,
+        node: Node,
+        current_user: CurrentUser,
+        terminal_id: int,
+        terminal: NewTerminal | UpdateTerminal,
     ) -> Terminal:
         existing_terminal = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         if existing_terminal is None:
             raise NotFound(element_type="terminal", element_id=terminal_id)
+        values = terminal.model_dump()
+        if terminal.login_mode is None or "login_mode" not in terminal.model_fields_set:
+            values["login_mode"] = existing_terminal.login_mode
+            for field in ("device_role_id", "device_cash_register_id"):
+                if field not in terminal.model_fields_set:
+                    values[field] = getattr(existing_terminal, field)
+        terminal = NewTerminal.model_validate(values)
         await self._configure_device(conn=conn, current_user=current_user, terminal_id=terminal_id, terminal=terminal)
 
         if terminal.mode == TerminalMode.till:

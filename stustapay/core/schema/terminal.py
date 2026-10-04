@@ -27,7 +27,7 @@ class TerminalLoginMode(enum.Enum):
 
 
 class NewTerminal(BaseModel):
-    login_mode: TerminalLoginMode = TerminalLoginMode.personal
+    login_mode: TerminalLoginMode = TerminalLoginMode.device
     device_role_id: int | None = None
     device_cash_register_id: int | None = None
     name: str
@@ -38,7 +38,12 @@ class NewTerminal(BaseModel):
     app_display_mode: AppDisplayMode | None = None
 
 
+class UpdateTerminal(NewTerminal):
+    login_mode: TerminalLoginMode | None = None  # type: ignore[assignment]
+
+
 class Terminal(NewTerminal):
+    login_mode: TerminalLoginMode = TerminalLoginMode.personal
     device_user_id: int | None = None
     id: int
     node_id: int

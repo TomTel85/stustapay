@@ -10133,7 +10133,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NewTerminal"
+                "$ref": "#/components/schemas/UpdateTerminal"
               }
             }
           }
@@ -17397,7 +17397,7 @@
         "properties": {
           "login_mode": {
             "$ref": "#/components/schemas/TerminalLoginMode",
-            "default": "personal"
+            "default": "device"
           },
           "device_role_id": {
             "anyOf": [
@@ -22798,6 +22798,92 @@
           "group_tag"
         ],
         "title": "UpdateGroupTagPayload"
+      },
+      "UpdateTerminal": {
+        "properties": {
+          "login_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TerminalLoginMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "device_role_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Role Id"
+          },
+          "device_cash_register_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Cash Register Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/TerminalMode",
+            "default": "till"
+          },
+          "entry_area_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Area Id"
+          },
+          "self_service": {
+            "type": "boolean",
+            "title": "Self Service",
+            "default": false
+          },
+          "app_display_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppDisplayMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "UpdateTerminal"
       },
       "UpdateTse": {
         "properties": {

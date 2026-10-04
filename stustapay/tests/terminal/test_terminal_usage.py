@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from sftkit.database import Connection
 
 from stustapay.core.schema.entry import NewEntryArea
-from stustapay.core.schema.terminal import AppDisplayMode, NewTerminal, Terminal, TerminalMode
+from stustapay.core.schema.terminal import AppDisplayMode, NewTerminal, Terminal, TerminalLoginMode, TerminalMode
 from stustapay.core.schema.tree import Node
 from stustapay.core.service.entry import EntryService
 from stustapay.core.service.terminal import TerminalService
@@ -40,6 +40,7 @@ async def test_terminal_self_service_roundtrip(
         token=event_admin_token,
         node_id=event_node.id,
         terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
             name="Self Service",
             description="",
             self_service=True,
@@ -64,7 +65,13 @@ async def test_terminal_self_service_roundtrip(
         token=event_admin_token,
         node_id=event_node.id,
         terminal_id=terminal.id,
-        terminal=NewTerminal(name="Self Service", description="", self_service=False, app_display_mode=AppDisplayMode.night),
+        terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
+            name="Self Service",
+            description="",
+            self_service=False,
+            app_display_mode=AppDisplayMode.night,
+        ),
     )
 
     assert updated_terminal.self_service is False
@@ -83,6 +90,7 @@ async def test_terminal_config_exposes_self_service_flag(
         node_id=event_node.id,
         terminal_id=terminal.id,
         terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
             name="Test Terminal",
             description="",
             self_service=True,
@@ -160,6 +168,7 @@ async def test_entry_and_exit_terminals_clear_self_service(
         token=event_admin_token,
         node_id=event_node.id,
         terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
             name="Entry Terminal",
             description="",
             mode=TerminalMode.entry,
@@ -176,6 +185,7 @@ async def test_entry_and_exit_terminals_clear_self_service(
         token=event_admin_token,
         node_id=event_node.id,
         terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
             name="Exit Terminal",
             description="",
             mode=TerminalMode.exit,
