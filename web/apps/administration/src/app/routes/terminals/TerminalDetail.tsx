@@ -185,7 +185,7 @@ export const TerminalDetail: React.FC = () => {
           onClick: () => setLoginUserOpen(true),
           color: "primary",
           icon: <LoginIcon />,
-          hidden: terminal.active_user_id != null || terminal.mode !== "till",
+          hidden: terminal.login_mode === "device" || terminal.active_user_id != null || terminal.mode !== "till",
         },
         {
           label: t("terminal.logout"),
@@ -198,6 +198,7 @@ export const TerminalDetail: React.FC = () => {
       ]}
     >
       <DetailView>
+        <DetailField label={t("terminal.loginMode.label")} value={t(`terminal.loginMode.${terminal.login_mode ?? "personal"}`)} />
         <DetailField label={t("terminal.id")} value={terminal.id} />
         <DetailField label={t("common.name")} value={terminal.name} />
         <DetailField label={t("common.description")} value={terminal.description} />
@@ -236,13 +237,15 @@ export const TerminalDetail: React.FC = () => {
             <DetailField
               label={t("till.activeUser")}
               linkTo={CashierRoutes.detail(terminal.active_user_id)}
-              value={renderUser(terminal.active_user_id)}
+              value={terminal.login_mode === "device" ? `${t("terminal.loginMode.device")}: ${terminal.name}` : renderUser(terminal.active_user_id)}
             />
-            <ListItem>
-              <Button color="primary" variant="contained" onClick={openConfirmLogoutDialog} startIcon={<LogoutIcon />}>
-                {t("till.forceLogoutUser")}
-              </Button>
-            </ListItem>
+            {terminal.login_mode !== "device" && (
+              <ListItem>
+                <Button color="primary" variant="contained" onClick={openConfirmLogoutDialog} startIcon={<LogoutIcon />}>
+                  {t("till.forceLogoutUser")}
+                </Button>
+              </ListItem>
+            )}
           </>
         )}
         {terminal.registration_uuid != null && (

@@ -91,7 +91,7 @@ private fun loginProfileUiState(
                         is UserState.LoggedIn -> {
                             if (state.user.activeRoleName != null) {
                                 LoginProfileUIState.LoggedIn(
-                                    username = state.user.login,
+                                    username = if (state.user.isDeviceIdentity == true) state.user.displayName else state.user.login,
                                     role = state.user.activeRoleName!!
                                 )
                             } else {

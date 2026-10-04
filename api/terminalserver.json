@@ -2798,6 +2798,11 @@
               }
             ],
             "title": "Cash Register Id"
+          },
+          "is_device_identity": {
+            "type": "boolean",
+            "title": "Is Device Identity",
+            "default": false
           }
         },
         "type": "object",
@@ -3957,6 +3962,32 @@
       },
       "Terminal": {
         "properties": {
+          "login_mode": {
+            "$ref": "#/components/schemas/TerminalLoginMode",
+            "default": "personal"
+          },
+          "device_role_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Role Id"
+          },
+          "device_cash_register_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Cash Register Id"
+          },
           "name": {
             "type": "string",
             "title": "Name"
@@ -4001,6 +4032,17 @@
                 "type": "null"
               }
             ]
+          },
+          "device_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device User Id"
           },
           "id": {
             "type": "integer",
@@ -4154,6 +4196,10 @@
       },
       "TerminalConfig": {
         "properties": {
+          "login_mode": {
+            "$ref": "#/components/schemas/TerminalLoginMode",
+            "default": "personal"
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -4284,6 +4330,14 @@
           "test_mode_message"
         ],
         "title": "TerminalConfig"
+      },
+      "TerminalLoginMode": {
+        "type": "string",
+        "enum": [
+          "personal",
+          "device"
+        ],
+        "title": "TerminalLoginMode"
       },
       "TerminalMode": {
         "type": "string",

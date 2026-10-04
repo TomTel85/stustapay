@@ -9,6 +9,7 @@ from stustapay.core.schema.user import format_user_tag_uid
 
 
 class Cashier(BaseModel):
+    is_device_identity: bool = False
     node_id: int
     id: int
     login: str

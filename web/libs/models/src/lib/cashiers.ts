@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ProductSchema } from "./product";
 
 export const CashierSchema = z.object({
+  is_device_identity: z.boolean().optional(),
   node_id: z.number(),
   id: z.number().int(),
   login: z.string().min(1),

@@ -137,6 +137,10 @@ export const api = generatedApi.enhanceEndpoints({
     "entry-groups",
   ],
   endpoints: {
+    createTerminal: { invalidatesTags: ["terminals", "cashiers", "user-to-roles"] },
+    updateTerminal: { invalidatesTags: ["terminals", "cashiers", "tills", "till-registers", "user-to-roles"] },
+    deleteTerminal: { invalidatesTags: ["terminals", "cashiers", "tills", "user-to-roles"] },
+    closeOutCashier: { invalidatesTags: ["cashiers", "terminals", "tills", "till-registers"] },
     listUsers: {
       providesTags: (result) => generateCacheKeys("users", result),
     },
@@ -267,6 +271,10 @@ export const api = generatedApi.enhanceEndpoints({
       query: (queryArg: GenerateRevenueReportApiArg) => ({
         url: `/tree/nodes/${queryArg.nodeId}/generate-revenue-report`,
         method: "POST",
+        params: {
+          selected_dates: queryArg.selectedDates,
+          day_mode: queryArg.dayMode,
+        },
         responseHandler: async (resp: Response) => window.URL.createObjectURL(await resp.blob()),
       }),
       invalidatesTags: [],
@@ -281,6 +289,7 @@ export const api = generatedApi.enhanceEndpoints({
           till_id: queryArg.tillId,
           subnode_id: queryArg.subnodeId,
           selected_dates: queryArg.selectedDates,
+          day_mode: queryArg.dayMode,
         },
         responseHandler: async (resp: Response) => window.URL.createObjectURL(await resp.blob()),
       }),

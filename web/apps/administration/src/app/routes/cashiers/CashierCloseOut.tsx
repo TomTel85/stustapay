@@ -138,7 +138,7 @@ export const CashierCloseOut: React.FC = () => {
         </ListItem>
       </Paper>
 
-      {cashier.terminal_ids.length !== 0 && (
+      {!cashier.is_device_identity && cashier.terminal_ids.length !== 0 && (
         <Alert severity="error">
           <AlertTitle>{t("closeOut.warningStillLoggedInTitle")}</AlertTitle>
           {t("closeOut.warningStillLoggedIn")}
@@ -192,13 +192,10 @@ export const CashierCloseOut: React.FC = () => {
                       {t("closeOut.difference")}
                     </TableCell>
                     <TableCell align="right">
-                      {formatCurrency(computeDifference(formik.values, denominations, cashDrawerBalance))} (
-                      {(
-                        Math.abs(
-                          computeDifference(formik.values, denominations, cashDrawerBalance) / cashDrawerBalance
-                        ) * 100
-                      ).toFixed(2)}
-                      %)
+                      {formatCurrency(computeDifference(formik.values, denominations, cashDrawerBalance))}
+                      {cashDrawerBalance !== 0 && (
+                        <> ({(Math.abs(computeDifference(formik.values, denominations, cashDrawerBalance) / cashDrawerBalance) * 100).toFixed(2)}%)</>
+                      )}
                     </TableCell>
                   </TableRow>
                 </TableBody>

@@ -1,4 +1,4 @@
-import { NewTerminal, selectEntryAreaAll, useListEntryAreasQuery } from "@/api";
+import { NewTerminal, selectEntryAreaAll, useListEntryAreasQuery, useListUserRolesQuery, useListCashRegistersAdminQuery, selectUserRoleAll, selectCashRegisterAll } from "@/api";
 import { useCurrentNode } from "@/hooks";
 import { FormCheckbox, FormSelect, FormTextField } from "@stustapay/form-components";
 import { Select } from "@stustapay/components";
@@ -23,6 +23,11 @@ export function TerminalForm<T extends NewTerminal>(props: TerminalFormProps<T>)
     }
   );
 
+  const { data: roles } = useListUserRolesQuery({ nodeId: currentNode.id });
+  const { data: registers } = useListCashRegistersAdminQuery({ nodeId: currentNode.id });
+  const isDevice = values.login_mode === "device";
+  const tillId = (values as NewTerminal & { till_id?: number | null }).till_id;
+
   React.useEffect(() => {
     if (values.mode === "till" && values.entry_area_id != null) {
       setFieldValue("entry_area_id", null);
@@ -39,6 +44,48 @@ export function TerminalForm<T extends NewTerminal>(props: TerminalFormProps<T>)
 
   return (
     <>
+      <FormControl fullWidth>
+        <InputLabel id="terminal-login-mode-label">{t("terminal.loginMode.label")}</InputLabel>
+        <MuiSelect
+          labelId="terminal-login-mode-label"
+          label={t("terminal.loginMode.label")}
+          value={values.login_mode ?? "personal"}
+          onChange={(event) => {
+            setFieldValue("login_mode", event.target.value);
+            if (event.target.value === "personal") {
+              setFieldValue("device_role_id", null);
+              setFieldValue("device_cash_register_id", null);
+            }
+          }}
+        >
+          <MenuItem value="personal">{t("terminal.loginMode.personal")}</MenuItem>
+          <MenuItem value="device">{t("terminal.loginMode.device")}</MenuItem>
+        </MuiSelect>
+      </FormControl>
+      {isDevice && (
+        <>
+          <Select
+            multiple={false}
+            options={roles ? selectUserRoleAll(roles) : []}
+            value={roles?.entities[values.device_role_id ?? -1] ?? null}
+            formatOption={(role) => role.name}
+            label={t("terminal.deviceRole")}
+            onChange={(role) => setFieldValue("device_role_id", role?.id ?? null)}
+          />
+          <Select
+            multiple={false}
+            options={registers ? selectCashRegisterAll(registers).filter(
+              (register) => register.current_cashier_id == null || register.id === values.device_cash_register_id
+            ) : []}
+            value={registers?.entities[values.device_cash_register_id ?? -1] ?? null}
+            formatOption={(register) => register.name}
+            label={t("terminal.deviceCashRegister")}
+            disabled={values.mode !== "till" || tillId == null}
+            onChange={(register) => setFieldValue("device_cash_register_id", register?.id ?? null)}
+          />
+          <p>{t("terminal.deviceOperationHint")}</p>
+        </>
+      )}
       <FormTextField autoFocus name="name" label={t("common.name")} formik={props} />
       <FormTextField name="description" label={t("common.description")} formik={props} />
       <FormSelect

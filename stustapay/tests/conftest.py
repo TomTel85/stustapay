@@ -22,7 +22,7 @@ from stustapay.core.config import (
 from stustapay.core.database import get_database
 from stustapay.core.schema.product import ProductRestriction
 from stustapay.core.schema.tax_rate import NewTaxRate, TaxRate
-from stustapay.core.schema.terminal import NewTerminal, Terminal
+from stustapay.core.schema.terminal import NewTerminal, Terminal, TerminalLoginMode
 from stustapay.core.schema.till import (
     NewTill,
     NewTillLayout,
@@ -559,7 +559,11 @@ async def till_profile(
 @pytest.fixture
 async def terminal(terminal_service: TerminalService, event_admin_token: str, event_node: Node) -> Terminal:
     return await terminal_service.create_terminal(
-        token=event_admin_token, node_id=event_node.id, terminal=NewTerminal(name="Test Terminal", description="")
+        token=event_admin_token, node_id=event_node.id, terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
+            name="Test Terminal",
+            description="",
+        )
     )
 
 

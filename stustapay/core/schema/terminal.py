@@ -21,7 +21,15 @@ class AppDisplayMode(enum.Enum):
     night = "night"
 
 
+class TerminalLoginMode(enum.Enum):
+    personal = "personal"
+    device = "device"
+
+
 class NewTerminal(BaseModel):
+    login_mode: TerminalLoginMode = TerminalLoginMode.device
+    device_role_id: int | None = None
+    device_cash_register_id: int | None = None
     name: str
     description: str | None = None
     mode: TerminalMode = TerminalMode.till
@@ -30,7 +38,13 @@ class NewTerminal(BaseModel):
     app_display_mode: AppDisplayMode | None = None
 
 
+class UpdateTerminal(NewTerminal):
+    login_mode: TerminalLoginMode | None = None  # type: ignore[assignment]
+
+
 class Terminal(NewTerminal):
+    login_mode: TerminalLoginMode = TerminalLoginMode.personal
+    device_user_id: int | None = None
     id: int
     node_id: int
     till_id: int | None
@@ -96,7 +110,7 @@ class TerminalTillConfig(BaseModel):
     sumup_secrets: Optional[TerminalSumupSecrets]
     post_payment_allowed: bool
     sumup_payment_enabled: bool
-    
+
     # Add required fields that were missing
     user_privileges: Optional[list[Privilege]]
     secrets: Optional[TerminalSecrets]
@@ -105,6 +119,7 @@ class TerminalTillConfig(BaseModel):
 
 
 class TerminalConfig(BaseModel):
+    login_mode: TerminalLoginMode = TerminalLoginMode.personal
     id: int
     name: str
     description: str | None
@@ -131,6 +146,7 @@ class TerminalRegistrationSuccess(BaseModel):
 
 
 class CurrentTerminal(BaseModel):
+    login_mode: TerminalLoginMode = TerminalLoginMode.personal
     id: int
     node_id: int
     name: str

@@ -9,7 +9,7 @@ from stustapay.core.schema.entry import (
     NewEntryAreaGroupWindow,
     NewEntryGroup,
 )
-from stustapay.core.schema.terminal import NewTerminal, TerminalMode
+from stustapay.core.schema.terminal import NewTerminal, TerminalLoginMode, TerminalMode
 from stustapay.core.schema.tree import NewNode, Node
 from stustapay.core.service.entry import EntryService
 from stustapay.core.service.terminal import TerminalService
@@ -63,6 +63,7 @@ async def test_entry_scan_flow(
         token=event_admin_token,
         node_id=event_node.id,
         terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
             name="Entry Gate",
             description="Entry scanner",
             mode=TerminalMode.entry,
@@ -73,6 +74,7 @@ async def test_entry_scan_flow(
         token=event_admin_token,
         node_id=event_node.id,
         terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
             name="Exit Gate",
             description="Exit scanner",
             mode=TerminalMode.exit,
@@ -127,6 +129,7 @@ async def test_parent_terminal_can_use_child_entry_area(
         token=event_admin_token,
         node_id=event_node.id,
         terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
             name="Shared Entry Terminal",
             description="Shared scanner",
             mode=TerminalMode.entry,
@@ -252,6 +255,7 @@ async def test_entry_scan_allows_any_matching_group_window(
         token=event_admin_token,
         node_id=event_node.id,
         terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
             name="Entry Gate",
             description="Entry scanner",
             mode=TerminalMode.entry,
@@ -311,6 +315,7 @@ async def test_entry_scan_denied_outside_window(
         token=event_admin_token,
         node_id=event_node.id,
         terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
             name="Entry Gate",
             description="Entry scanner",
             mode=TerminalMode.entry,
@@ -344,6 +349,7 @@ async def test_entry_scan_exit_requires_presence(
         token=event_admin_token,
         node_id=event_node.id,
         terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
             name="Exit Gate",
             description="Exit scanner",
             mode=TerminalMode.exit,
@@ -403,6 +409,7 @@ async def test_entry_scan_logs_include_denied(
         token=event_admin_token,
         node_id=event_node.id,
         terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
             name="Entry Gate",
             description="Entry scanner",
             mode=TerminalMode.entry,

@@ -120,6 +120,7 @@ class CurrentUser(BaseModel):
 
     transport_account_id: Optional[int] = None
     cash_register_id: Optional[int] = None
+    is_device_identity: bool = False
 
 
 class UpdateCurrentUserProfilePayload(BaseModel):

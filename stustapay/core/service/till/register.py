@@ -298,7 +298,9 @@ class TillRegisterService(Service[Config]):
                 conducting_user_id=current_user.id,
             )
 
-        await assign_cash_register_to_active_user_till(conn=conn, user_id=user_row["id"], cash_register_id=cash_register_id)
+        await assign_cash_register_to_active_user_till(
+            conn=conn, user_id=user_row["id"], cash_register_id=cash_register_id
+        )
         return True
 
     @with_db_transaction(read_only=False)
@@ -333,6 +335,7 @@ class TillRegisterService(Service[Config]):
 
         # Convert amount to Decimal to match cash_register_balance type
         from decimal import Decimal
+
         amount_decimal = Decimal(str(amount))
 
         if cash_register_balance + amount_decimal < 0:
@@ -425,37 +428,36 @@ class TillRegisterService(Service[Config]):
             cashier_id,
             node.ids_to_event_node,
         )
-        
+
         if cash_register_row is None:
             raise InvalidArgument("Cashier does not exist or does not have a cash register assigned")
-        
+
         cash_register_balance = cash_register_row["balance"]
         cash_register_account_id = cash_register_row["account_id"]
         cash_register_id = cash_register_row["id"]
-        
+
         # Convert amount to Decimal to match cash_register_balance type
         from decimal import Decimal
+
         amount_decimal = Decimal(str(amount))
-        
+
         # For negative amounts, ensure there's enough balance
         if amount_decimal < 0 and cash_register_balance + amount_decimal < 0:
             raise InvalidArgument(
                 f"Insufficient balance on cashier account. Current balance is {cash_register_balance}."
             )
-        
+
         # Get the cash vault account
         cash_vault_acc = await get_system_account_for_node(conn=conn, node=node, account_type=AccountType.cash_vault)
-        
+
         # Find the current till for logging purposes
         virtual_till = await fetch_virtual_till(conn=conn, node=node)
-        
+
         # Create a money transfer record
         bookings: dict[BookingIdentifier, float] = {
-            BookingIdentifier(
-                source_account_id=cash_vault_acc.id, target_account_id=cash_register_account_id
-            ): amount
+            BookingIdentifier(source_account_id=cash_vault_acc.id, target_account_id=cash_register_account_id): amount
         }
-        
+
         await book_money_transfer(
             conn=conn,
             node=node,
@@ -465,13 +467,19 @@ class TillRegisterService(Service[Config]):
             cash_register_id=cash_register_id,
             amount=amount,
         )
-        
+
         return True
 
     @staticmethod
     async def _transfer_cash_register(
         conn: Connection, node: Node, source_cashier_id: int, target_cashier_id: int
     ) -> CashRegister:
+        if await conn.fetchval(
+            "select exists(select 1 from usr where id in ($1, $2) and is_device_identity)",
+            source_cashier_id,
+            target_cashier_id,
+        ):
+            raise InvalidArgument("Close the device shift and assign its next drawer through terminal configuration")
         if source_cashier_id == target_cashier_id:
             raise InvalidArgument("Cashiers must differ")
 
@@ -565,54 +573,62 @@ class TillRegisterService(Service[Config]):
         Directly assign a cash register to a cashier without requiring a transfer or stock up operation.
         The register must not be in use by any cashier or till.
         """
-        # Check if cash register exists and is valid
-        cash_register_account_id: int | None = await conn.fetchval(
-            "select account_id from cash_register where id = $1 and node_id = any($2)",
-            cash_register_id,
-            node.ids_to_event_node,
-        )
-        if cash_register_account_id is None:
-            raise InvalidArgument("Cash register does not exist")
-
-        # Check if the register is already in use
-        till_in_use = await conn.fetchrow(
-            "select t.name from till t where t.active_cash_register_id = $1",
-            cash_register_id,
-        )
-        if till_in_use is not None:
-            raise InvalidArgument(f"Cash register is already in use at till {till_in_use['name']}")
-
-        # Check if any cashier is already using this register
-        user_with_register = await conn.fetchval(
-            "select u.id from usr u where u.cash_register_id = $1",
-            cash_register_id,
-        )
-        if user_with_register is not None:
-            raise InvalidArgument("Cash register is already assigned to another cashier")
-
-        # Check if the target cashier exists and doesn't already have a register
-        cashier = await conn.fetchrow(
-            "select id, cash_register_id from usr where id = $1 and node_id = any($2)",
-            cashier_id,
-            node.ids_to_event_node,
-        )
-        if cashier is None:
-            raise InvalidArgument("Cashier does not exist")
-        if cashier["cash_register_id"] is not None:
-            raise InvalidArgument("The cashier already has an assigned cash register")
-
-        # Assign the register to the cashier
-        await conn.execute("update usr set cash_register_id = $1 where id = $2", cash_register_id, cashier_id)
-
-        # Create a cashier shift start order
-        await book_cashier_shift_start_order(
-            conn=conn, cashier_id=cashier_id, cash_register_id=cash_register_id, node=node
+        if await conn.fetchval("select is_device_identity from usr where id = $1", cashier_id):
+            raise InvalidArgument("Assign device cash drawers through terminal configuration")
+        return await assign_cash_register_admin(
+            conn=conn, node=node, cashier_id=cashier_id, cash_register_id=cash_register_id
         )
 
-        # If the cashier is logged in at a till, select it for the cash register
-        await assign_cash_register_to_active_user_till(
-            conn=conn, user_id=cashier_id, cash_register_id=cash_register_id
-        )
 
-        # Return the updated cash register
-        return await get_cash_register(conn=conn, node=node, register_id=cash_register_id)
+async def assign_cash_register_admin(
+    *, conn: Connection, node: Node, cashier_id: int, cash_register_id: int
+) -> CashRegister:
+    # Serialize assignment of the same drawer before checking occupancy.
+    await conn.fetchval("select id from cash_register where id = $1 for update", cash_register_id)
+    # Check if cash register exists and is valid
+    cash_register_account_id: int | None = await conn.fetchval(
+        "select account_id from cash_register where id = $1 and node_id = any($2)",
+        cash_register_id,
+        node.ids_to_event_node,
+    )
+    if cash_register_account_id is None:
+        raise InvalidArgument("Cash register does not exist")
+
+    # Check if the register is already in use
+    till_in_use = await conn.fetchrow(
+        "select t.name from till t where t.active_cash_register_id = $1",
+        cash_register_id,
+    )
+    if till_in_use is not None:
+        raise InvalidArgument(f"Cash register is already in use at till {till_in_use['name']}")
+
+    # Check if any cashier is already using this register
+    user_with_register = await conn.fetchval(
+        "select u.id from usr u where u.cash_register_id = $1",
+        cash_register_id,
+    )
+    if user_with_register is not None:
+        raise InvalidArgument("Cash register is already assigned to another cashier")
+
+    # Check if the target cashier exists and doesn't already have a register
+    cashier = await conn.fetchrow(
+        "select id, cash_register_id from usr where id = $1 and node_id = any($2)",
+        cashier_id,
+        node.ids_to_event_node,
+    )
+    if cashier is None:
+        raise InvalidArgument("Cashier does not exist")
+    if cashier["cash_register_id"] is not None:
+        raise InvalidArgument("The cashier already has an assigned cash register")
+
+    # Assign the register to the cashier
+    await conn.execute("update usr set cash_register_id = $1 where id = $2", cash_register_id, cashier_id)
+
+    # Create a cashier shift start order
+    await book_cashier_shift_start_order(conn=conn, cashier_id=cashier_id, cash_register_id=cash_register_id, node=node)
+
+    # If the cashier is logged in at a till, select it for the cash register
+    await assign_cash_register_to_active_user_till(conn=conn, user_id=cashier_id, cash_register_id=cash_register_id)
+
+    # Return the updated cash register
+    return await get_cash_register(conn=conn, node=node, register_id=cash_register_id)

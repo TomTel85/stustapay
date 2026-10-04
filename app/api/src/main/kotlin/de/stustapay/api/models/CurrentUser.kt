@@ -37,6 +37,7 @@ import kotlinx.serialization.Contextual
  * @param email 
  * @param transportAccountId 
  * @param cashRegisterId 
+ * @param isDeviceIdentity
  */
 @Serializable
 
@@ -79,10 +80,12 @@ data class CurrentUser (
     val transportAccountId: @Contextual com.ionspin.kotlin.bignum.integer.BigInteger? = null,
 
     @SerialName(value = "cash_register_id")
-    val cashRegisterId: @Contextual com.ionspin.kotlin.bignum.integer.BigInteger? = null
+    val cashRegisterId: @Contextual com.ionspin.kotlin.bignum.integer.BigInteger? = null,
+
+    @SerialName(value = "is_device_identity")
+    val isDeviceIdentity: kotlin.Boolean? = false
 
 ) {
 
 
 }
-

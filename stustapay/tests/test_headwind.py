@@ -1,7 +1,7 @@
 import json
 
 from stustapay.administration.service.headwind import build_headwind_custom3
-from stustapay.core.schema.terminal import HeadwindDeviceMapping, NewTerminal, Terminal
+from stustapay.core.schema.terminal import HeadwindDeviceMapping, NewTerminal, Terminal, TerminalLoginMode
 from stustapay.core.schema.tree import NewNode, Node
 from stustapay.core.service.terminal import TerminalService
 from stustapay.core.service.tree.service import TreeService
@@ -69,7 +69,7 @@ async def test_event_node_lists_and_updates_child_headwind_mappings(
     child_terminal = await terminal_service.create_terminal(
         token=event_admin_token,
         node_id=child_node.id,
-        terminal=NewTerminal(name="Child Terminal", description=""),
+        terminal=NewTerminal(login_mode=TerminalLoginMode.personal, name="Child Terminal", description=""),
     )
 
     terminals = await terminal_service.list_terminals(token=event_admin_token, node_id=event_node.id)

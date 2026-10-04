@@ -2,6 +2,7 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, Mock
 
+import pytest
 from sftkit.database import Connection
 
 from stustapay.core.config import Config
@@ -41,9 +42,7 @@ def test_next_check_after_skips_missed_weeks(config: Config):
     service = _service(config)
     now = datetime(2026, 9, 28, 10, tzinfo=timezone.utc)
 
-    next_check = service.next_check_after(
-        scheduled_check=datetime(2026, 9, 7, 9, tzinfo=timezone.utc), now=now
-    )
+    next_check = service.next_check_after(scheduled_check=datetime(2026, 9, 7, 9, tzinfo=timezone.utc), now=now)
 
     assert next_check > now
     assert next_check.astimezone().weekday() == 0
@@ -54,7 +53,7 @@ def test_payout_reminder_message_is_bilingual_and_links_to_the_event(config: Con
     config.administration.base_url = "https://admin.teamfestlichpay.de/api/admin"
     service = _service(config)
 
-    subject, message, html_message = service._message(
+    subject, message, html_message = service._message(  # pylint: disable=protected-access
         event_name="Test Festival",
         count=2,
         payout_total=Decimal("12.50"),
@@ -71,26 +70,49 @@ def test_payout_reminder_message_is_bilingual_and_links_to_the_event(config: Con
     assert "https://admin.teamfestlichpay.de/node/42/payout-runs" in html_message
 
 
+@pytest.mark.parametrize(
+    "customers, payout_amount, donation_amount",
+    [
+        ([(12.5, 0, False, True)], "12.50", "0.00"),
+        (
+            [(12.5, 2.5, False, True), (20, None, True, True), (5, 99, False, True), (7, 0, False, False)],
+            "10.00",
+            "27.50",
+        ),
+        ([(20, None, True, True)], None, None),
+        ([(5, 99, False, True)], None, None),
+    ],
+)
 async def test_due_reminder_queues_one_email_and_advances_the_schedule(
     config: Config,
     db_connection: Connection,
     event_node: Node,
     event_admin_user: tuple[User, str],
     create_random_user_tag,
+    customers,
+    payout_amount,
+    donation_amount,
 ):
+    assert event_node.event is not None
     admin, _ = event_admin_user
     await db_connection.execute("update usr set email = 'payout-admin@example.test' where id = $1", admin.id)
-    customer_tag = await create_random_user_tag()
-    customer_account_id = await db_connection.fetchval(
-        "insert into account (node_id, user_tag_id, balance, type) values ($1, $2, 12.5, 'private') returning id",
-        event_node.id,
-        customer_tag.id,
-    )
-    await db_connection.execute(
-        "update customer_info set iban = 'DE89370400440532013000', account_name = 'Payout Customer', "
-        "email = 'customer@example.test', has_entered_info = true, payout_export = true where customer_account_id = $1",
-        customer_account_id,
-    )
+    for balance, donation, donate_all, payout_export in customers:
+        customer_tag = await create_random_user_tag()
+        customer_account_id = await db_connection.fetchval(
+            "insert into account (node_id, user_tag_id, balance, type) values ($1, $2, $3, 'private') returning id",
+            event_node.id,
+            customer_tag.id,
+            balance,
+        )
+        await db_connection.execute(
+            "update customer_info set iban = 'DE89370400440532013000', account_name = 'Payout Customer', "
+            "email = 'customer@example.test', has_entered_info = true, "
+            "donation = $2, donate_all = $3, payout_export = $4 where customer_account_id = $1",
+            customer_account_id,
+            donation,
+            donate_all,
+            payout_export,
+        )
     now = datetime.now(timezone.utc)
     await db_connection.execute(
         "update event set payout_reminder_enabled = true, payout_sender = 'payout@teamfestlichpay.de', "
@@ -108,8 +130,18 @@ async def test_due_reminder_queues_one_email_and_advances_the_schedule(
     await service.process_due_reminders(conn=db_connection, now=now)
     await service.process_due_reminders(conn=db_connection, now=now)
 
-    mail_service.send_mail.assert_awaited_once()
-    assert mail_service.send_mail.await_args.kwargs["to_addr"] == "payout-admin@example.test"
-    assert mail_service.send_mail.await_args.kwargs["from_addr"] == f"{event_node.name} Auszahlung <payout@teamfestlichpay.de>"
-    assert "12.50 EUR" in mail_service.send_mail.await_args.kwargs["text_message"]
-    assert await db_connection.fetchval("select payout_reminder_next_check_at > $1 from event where id = $2", now, event_node.event.id)
+    if payout_amount is None:
+        mail_service.send_mail.assert_not_awaited()
+    else:
+        mail_service.send_mail.assert_awaited_once()
+        assert mail_service.send_mail.await_args.kwargs["to_addr"] == "payout-admin@example.test"
+        assert (
+            mail_service.send_mail.await_args.kwargs["from_addr"]
+            == f"{event_node.name} Auszahlung <payout@teamfestlichpay.de>"
+        )
+        message = mail_service.send_mail.await_args.kwargs["text_message"]
+        assert f"{payout_amount} EUR" in message
+        assert f"Spenden: {donation_amount} EUR" in message
+    assert await db_connection.fetchval(
+        "select payout_reminder_next_check_at > $1 from event where id = $2", now, event_node.event.id
+    )

@@ -42,16 +42,21 @@ class PayoutReminderService(Service[Config]):
     @staticmethod
     def next_check_after(*, scheduled_check: datetime, now: datetime) -> datetime:
         """Advance an overdue schedule beyond now so a restart produces one catch-up reminder."""
-        next_check = (scheduled_check.astimezone(PAYOUT_REMINDER_TIMEZONE) + timedelta(days=7)).astimezone(
-            timezone.utc
-        )
+        next_check = (scheduled_check.astimezone(PAYOUT_REMINDER_TIMEZONE) + timedelta(days=7)).astimezone(timezone.utc)
         while next_check <= now:
-            next_check = (next_check.astimezone(PAYOUT_REMINDER_TIMEZONE) + timedelta(days=7)).astimezone(
-                timezone.utc
-            )
+            next_check = (next_check.astimezone(PAYOUT_REMINDER_TIMEZONE) + timedelta(days=7)).astimezone(timezone.utc)
         return next_check
 
-    def _message(self, *, event_name: str, count: int, payout_total: Decimal, donation_total: Decimal, currency: str, node_id: int):
+    def _message(
+        self,
+        *,
+        event_name: str,
+        count: int,
+        payout_total: Decimal,
+        donation_total: Decimal,
+        currency: str,
+        node_id: int,
+    ):
         payout_amount = f"{payout_total:.2f} {currency}"
         donation_amount = f"{donation_total:.2f} {currency}"
         administration_url = derive_invitation_base_url(self.config.administration.base_url)
@@ -106,9 +111,12 @@ class PayoutReminderService(Service[Config]):
                 "update event set payout_reminder_next_check_at = $2 where id = $1", event["event_id"], next_check
             )
             pending = await conn.fetchrow(
-                "select coalesce(sum(c.balance), 0) - coalesce(sum(c.donation), 0) as total_payout_amount, "
-                "coalesce(sum(c.donation), 0) as total_donation_amount, count(*) as n_payouts "
-                "from customers_without_payout_run c where c.node_id = $1",
+                "select coalesce(sum(case when c.donate_all then 0 "
+                "else greatest(0, c.balance - c.donation) end), 0) as total_payout_amount, "
+                "coalesce(sum(case when c.donate_all then c.balance "
+                "else least(c.balance, c.donation) end), 0) as total_donation_amount, "
+                "count(*) as n_payouts "
+                "from customers_without_payout_run c where c.node_id = $1 and c.payout_export",
                 event["node_id"],
             )
             if pending["total_payout_amount"] <= 0:
@@ -156,7 +164,7 @@ class PayoutReminderService(Service[Config]):
         self.logger.info("Starting periodic job to check pending online payouts")
         while True:
             try:
-                await self.process_due_reminders()
+                await self.process_due_reminders()  # pylint: disable=missing-kwoa
             except Exception:
                 self.logger.exception("Failed to process payout reminders")
             await asyncio.sleep(self.CHECK_INTERVAL_SECONDS)

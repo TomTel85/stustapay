@@ -8,7 +8,7 @@ from sftkit.database import Connection
 
 from stustapay.core.schema.language import Language
 from stustapay.core.schema.product import NewProduct
-from stustapay.core.schema.terminal import NewTerminal, TerminalMode
+from stustapay.core.schema.terminal import NewTerminal, TerminalLoginMode, TerminalMode
 from stustapay.core.schema.ticket import NewTicket
 from stustapay.core.schema.till import NewTill, NewTillButton, NewTillLayout, NewTillProfile
 from stustapay.core.schema.tree import (
@@ -600,7 +600,12 @@ async def test_copy_event(
     terminal = await terminal_service.create_terminal(
         token=global_admin_token,
         node_id=original_event.id,
-        terminal=NewTerminal(name="Main Terminal", description="main terminal", mode=TerminalMode.till),
+        terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
+            name="Main Terminal",
+            description="main terminal",
+            mode=TerminalMode.till,
+        ),
     )
     button = await till_service.layout.create_button(
         token=global_admin_token,
@@ -1050,7 +1055,12 @@ async def test_copy_event_tills_without_products_drop_unresolved_links(
     terminal = await terminal_service.create_terminal(
         token=global_admin_token,
         node_id=original_event.id,
-        terminal=NewTerminal(name="Till Copy Terminal", description="terminal", mode=TerminalMode.till),
+        terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
+            name="Till Copy Terminal",
+            description="terminal",
+            mode=TerminalMode.till,
+        ),
     )
     button = await till_service.layout.create_button(
         token=global_admin_token,
@@ -1261,7 +1271,12 @@ async def test_copy_event_sub_nodes_preserve_internal_mappings(
     child_terminal = await terminal_service.create_terminal(
         token=global_admin_token,
         node_id=child_node.id,
-        terminal=NewTerminal(name="Child Terminal", description="terminal", mode=TerminalMode.till),
+        terminal=NewTerminal(
+            login_mode=TerminalLoginMode.personal,
+            name="Child Terminal",
+            description="terminal",
+            mode=TerminalMode.till,
+        ),
     )
     child_button = await till_service.layout.create_button(
         token=global_admin_token,

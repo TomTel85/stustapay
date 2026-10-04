@@ -170,6 +170,8 @@ class CashierService(Service[Config]):
     async def close_out_cashier(
         self, *, conn: Connection, current_user: CurrentUser, node: Node, cashier_id: int, close_out: CloseOut
     ) -> CloseOutResult:
+        await conn.fetch("select id from terminal where device_user_id = $1 order by id for update", cashier_id)
+        await conn.fetchval("select id from usr where id = $1 for update", cashier_id)
         cashier = await self.get_cashier(  # pylint: disable=unexpected-keyword-arg
             conn=conn, current_user=current_user, node=node, cashier_id=cashier_id
         )
@@ -179,7 +181,7 @@ class CashierService(Service[Config]):
         expected_balance = cashier.cash_drawer_balance
 
         is_logged_in = await conn.fetchval("select exists(select from terminal where active_user_id = $1)", cashier_id)
-        if is_logged_in:
+        if is_logged_in and not cashier.is_device_identity:
             raise InvalidCloseOutException("cannot close out a cashier who is logged in at a terminal")
 
         if cashier.cash_register_id is None:
@@ -240,6 +242,10 @@ class CashierService(Service[Config]):
             cashier.cash_register_id,
         )
 
+        await conn.execute(
+            "update till set active_cash_register_id = null where active_cash_register_id = $1",
+            cashier.cash_register_id,
+        )
         virtual_till = await fetch_virtual_till(conn=conn, node=node)
         await conn.execute("update usr set cash_register_id = null where id = $1", cashier.id)
         await conn.execute("update till set z_nr = z_nr + 1 where id = $1", virtual_till.id)

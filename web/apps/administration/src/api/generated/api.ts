@@ -1588,7 +1588,7 @@ const injectedRtkApi = api
         query: (queryArg) => ({
           url: `/terminal/${queryArg.terminalId}`,
           method: "POST",
-          body: queryArg.newTerminal,
+          body: queryArg.updateTerminal,
           params: {
             node_id: queryArg.nodeId,
           },
@@ -2950,7 +2950,7 @@ export type UpdateTerminalApiResponse = /** status 200 Successful Response */ Te
 export type UpdateTerminalApiArg = {
   terminalId: number;
   nodeId: number;
-  newTerminal: NewTerminal;
+  updateTerminal: UpdateTerminal;
 };
 export type DeleteTerminalApiResponse = /** status 200 Successful Response */ any;
 export type DeleteTerminalApiArg = {
@@ -3438,6 +3438,7 @@ export type CurrentUser = {
   email?: string | null;
   transport_account_id?: number | null;
   cash_register_id?: number | null;
+  is_device_identity?: boolean;
 };
 export type UserLoginSuccess = {
   user: CurrentUser;
@@ -4034,6 +4035,7 @@ export type EditSaleProducts = {
   products: BookedProduct[];
 };
 export type Cashier = {
+  is_device_identity?: boolean;
   node_id: number;
   id: number;
   login: string;
@@ -4047,6 +4049,7 @@ export type Cashier = {
   terminal_ids: number[];
 };
 export type CashierRead = {
+  is_device_identity?: boolean;
   node_id: number;
   id: number;
   login: string;
@@ -4832,15 +4835,20 @@ export type SwapCustomerTagPayload = {
   comment: string;
   block_source_tag?: boolean;
 };
+export type TerminalLoginMode = "personal" | "device";
 export type TerminalMode = "till" | "entry" | "exit";
 export type AppDisplayMode = "day" | "night";
 export type Terminal = {
+  login_mode?: TerminalLoginMode;
+  device_role_id?: number | null;
+  device_cash_register_id?: number | null;
   name: string;
   description?: string | null;
   mode?: TerminalMode;
   entry_area_id?: number | null;
   self_service?: boolean;
   app_display_mode?: AppDisplayMode | null;
+  device_user_id?: number | null;
   id: number;
   node_id: number;
   till_id: number | null;
@@ -4856,6 +4864,20 @@ export type NormalizedListTerminalInt = {
   };
 };
 export type NewTerminal = {
+  login_mode?: TerminalLoginMode;
+  device_role_id?: number | null;
+  device_cash_register_id?: number | null;
+  name: string;
+  description?: string | null;
+  mode?: TerminalMode;
+  entry_area_id?: number | null;
+  self_service?: boolean;
+  app_display_mode?: AppDisplayMode | null;
+};
+export type UpdateTerminal = {
+  login_mode?: TerminalLoginMode | null;
+  device_role_id?: number | null;
+  device_cash_register_id?: number | null;
   name: string;
   description?: string | null;
   mode?: TerminalMode;

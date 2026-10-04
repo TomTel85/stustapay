@@ -77,7 +77,10 @@ async def fetch_user_to_roles(*, conn: Connection, node: Node, user_id: int) -> 
 
 async def fetch_user(*, conn: Connection, node: Node, user_id: int) -> User:
     user = await conn.fetch_maybe_one(
-        User, "select * from user_with_tag where id = $1 and node_id = any($2)", user_id, node.ids_to_root
+        User,
+        "select * from user_with_tag where id = $1 and node_id = any($2) and not is_device_identity",
+        user_id,
+        node.ids_to_root,
     )
     if user is None:
         raise NotFound(element_type="user", element_id=user_id)
@@ -94,7 +97,7 @@ async def update_user(*, conn: Connection, node: Node, user_id: int, user: NewUs
     row = await conn.fetchrow(
         "update usr "
         "set login = $2, description = $3, display_name = $4, user_tag_id = $5, email = $6 "
-        "where id = $1 and node_id = $7 returning id",
+        "where id = $1 and node_id = $7 and not is_device_identity returning id",
         user_id,
         user.login,
         user.description,
@@ -148,7 +151,7 @@ async def associate_user_to_role(
     *, conn: Connection, current_user_id: int | None, node: Node, user_id: int, role_id: int
 ):
     user_node_id = await conn.fetchval(
-        "select node_id from usr where node_id = any($1) and id = $2",
+        "select node_id from usr where node_id = any($1) and id = $2 and not is_device_identity",
         node.ids_to_root,
         user_id,
     )
@@ -502,7 +505,7 @@ class UserService(Service[Config]):
                 "select distinct u.* "
                 "from user_with_tag u "
                 "left join user_to_role utr on utr.user_id = u.id "
-                "where u.node_id = any($1) or utr.node_id = any($2) "
+                "where not u.is_device_identity and (u.node_id = any($1) or utr.node_id = any($2)) "
                 "order by u.login",
                 ancestor_and_visible_node_ids,
                 visible_node_ids_list,
@@ -517,7 +520,7 @@ class UserService(Service[Config]):
             "       where $3 = any(up.privileges_at_node) and up.node_id = any($2))) as has_privilege "
             "   from user_with_tag u "
             "   left join user_to_role utr on utr.user_id = u.id "
-            "   where u.node_id = any($1) or utr.node_id = any($2) "
+            "   where not u.is_device_identity and (u.node_id = any($1) or utr.node_id = any($2)) "
             ")"
             "select * from users_by_privilege where has_privilege",
             ancestor_and_visible_node_ids,
@@ -546,7 +549,7 @@ class UserService(Service[Config]):
         new_password_hashed = self._hash_password(new_password)
 
         ret = await conn.fetchval(
-            "update usr set password = $2 where id = $1 and node_id = $3 returning id",
+            "update usr set password = $2 where id = $1 and node_id = $3 and not is_device_identity returning id",
             user_id,
             new_password_hashed,
             node.id,
@@ -561,7 +564,7 @@ class UserService(Service[Config]):
     @requires_user([Privilege.user_management])
     async def delete_user(self, *, conn: Connection, node: Node, user_id: int) -> bool:
         result = await conn.execute(
-            "delete from usr where id = $1 and node_id = $2",
+            "delete from usr where id = $1 and node_id = $2 and not is_device_identity",
             user_id,
             node.id,
         )
@@ -582,6 +585,8 @@ class UserService(Service[Config]):
         self, *, conn: Connection, node: Node, current_user: CurrentUser, user_to_roles: NewUserToRoles
     ) -> UserToRoles:
         print("updating user to roles ...")
+        if await conn.fetchval("select is_device_identity from usr where id = $1", user_to_roles.user_id):
+            raise AccessDenied("Device roles are managed through terminal configuration")
         if len(user_to_roles.role_ids) == 0:
             await conn.execute(
                 "delete from user_to_role where node_id = $1 and user_id = $2", node.id, user_to_roles.user_id
@@ -624,10 +629,14 @@ class UserService(Service[Config]):
         self, *, conn: Connection, username: str, password: str, node_id: int | None = None
     ) -> UserLoginResult:
         if node_id is None:
-            potential_users = await conn.fetch("select * from usr where login = $1 order by id for update", username)
+            potential_users = await conn.fetch(
+                "select * from usr where login = $1 and not is_device_identity order by id for update", username
+            )
         else:
             potential_users = await conn.fetch(
-                "select * from usr where login = $1 and node_id = $2 order by id for update", username, node_id
+                "select * from usr where login = $1 and node_id = $2 and not is_device_identity order by id for update",
+                username,
+                node_id,
             )
         if len(potential_users) == 0:
             raise AccessDenied("Invalid username or password")

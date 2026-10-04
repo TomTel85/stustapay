@@ -75,14 +75,14 @@ export const NewUserSchema = CommonUserSchema.merge(
 
 export type NewUser = z.infer<typeof NewUserSchema>;
 
-export const getUserName = (user?: Pick<User, "login" | "display_name">) => {
+export const getUserName = (user?: Pick<User, "login" | "display_name"> & { is_device_identity?: boolean }) => {
   if (!user) {
     return "";
   }
   if (user.display_name === "" || user.display_name == null) {
     return user.login;
   }
-  return `${user.display_name} (${user.login})`;
+  return user.is_device_identity ? user.display_name : `${user.display_name} (${user.login})`;
 };
 
 export const CurrentUserSchema = UserSchema.merge(

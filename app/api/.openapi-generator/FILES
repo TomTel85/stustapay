@@ -68,6 +68,7 @@ src/main/kotlin/de/stustapay/api/models/SwitchTagPayload.kt
 src/main/kotlin/de/stustapay/api/models/Terminal.kt
 src/main/kotlin/de/stustapay/api/models/TerminalButton.kt
 src/main/kotlin/de/stustapay/api/models/TerminalConfig.kt
+src/main/kotlin/de/stustapay/api/models/TerminalLoginMode.kt
 src/main/kotlin/de/stustapay/api/models/TerminalMode.kt
 src/main/kotlin/de/stustapay/api/models/TerminalRegistrationPayload.kt
 src/main/kotlin/de/stustapay/api/models/TerminalRegistrationSuccess.kt

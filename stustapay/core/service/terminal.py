@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional
+from uuid import uuid4
 
 import asyncpg
 from sftkit.database import Connection
@@ -19,11 +20,13 @@ from stustapay.core.schema.terminal import (
     Terminal,
     TerminalButton,
     TerminalConfig,
+    TerminalLoginMode,
     TerminalMode,
     TerminalRegistrationSuccess,
     TerminalSecrets,
     TerminalSumupSecrets,
     TerminalTillConfig,
+    UpdateTerminal,
     UserTagSecret,
 )
 from stustapay.core.schema.till import Till, TillProfile, UserInfo, UserRoleInfo
@@ -42,6 +45,7 @@ from stustapay.core.service.common.decorators import (
 )
 from stustapay.core.service.sumup_link import resolve_terminal_sumup_access
 from stustapay.core.service.till.common import assign_cash_register_to_active_user_till
+from stustapay.core.service.till.register import assign_cash_register_admin
 from stustapay.core.service.till.till import (
     assign_till_to_terminal,
     logout_user_from_terminal,
@@ -77,7 +81,8 @@ async def _fetch_terminal(conn: Connection, node: Node, terminal_id: int) -> Ter
     scope_node_ids = _terminal_scope_node_ids(node)
     return await conn.fetch_maybe_one(
         Terminal,
-        "select t.*, till.id as till_id "
+        "select t.*, till.id as till_id, "
+        "(select cash_register_id from usr where id = t.device_user_id) as device_cash_register_id "
         "from terminal t "
         "left join till on t.id = till.terminal_id "
         "join node n on t.node_id = n.id "
@@ -122,10 +127,94 @@ class TerminalService(Service[Config]):
 
         self.sumup_oauth_cache: dict[SumUpOAuthCacheKey, SumUpOAuthToken] = {}
 
+    @staticmethod
+    async def _ensure_no_open_device_shift(conn: Connection, terminal_id: int):
+        terminal = await conn.fetchrow("select * from terminal where id = $1 for update", terminal_id)
+        if terminal is not None and await conn.fetchval(
+            "select exists(select 1 from usr where id in ($1, $2) and cash_register_id is not null)",
+            terminal["active_user_id"],
+            terminal["device_user_id"],
+        ):
+            raise InvalidArgument("Close the current cashier shift before changing device operation")
+
+    async def _configure_device(
+        self, *, conn: Connection, current_user: CurrentUser, terminal_id: int, terminal: NewTerminal
+    ):
+        previous = await conn.fetchrow("select * from terminal where id = $1 for update", terminal_id)
+        assert previous is not None
+        terminal_node = await fetch_node(conn=conn, node_id=previous["node_id"])
+        assert terminal_node is not None
+        role_id = terminal.device_role_id if terminal.login_mode == TerminalLoginMode.device else None
+        register_id = terminal.device_cash_register_id
+        if terminal.login_mode == TerminalLoginMode.personal and register_id is not None:
+            raise InvalidArgument("A device cash register requires device operation")
+        current_register = await conn.fetchval(
+            "select cash_register_id from usr where id = $1", previous["device_user_id"]
+        )
+        changed = (
+            previous["login_mode"] != terminal.login_mode.value
+            or previous["device_role_id"] != role_id
+            or current_register != register_id
+            or previous["mode"] != terminal.mode.value
+        )
+        if changed:
+            await self._ensure_no_open_device_shift(conn, terminal_id)
+        if terminal.login_mode == TerminalLoginMode.device:
+            roles = await list_assignable_roles_for_user_at_node(conn=conn, node=terminal_node, user_id=current_user.id)
+            if role_id is None or not any(role.id == role_id for role in roles):
+                raise AccessDenied("Select a device role you are allowed to assign at this terminal")
+            if register_id is not None and terminal.mode != TerminalMode.till:
+                raise InvalidArgument("Only till terminals can have a cash register")
+            user_id = previous["device_user_id"]
+            if user_id is None:
+                account_id = await conn.fetchval(
+                    "insert into account (node_id, type) values ($1, 'private') returning id", terminal_node.id
+                )
+                user_id = await conn.fetchval(
+                    "insert into usr (node_id, login, display_name, customer_account_id, is_device_identity) "
+                    "values ($1, $2, $3, $4, true) returning id",
+                    terminal_node.id,
+                    f"device-{terminal_id}-{uuid4().hex}",
+                    f"Gerät: {terminal.name}",
+                    account_id,
+                )
+            await conn.execute("update usr set display_name = $2 where id = $1", user_id, f"Gerät: {terminal.name}")
+            await conn.execute("delete from user_to_role where user_id = $1", user_id)
+            await conn.execute(
+                "insert into user_to_role (node_id, user_id, role_id) values ($1, $2, $3)",
+                terminal_node.id,
+                user_id,
+                role_id,
+            )
+            await conn.execute(
+                "update terminal set login_mode = 'device', device_role_id = $2, device_user_id = $3, "
+                "active_user_id = $3, active_user_role_id = $2 where id = $1",
+                terminal_id,
+                role_id,
+                user_id,
+            )
+            if register_id is not None and current_register is None:
+                till_id = await conn.fetchval("select id from till where terminal_id = $1", terminal_id)
+                if till_id is None:
+                    raise InvalidArgument("Assign a till before assigning a device cash register")
+                await assign_cash_register_admin(
+                    conn=conn, node=terminal_node, cashier_id=user_id, cash_register_id=register_id
+                )
+        elif previous["login_mode"] == "device":
+            await conn.execute(
+                "update terminal set login_mode = 'personal', device_role_id = null, "
+                "active_user_id = null, active_user_role_id = null where id = $1",
+                terminal_id,
+            )
+            await conn.execute("delete from user_to_role where user_id = $1", previous["device_user_id"])
+            await conn.execute("update till set active_cash_register_id = null where terminal_id = $1", terminal_id)
+
     @with_db_transaction
     @requires_node(object_types=[ObjectType.terminal])
     @requires_user([Privilege.node_administration])
-    async def create_terminal(self, *, conn: Connection, node: Node, terminal: NewTerminal) -> Terminal:
+    async def create_terminal(
+        self, *, conn: Connection, node: Node, current_user: CurrentUser, terminal: NewTerminal
+    ) -> Terminal:
         if terminal.mode == TerminalMode.till:
             if terminal.entry_area_id is not None:
                 raise InvalidArgument("Till terminals cannot be assigned to an entry area")
@@ -146,6 +235,7 @@ class TerminalService(Service[Config]):
             _normalize_self_service(terminal),
             app_display_mode.value if app_display_mode is not None else None,
         )
+        await self._configure_device(conn=conn, current_user=current_user, terminal_id=terminal_id, terminal=terminal)
         t = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         assert t is not None
         return t
@@ -157,7 +247,8 @@ class TerminalService(Service[Config]):
         scope_node_ids = _terminal_scope_node_ids(node)
         return await conn.fetch_many(
             Terminal,
-            "select t.*, till.id as till_id "
+            "select t.*, till.id as till_id, "
+            "(select cash_register_id from usr where id = t.device_user_id) as device_cash_register_id "
             "from terminal t "
             "left join till on t.id = till.terminal_id "
             "join node n on t.node_id = n.id "
@@ -177,11 +268,25 @@ class TerminalService(Service[Config]):
     @requires_node(object_types=[ObjectType.terminal])
     @requires_user([Privilege.node_administration])
     async def update_terminal(
-        self, *, conn: Connection, node: Node, terminal_id: int, terminal: NewTerminal
+        self,
+        *,
+        conn: Connection,
+        node: Node,
+        current_user: CurrentUser,
+        terminal_id: int,
+        terminal: NewTerminal | UpdateTerminal,
     ) -> Terminal:
         existing_terminal = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         if existing_terminal is None:
             raise NotFound(element_type="terminal", element_id=terminal_id)
+        values = terminal.model_dump()
+        if terminal.login_mode is None or "login_mode" not in terminal.model_fields_set:
+            values["login_mode"] = existing_terminal.login_mode
+            for field in ("device_role_id", "device_cash_register_id"):
+                if field not in terminal.model_fields_set:
+                    values[field] = getattr(existing_terminal, field)
+        terminal = NewTerminal.model_validate(values)
+        await self._configure_device(conn=conn, current_user=current_user, terminal_id=terminal_id, terminal=terminal)
 
         if terminal.mode == TerminalMode.till:
             if terminal.entry_area_id is not None:
@@ -219,7 +324,14 @@ class TerminalService(Service[Config]):
         terminal = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         if terminal is None:
             return False
-        result = await conn.execute("delete from terminal where id = $1 and node_id = $2", terminal_id, terminal.node_id)
+        await self._ensure_no_open_device_shift(conn, terminal_id)
+        if terminal.device_user_id is not None:
+            if terminal.till_id is not None:
+                await remove_terminal_from_till(conn=conn, till_id=terminal.till_id)
+            await conn.execute("delete from user_to_role where user_id = $1", terminal.device_user_id)
+        result = await conn.execute(
+            "delete from terminal where id = $1 and node_id = $2", terminal_id, terminal.node_id
+        )
         return result != "DELETE 0"
 
     @with_db_transaction(read_only=False)
@@ -227,7 +339,8 @@ class TerminalService(Service[Config]):
         # TODO: TREE visibility
         terminal = await conn.fetch_maybe_one(
             Terminal,
-            "select t.*, till.id as till_id "
+            "select t.*, till.id as till_id, "
+            "(select cash_register_id from usr where id = t.device_user_id) as device_cash_register_id "
             "from terminal t "
             "left join till on t.id = till.terminal_id "
             "where registration_uuid = $1",
@@ -365,7 +478,7 @@ class TerminalService(Service[Config]):
         # Get cash register information for the terminal
         cash_register_id = till.active_cash_register_id
         cash_register_name = None
-        
+
         # If we have a cash register ID, verify it exists and get its name
         if cash_register_id is not None:
             cash_reg = await conn.fetchrow(
@@ -375,9 +488,9 @@ class TerminalService(Service[Config]):
                 "where cr.id = $1 and (cr.node_id = any($2) OR n.event_node_id = $3)",
                 cash_register_id,
                 event_node.ids_to_root,
-                event_node.id
+                event_node.id,
             )
-            
+
             if cash_reg is not None:
                 cash_register_id = cash_reg["id"]
                 cash_register_name = cash_reg["name"]
@@ -385,10 +498,7 @@ class TerminalService(Service[Config]):
                 # If we didn't find the cash register, set it to None
                 cash_register_id = None
                 # Update the till to remove the invalid cash register
-                await conn.execute(
-                    "update till set active_cash_register_id = null where id = $1", 
-                    till.id
-                )
+                await conn.execute("update till set active_cash_register_id = null where id = $1", till.id)
 
         sumup_secrets = None
         if event_settings.sumup_payment_enabled:
@@ -415,7 +525,7 @@ class TerminalService(Service[Config]):
         # Get terminal information for the required fields
         terminal_obj = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         active_user_id = terminal_obj.active_user_id if terminal_obj else None
-        
+
         # Get user privileges
         user_privileges = None
         if active_user_id:
@@ -427,19 +537,21 @@ class TerminalService(Service[Config]):
                     "GROUP BY ur.role_id) privs ON r.id = privs.role_id WHERE r.id = $1",
                     active_user_role_id,
                 )
-                if user_role and 'privileges' in user_role:
-                    user_privileges = user_role['privileges']
-        
+                if user_role and "privileges" in user_role:
+                    user_privileges = user_role["privileges"]
+
         # Get event name
         event_name = event_node.name if event_node else ""
-        
+
         # Get terminal secrets
         secrets = await self._get_terminal_secrets(conn=conn, event_node=event_node)
-        
+
         # Get available roles
         available_roles = []
         if terminal_obj:
-            available_roles = await self._get_assignable_roles_for_user_at_node(conn=conn, current_terminal=terminal_obj)
+            available_roles = await self._get_assignable_roles_for_user_at_node(
+                conn=conn, current_terminal=terminal_obj
+            )
 
         return TerminalTillConfig(
             id=till.id,
@@ -477,20 +589,22 @@ class TerminalService(Service[Config]):
             "limit 1",
             event_node.id,
         )
-        
+
         # Get event settings to retrieve SumUp information
         event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=event_node.id)
-        
+
         # Default empty values for SumUp fields
         sumup_affiliate_key = ""
         sumup_api_key = ""
         sumup_api_key_expires_at = None
-        
+
         # If SumUp is enabled, set the affiliate key
         if event_settings and event_settings.sumup_payment_enabled:
-            access = await resolve_terminal_sumup_access(conn=conn, node_id=event_node.id, event_settings=event_settings)
+            access = await resolve_terminal_sumup_access(
+                conn=conn, node_id=event_node.id, event_settings=event_settings
+            )
             sumup_affiliate_key = access.affiliate_key if access is not None else ""
-        
+
         # Return the combined secrets in the format expected by the Android app
         return TerminalSecrets(
             sumup_affiliate_key=sumup_affiliate_key,
@@ -502,9 +616,9 @@ class TerminalService(Service[Config]):
     @staticmethod
     async def _get_assignable_roles_for_user_at_node(conn: Connection, current_terminal: Terminal | CurrentTerminal):
         available_roles = []
-        
+
         # Check if we have a CurrentTerminal or a regular Terminal object
-        if hasattr(current_terminal, 'till') and current_terminal.till is not None:
+        if hasattr(current_terminal, "till") and current_terminal.till is not None:
             node = await fetch_node(conn=conn, node_id=current_terminal.till.node_id)
         else:
             node = await fetch_node(conn=conn, node_id=current_terminal.node_id)
@@ -534,7 +648,9 @@ class TerminalService(Service[Config]):
 
         till_config = None
         if current_terminal.till is not None:
-            till = await conn.fetch_one(Till, "select * from till_with_cash_register where id = $1", current_terminal.till.id)
+            till = await conn.fetch_one(
+                Till, "select * from till_with_cash_register where id = $1", current_terminal.till.id
+            )
             till_config = await self._get_terminal_till_config(
                 conn=conn, terminal_id=current_terminal.id, till=till, event_node=event_node
             )
@@ -562,6 +678,7 @@ class TerminalService(Service[Config]):
             event_name=event_node.name,
             description=current_terminal.description,
             mode=current_terminal.mode,
+            login_mode=current_terminal.login_mode,
             entry_area=entry_area,
             self_service=current_terminal.self_service,
             app_display_mode=current_terminal.app_display_mode,
@@ -582,12 +699,16 @@ class TerminalService(Service[Config]):
         node: Node,
         conn: Connection,
         current_user: CurrentUser,
+        current_terminal: CurrentTerminal,
         user_tag: UserTag,
     ) -> list[UserRole]:
         """
         Check if a user can log in to the terminal and return the available roles he can log in as
         """
-        
+
+        if current_terminal.login_mode == TerminalLoginMode.device:
+            raise AccessDenied("Personal login is disabled in device operation")
+
         # Get the event node for the terminal
         event_node_id = node.event_node_id
         if event_node_id is None:
@@ -626,9 +747,9 @@ class TerminalService(Service[Config]):
             "join node n on u.node_id = n.id "
             "where u.user_tag_uid = $1 and (u.node_id = $2 OR n.event_node_id = $2)",
             user_tag.uid,
-            event_node_id
+            event_node_id,
         )
-        
+
         if new_user_id is None:
             raise AccessDenied("User not found in this event")
 
@@ -675,7 +796,7 @@ class TerminalService(Service[Config]):
         # Get the terminal's node and event_node_id
         terminal_node = await fetch_node(conn=conn, node_id=current_terminal.node_id)
         assert terminal_node is not None
-        
+
         # Get the event node for the terminal
         event_node_id = terminal_node.event_node_id
         if event_node_id is None:
@@ -687,12 +808,15 @@ class TerminalService(Service[Config]):
             "select u.id, u.cash_register_id from user_with_tag u "
             "join node n on u.node_id = n.id "
             "where u.user_tag_uid = $1 and (u.node_id = $2 OR n.event_node_id = $2)",
-            user_tag.uid, event_node_id
+            user_tag.uid,
+            event_node_id,
         )
-        
+
         if user_id is None:
             raise AccessDenied("User not found in this event")
 
+        if current_terminal.login_mode == TerminalLoginMode.device:
+            raise AccessDenied("Personal login/logout is disabled in device operation")
         if current_terminal.till is not None:
             await conn.execute("update till set active_cash_register_id = null where id = $1", current_terminal.till.id)
 
@@ -710,10 +834,11 @@ class TerminalService(Service[Config]):
             cash_register_exists = await conn.fetchval(
                 "select exists(select 1 from cash_register cr "
                 "join node n on cr.node_id = n.id "
-                "where cr.id = $1 and (cr.node_id = $2 OR n.event_node_id = $2))", 
-                cash_register_id, event_node_id
+                "where cr.id = $1 and (cr.node_id = $2 OR n.event_node_id = $2))",
+                cash_register_id,
+                event_node_id,
             )
-            
+
             if cash_register_exists:
                 await assign_cash_register_to_active_user_till(
                     conn=conn,
@@ -743,24 +868,22 @@ class TerminalService(Service[Config]):
             WHERE u.id = $1
             """,
             user_id,
-            user_role_id
+            user_role_id,
         )
-        
+
         assert user is not None
         return user
 
     @with_db_transaction(read_only=True)
     @requires_terminal(requires_till=False)
-    async def get_current_user(
-        self, *, conn: Connection, current_terminal: CurrentTerminal
-    ) -> Optional[CurrentUser]:
+    async def get_current_user(self, *, conn: Connection, current_terminal: CurrentTerminal) -> Optional[CurrentUser]:
         """
         Get the user that is currently logged into the terminal
         This is called from the terminal API to get the current user
         """
         if current_terminal.active_user_id is None:
             return None
-            
+
         # Fetch user details and role
         user = await conn.fetch_maybe_one(
             CurrentUser,
@@ -784,9 +907,9 @@ class TerminalService(Service[Config]):
             WHERE u.id = $1 AND t.id = $2
             """,
             current_terminal.active_user_id,
-            current_terminal.id
+            current_terminal.id,
         )
-        
+
         return user
 
     @with_db_transaction
@@ -796,6 +919,8 @@ class TerminalService(Service[Config]):
         Logout the currently logged-in user. This is always possible
         """
 
+        if current_terminal.login_mode == TerminalLoginMode.device:
+            raise AccessDenied("Personal login/logout is disabled in device operation")
         if current_terminal.till is not None:
             await conn.execute("update till set active_cash_register_id = null where id = $1", current_terminal.till.id)
         await conn.fetchval(
@@ -859,7 +984,7 @@ class TerminalService(Service[Config]):
         )
         if user is None:
             raise NotFound(element_type="user_with_tag", element_id=user_tag_uid)
-            
+
         # Get the assigned roles for the user
         assigned_roles = await conn.fetch_many(
             UserRoleInfo,
@@ -878,10 +1003,10 @@ class TerminalService(Service[Config]):
             node.ids_to_root,
             node.id,
         )
-        
+
         # Set the assigned roles
         user.assigned_roles = assigned_roles
-  
+
         return user
 
     @with_db_transaction
@@ -901,35 +1026,43 @@ class TerminalService(Service[Config]):
         Login a User to a terminal by user_id and role_id from the administration API
         """
         del current_user
+        await conn.fetchval("select id from terminal where id = $1 for update", terminal_id)
         terminal = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         if terminal is None:
             raise NotFound(f"Terminal with id {terminal_id} not found")
-            
+
+        if terminal.login_mode == TerminalLoginMode.device:
+            raise AccessDenied("Personal login is disabled in device operation")
+        if await conn.fetchval("select is_device_identity from usr where id = $1", user_id):
+            raise AccessDenied("Device identities cannot log in personally")
+
         # Check if the user has the requested role
         has_role = await conn.fetchval(
-            "select exists(select 1 from user_to_role where user_id = $1 and role_id = $2 and node_id = any($3))", 
-            user_id, role_id, node.ids_to_root
+            "select exists(select 1 from user_to_role where user_id = $1 and role_id = $2 and node_id = any($3))",
+            user_id,
+            role_id,
+            node.ids_to_root,
         )
-        
+
         if not has_role:
             raise AccessDenied("The user does not have the requested role")
-            
+
         # Check if the user exists
         user_exists = await conn.fetchval("select exists(select 1 from usr where id = $1)", user_id)
-        
+
         if not user_exists:
             raise NotFound(f"User with id {user_id} not found")
-            
+
         # Get the cash register id of the user if any
         cash_register_id = await conn.fetchval("select cash_register_id from usr where id = $1", user_id)
-        
+
         # Check if there's a till associated with this terminal
         till = await conn.fetchrow("select * from till where terminal_id = $1", terminal_id)
-        
+
         # If there's a till associated with the terminal and the user has a cash register, update the till
         if till is not None and cash_register_id is not None:
             await conn.execute("update till set active_cash_register_id = null where id = $1", till["id"])
-            
+
         # Update the terminal to set the active user and role
         await conn.execute(
             "update terminal set active_user_id = $1, active_user_role_id = $2 where id = $3",
@@ -937,7 +1070,7 @@ class TerminalService(Service[Config]):
             role_id,
             terminal_id,
         )
-        
+
         # If there's a till and cash register, assign it
         if till is not None and cash_register_id is not None:
             await assign_cash_register_to_active_user_till(
@@ -954,9 +1087,7 @@ class TerminalService(Service[Config]):
     @with_db_transaction(read_only=True)
     @requires_node()
     @requires_user([Privilege.node_administration])
-    async def list_headwind_mappings(
-        self, *, conn: Connection, node: Node
-    ) -> list[HeadwindDeviceMappingWithTerminal]:
+    async def list_headwind_mappings(self, *, conn: Connection, node: Node) -> list[HeadwindDeviceMappingWithTerminal]:
         scope_node_ids = _terminal_scope_node_ids(node)
         return await conn.fetch_many(
             HeadwindDeviceMappingWithTerminal,
@@ -1093,9 +1224,7 @@ class TerminalService(Service[Config]):
     @with_db_transaction
     @requires_node(object_types=[ObjectType.terminal])
     @requires_user([Privilege.node_administration])
-    async def delete_headwind_mapping(
-        self, *, conn: Connection, node: Node, terminal_id: int
-    ) -> bool:
+    async def delete_headwind_mapping(self, *, conn: Connection, node: Node, terminal_id: int) -> bool:
         scope_node_ids = _terminal_scope_node_ids(node)
         mapping = await conn.fetch_maybe_one(
             HeadwindDeviceMapping,

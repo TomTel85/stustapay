@@ -10244,7 +10244,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NewTerminal"
+                "$ref": "#/components/schemas/UpdateTerminal"
               }
             }
           }
@@ -14219,6 +14219,11 @@
       },
       "Cashier": {
         "properties": {
+          "is_device_identity": {
+            "type": "boolean",
+            "title": "Is Device Identity",
+            "default": false
+          },
           "node_id": {
             "type": "integer",
             "title": "Node Id"
@@ -15235,6 +15240,11 @@
               }
             ],
             "title": "Cash Register Id"
+          },
+          "is_device_identity": {
+            "type": "boolean",
+            "title": "Is Device Identity",
+            "default": false
           }
         },
         "type": "object",
@@ -17496,6 +17506,32 @@
       },
       "NewTerminal": {
         "properties": {
+          "login_mode": {
+            "$ref": "#/components/schemas/TerminalLoginMode",
+            "default": "device"
+          },
+          "device_role_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Role Id"
+          },
+          "device_cash_register_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Cash Register Id"
+          },
           "name": {
             "type": "string",
             "title": "Name"
@@ -21402,6 +21438,32 @@
       },
       "Terminal": {
         "properties": {
+          "login_mode": {
+            "$ref": "#/components/schemas/TerminalLoginMode",
+            "default": "personal"
+          },
+          "device_role_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Role Id"
+          },
+          "device_cash_register_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Cash Register Id"
+          },
           "name": {
             "type": "string",
             "title": "Name"
@@ -21446,6 +21508,17 @@
                 "type": "null"
               }
             ]
+          },
+          "device_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device User Id"
           },
           "id": {
             "type": "integer",
@@ -21523,6 +21596,14 @@
           "registration_uuid"
         ],
         "title": "Terminal"
+      },
+      "TerminalLoginMode": {
+        "type": "string",
+        "enum": [
+          "personal",
+          "device"
+        ],
+        "title": "TerminalLoginMode"
       },
       "TerminalMode": {
         "type": "string",
@@ -22828,6 +22909,92 @@
           "group_tag"
         ],
         "title": "UpdateGroupTagPayload"
+      },
+      "UpdateTerminal": {
+        "properties": {
+          "login_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TerminalLoginMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "device_role_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Role Id"
+          },
+          "device_cash_register_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Cash Register Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/TerminalMode",
+            "default": "till"
+          },
+          "entry_area_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Area Id"
+          },
+          "self_service": {
+            "type": "boolean",
+            "title": "Self Service",
+            "default": false
+          },
+          "app_display_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppDisplayMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "UpdateTerminal"
       },
       "UpdateTse": {
         "properties": {
