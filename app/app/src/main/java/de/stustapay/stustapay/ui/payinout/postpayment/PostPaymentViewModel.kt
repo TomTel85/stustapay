@@ -335,6 +335,12 @@ class PostPaymentViewModel @Inject constructor(
 
         val payment = getECPayment(newTopUp)
 
+        // Register the payment before checkout so the backend can reconcile a completed
+        // SumUp transaction if its callback cannot be matched locally.
+        if (!registerTopUp(topUpTypeCard(), newTopUp)) {
+            return
+        }
+
         _status.update { this.context.getString(R.string.topup_status_remove_chip_start_ec) }
 
         // workaround so the sumup activity is not in foreground too quickly.
@@ -347,7 +353,12 @@ class PostPaymentViewModel @Inject constructor(
         when (val paymentResult = ecPaymentRepository.pay(context, payment)) {
             is ECPaymentResult.Failure -> {
                 _status.update { this.context.getString(R.string.topup_status_ec_result, paymentResult.msg) }
-                clearDraft()
+                if (!paymentResult.mayHaveCreatedCharge) {
+                    topUpApi.cancelPendingTopUp(newTopUp.uuid)
+                    clearDraft()
+                } else {
+                    _navState.update { PostPaymentPage.Failure }
+                }
                 return
             }
 
@@ -358,6 +369,30 @@ class PostPaymentViewModel @Inject constructor(
 
         // when successful, book the transaction
         bookTopUp(topUpTypeCard(), newTopUp)
+    }
+
+    private suspend fun registerTopUp(topUpType: String, newTopUp: NewTopUp): Boolean {
+        _status.update { context.getString(R.string.topup_status_announcing, topUpType) }
+
+        return when (val response = topUpApi.registerTopUp(newTopUp)) {
+            is Response.OK -> {
+                _status.update { context.getString(R.string.topup_status_announced, topUpType) }
+                true
+            }
+
+            is Response.Error.Service -> {
+                _status.update { response.msg() }
+                _navState.update { PostPaymentPage.Failure }
+                false
+            }
+
+            is Response.Error -> {
+                val msg = response.msg()
+                _status.update { msg }
+                _errorMessage.update { msg }
+                false
+            }
+        }
     }
 
     suspend fun topUpWithCash(tag: NfcTag) {

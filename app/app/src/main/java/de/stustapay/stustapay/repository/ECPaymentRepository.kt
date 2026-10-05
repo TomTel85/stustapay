@@ -17,6 +17,22 @@ sealed interface ECPaymentResult {
     ) : ECPaymentResult
 }
 
+internal fun verifiedCardPaymentResult(
+    result: SumUpState.Success,
+    expectedTransactionId: String,
+    actualTransactionId: String?,
+): ECPaymentResult {
+    if (expectedTransactionId.isNotBlank() && actualTransactionId == expectedTransactionId) {
+        return ECPaymentResult.Success(result)
+    }
+
+    // A success for another payment (or without an ID) cannot safely be booked or cancelled.
+    return ECPaymentResult.Failure(
+        msg = "Card payment could not be matched to this order. Check the payment status before retrying.",
+        mayHaveCreatedCharge = true,
+    )
+}
+
 @Singleton
 class ECPaymentRepository @Inject constructor(
     private val sumUp: SumUp,
@@ -79,8 +95,6 @@ class ECPaymentRepository @Inject constructor(
             }
         }
 
-        val ret: ECPaymentResult
-
         // proceed to notify the server about the new topup.
         when (sumUpState) {
             is SumUpState.None,
@@ -100,11 +114,12 @@ class ECPaymentRepository @Inject constructor(
             }
 
             is SumUpState.Success -> {
-                ret = ECPaymentResult.Success(sumUpState)
-                // continue
+                return verifiedCardPaymentResult(
+                    result = sumUpState,
+                    expectedTransactionId = ecPayment.id,
+                    actualTransactionId = sumUpState.txInfo?.foreignTransactionId,
+                )
             }
         }
-
-        return ret
     }
 }
