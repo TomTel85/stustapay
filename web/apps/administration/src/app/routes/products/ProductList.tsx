@@ -9,11 +9,7 @@ import {
 } from "@/api";
 import { ProductRoutes } from "@/app/routes";
 import { ListLayout } from "@/components";
-import {
-  ContentCopy as ContentCopyIcon,
-  Delete as DeleteIcon,
-  Edit as EditIcon,
-} from "@mui/icons-material";
+import { ContentCopy as ContentCopyIcon, Delete as DeleteIcon, Edit as EditIcon } from "@mui/icons-material";
 import { Link, Tooltip } from "@mui/material";
 import { DataGrid, GridActionsCellItem, GridColDef } from "@stustapay/framework";
 import { Loading } from "@stustapay/components";
@@ -36,7 +32,7 @@ export const ProductList: React.FC = () => {
     {
       selectFromResult: ({ data, ...rest }) => ({
         ...rest,
-        products: data ? selectProductAll(data).filter(product => product.node_id === currentNode.id) : undefined,
+        products: data ? selectProductAll(data).filter((product) => product.node_id === currentNode.id) : undefined,
       }),
     }
   );
@@ -102,6 +98,7 @@ export const ProductList: React.FC = () => {
       field: "name",
       headerName: t("product.name"),
       flex: 1,
+      minWidth: 180,
       renderCell: (params) => (
         <Link component={RouterLink} to={ProductRoutes.detail(params.row.id)}>
           {params.row.name}
@@ -188,13 +185,7 @@ export const ProductList: React.FC = () => {
 
   return (
     <ListLayout title={t("products")} routes={ProductRoutes}>
-      <DataGrid
-        autoHeight
-        rows={products ?? []}
-        columns={columns}
-        disableRowSelectionOnClick
-        sx={{ p: 1, boxShadow: (theme) => theme.shadows[1] }}
-      />
+      <DataGrid autoHeight rows={products ?? []} columns={columns} disableRowSelectionOnClick sx={{ p: 1 }} />
     </ListLayout>
   );
 };

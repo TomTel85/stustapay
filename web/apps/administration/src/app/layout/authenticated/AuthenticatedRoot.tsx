@@ -44,7 +44,9 @@ const clampSidebarWidth = (width: number) =>
 const readSidebarWidth = () => {
   try {
     const saved = Number(window.localStorage.getItem(sidebarWidthKey));
-    return saved > 0 && Number.isFinite(saved) ? clampSidebarWidth(saved) : drawerWidth;
+    return saved > 0 && Number.isFinite(saved)
+      ? Math.round(Math.max(minSidebarWidth, Math.min(600, saved)))
+      : drawerWidth;
   } catch {
     return drawerWidth;
   }
@@ -87,18 +89,28 @@ export const AuthenticatedRoot: React.FC = () => {
   }, [isMobile]);
 
   React.useEffect(() => {
+    if (isMobile) setOpen(false);
+  }, [isMobile, location.pathname]);
+
+  React.useEffect(() => {
+    if (isMobile) return;
     try {
       window.localStorage.setItem(sidebarWidthKey, String(sidebarWidth));
     } catch {
       // Resizing still works when browser storage is unavailable.
     }
-  }, [sidebarWidth]);
+  }, [sidebarWidth, isMobile]);
 
   React.useEffect(() => {
-    const handleResize = () => setSidebarWidth((width) => clampSidebarWidth(width));
+    const handleResize = () => {
+      if (window.innerWidth >= theme.breakpoints.values.md) {
+        setSidebarWidth((width) => clampSidebarWidth(width));
+      }
+    };
+    handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [theme.breakpoints.values.md]);
 
   React.useEffect(() => {
     if (currentProfile) {
@@ -141,20 +153,21 @@ export const AuthenticatedRoot: React.FC = () => {
       }}
     >
       <CssBaseline />
-      <AppBar position="fixed" open={open}>
+      <AppBar position="fixed" open={open && !isMobile}>
         <Toolbar sx={{ gap: { xs: 0.5, sm: 1 } }}>
           <IconButton
             color="inherit"
-            aria-label="open drawer"
+            aria-label={t("portal.openNavigation")}
             onClick={handleDrawerOpen}
             edge="start"
-            sx={{ mr: 2, ...(open && { display: "none" }) }}
+            sx={{ mr: 1, ...(open && { display: "none" }) }}
           >
             <MenuIcon />
           </IconButton>
           <Box sx={{ flexGrow: 1, minWidth: 0, overflow: "hidden" }}>
             <RouterLink
               to="/"
+              aria-label={t("TeamFestlichPay")}
               style={{
                 textDecoration: "none",
                 color: "inherit",
@@ -164,7 +177,7 @@ export const AuthenticatedRoot: React.FC = () => {
               }}
             >
               <BrandLogo />
-              <Box sx={{ minWidth: 0 }}>
+              <Box sx={{ minWidth: 0, display: { xs: "none", sm: "block" } }}>
                 <Typography
                   variant="h6"
                   component="div"
@@ -176,7 +189,13 @@ export const AuthenticatedRoot: React.FC = () => {
                   <Typography
                     variant="body2"
                     component="div"
-                    sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.85 }}
+                    sx={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      color: "text.secondary",
+                      fontSize: "0.75rem",
+                    }}
                   >
                     {currentNodePath.map((segment) => t(segment)).join(" > ")}
                   </Typography>
@@ -240,24 +259,34 @@ export const AuthenticatedRoot: React.FC = () => {
       </AppBar>
       <Drawer
         sx={{
-          width: "var(--sidebar-width)",
+          width: isMobile ? 0 : "var(--sidebar-width)",
           flexShrink: 0,
           "& .MuiDrawer-paper": {
-            width: "var(--sidebar-width)",
+            width: isMobile ? "min(320px, 88vw)" : "var(--sidebar-width)",
             boxSizing: "border-box",
+            bgcolor: "background.paper",
+            borderRight: 1,
+            borderColor: "divider",
           },
         }}
-        variant="persistent"
+        variant={isMobile ? "temporary" : "persistent"}
         anchor="left"
         open={open}
+        onClose={handleDrawerClose}
       >
-        <DrawerHeader>
-          <IconButton onClick={handleDrawerClose}>
+        <DrawerHeader sx={{ px: 2, gap: 1.5 }}>
+          <BrandLogo />
+          <Typography variant="subtitle2" sx={{ flexGrow: 1, fontWeight: 700 }}>
+            {t("portal.administration")}
+          </Typography>
+          <IconButton onClick={handleDrawerClose} aria-label={t("portal.closeNavigation")} size="small">
             {theme.direction === "ltr" ? <ChevronLeftIcon /> : <ChevronRightIcon />}
           </IconButton>
         </DrawerHeader>
         <Divider />
-        {/* <Sidebar /> */}
+        <Typography variant="overline" color="text.secondary" sx={{ px: 2.5, pt: 2, pb: 1 }}>
+          {t("portal.workspace")}
+        </Typography>
         {isTreeLoading ? (
           <Loading />
         ) : treeError ? (
@@ -332,8 +361,13 @@ export const AuthenticatedRoot: React.FC = () => {
           }}
         />
       )}
-      <Main open={open}>
+      <Main open={open || isMobile}>
         <DrawerHeader />
+        {isMobile && currentNodePath && currentNodePath.length > 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2, overflowWrap: "anywhere" }}>
+            {currentNodePath.map((segment) => t(segment)).join(" / ")}
+          </Typography>
+        )}
         <TestModeDisclaimer testMode={config.testMode} testModeMessage={config.testModeMessage} />
         <React.Suspense fallback={<CircularProgress />}>
           {isTreeLoading ? (

@@ -6,6 +6,19 @@ type NestedPartialAsStrings<T extends object> = {
 
 export const translations: NestedPartialAsStrings<Translations> = {
   TeamFestlichPay: "TeamFestlichPay",
+  portal: {
+    administration: "Administration",
+    workspace: "Arbeitsbereich",
+    closeNavigation: "Navigation schließen",
+    openNavigation: "Navigation öffnen",
+    back: "Zurück",
+    loginTitle: "Dein Event.\nEin Überblick.",
+    loginDescription: "Verwalte Verkäufe, Teams und Terminals an einem Ort.",
+    loginHint: "Melde dich in deinem Event-Arbeitsbereich an.",
+    sales: "Verkäufe",
+    teams: "Teams",
+    terminals: "Terminals",
+  },
   cashiers: "Kassierer",
   advanced: "Fortgeschritten",
   accounts: "Konten",
@@ -911,6 +924,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
     user: "Benutzer",
     users: "Benutzer",
     roles: "Rollen",
+    assignRoles: "Rollen zuordnen",
     login: "Anmeldung",
     displayName: "Anzeigename",
     description: "Beschreibung",

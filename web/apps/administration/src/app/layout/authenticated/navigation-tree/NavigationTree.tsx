@@ -18,12 +18,12 @@ import {
   EditOff as EditOffIcon,
 } from "@mui/icons-material";
 import { SimpleTreeView } from "@mui/x-tree-view";
+import { alpha } from "@mui/material/styles";
 import * as React from "react";
 import { useLocation } from "react-router-dom";
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from "react-i18next";
 import { NavigationTreeItem } from "./NavigationTreeItem";
 import { NodeMenu, isMenuEntryValidAtNode, nodeMenuEntryDefinitions } from "./NodeMenu";
-
 
 const getNavigationTreeItemLabel = (node: Node) => {
   if (node.event) {
@@ -124,7 +124,25 @@ export const NavigationTree: React.FC = () => {
       selectedItems={selected}
       onExpandedItemsChange={handleToggle}
       onSelectedItemsChange={handleSelect}
-      sx={{ flexGrow: 1, overflowX: "auto" }}
+      sx={(theme) => ({
+        flexGrow: 1,
+        overflowX: "auto",
+        px: 1,
+        pb: 2,
+        "& .MuiTreeItem-content": {
+          borderRadius: 1,
+          minHeight: 42,
+          my: 0.25,
+          color: "text.secondary",
+          "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.06) },
+          "&.Mui-selected, &.Mui-selected:hover, &.Mui-selected.Mui-focused": {
+            bgcolor: alpha(theme.palette.primary.main, 0.12),
+            color: "primary.main",
+            "& .MuiTypography-root": { fontWeight: 700 },
+          },
+        },
+        "& .MuiTreeItem-groupTransition": { ml: 1.5, pl: 1, borderLeft: 1, borderColor: "divider" },
+      })}
     >
       {renderTree(tree)}
     </SimpleTreeView>

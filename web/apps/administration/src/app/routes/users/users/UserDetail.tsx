@@ -1,9 +1,9 @@
 import { useDeleteUserMutation, useGetUserQuery, UserRead } from "@/api";
-import { UserRoutes, UserTagRoutes } from "@/app/routes";
+import { UserRoutes, UserTagRoutes, UserToRoleRoutes } from "@/app/routes";
 import { DetailField, DetailLayout, DetailView } from "@/components";
-import { useCurrentNode } from "@/hooks";
+import { useCurrentNode, useCurrentUserHasPrivilegeAtNode } from "@/hooks";
 import { selectAuthToken, useAppSelector } from "@/store";
-import { Delete as DeleteIcon, Edit as EditIcon, Mail as MailIcon } from "@mui/icons-material";
+import { Delete as DeleteIcon, Edit as EditIcon, GroupAdd as GroupAddIcon, Mail as MailIcon } from "@mui/icons-material";
 import { Loading } from "@stustapay/components";
 import { useOpenModal } from "@stustapay/modal-provider";
 import * as React from "react";
@@ -14,6 +14,7 @@ import { toast } from "react-toastify";
 export const UserDetail: React.FC = () => {
   const { t } = useTranslation();
   const { currentNode } = useCurrentNode();
+  const canManageUserRolesAtNode = useCurrentUserHasPrivilegeAtNode(UserToRoleRoutes.privilege);
   const { userId } = useParams();
   const navigate = useNavigate();
   const [deleteUser] = useDeleteUserMutation();
@@ -74,6 +75,16 @@ export const UserDetail: React.FC = () => {
       routes={UserRoutes}
       elementNodeId={user.node_id}
       actions={[
+        ...(canManageUserRolesAtNode(user.node_id)
+          ? [
+              {
+                label: t("user.assignRoles"),
+                onClick: () => navigate(UserToRoleRoutes.edit(user.id, user.node_id)),
+                color: "primary" as const,
+                icon: <GroupAddIcon />,
+              },
+            ]
+          : []),
         {
           label: t("user.invite"),
           onClick: handleInvite,

@@ -2,13 +2,14 @@ import { fetchConfig } from "@/api/common";
 import { BrandLogo, logoSrc } from "@/components/BrandLogo";
 import { useAppSelector } from "@/store";
 import { selectTheme } from "@/store/uiSlice";
-import { Box, createTheme, CssBaseline, PaletteMode, ThemeProvider, Typography, useMediaQuery } from "@mui/material";
+import { Box, CssBaseline, PaletteMode, ThemeProvider, Typography, useMediaQuery } from "@mui/material";
 import { Loading, MaintenancePage } from "@stustapay/components";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { ToastContainer } from "react-toastify";
 import { UnauthenticatedLayout } from "./layout/UnauthenticatedLayout";
 import { Router } from "./Router";
+import { createAdministrationTheme } from "./theme";
 
 export function App() {
   const { t } = useTranslation();
@@ -19,15 +20,7 @@ export function App() {
 
   const themeMode: PaletteMode = themeModeStore === "browser" ? (darkModeSystem ? "dark" : "light") : themeModeStore;
 
-  const theme = React.useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode: themeMode,
-        },
-      }),
-    [themeMode]
-  );
+  const theme = React.useMemo(() => createAdministrationTheme(themeMode), [themeMode]);
 
   React.useEffect(() => {
     const init = async () => {

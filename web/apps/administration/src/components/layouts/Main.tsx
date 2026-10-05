@@ -6,6 +6,7 @@ export const Main = styled("main", { shouldForwardProp: (prop) => prop !== "open
 }>(({ theme, open }) => ({
   flexGrow: 1,
   minWidth: 0,
+  minHeight: "100dvh",
   padding: theme.spacing(3),
   transition: theme.transitions.create("margin", {
     easing: theme.transitions.easing.sharp,
@@ -19,4 +20,6 @@ export const Main = styled("main", { shouldForwardProp: (prop) => prop !== "open
     }),
     marginLeft: 0,
   }),
+  [theme.breakpoints.down("md")]: { padding: theme.spacing(2) },
+  [theme.breakpoints.up("lg")]: { padding: theme.spacing(4) },
 }));

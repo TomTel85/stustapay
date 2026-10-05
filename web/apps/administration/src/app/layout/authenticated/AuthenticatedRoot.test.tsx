@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TextDecoder, TextEncoder } from "util";
 
 (globalThis as typeof globalThis & { TextEncoder: typeof TextEncoder; TextDecoder: typeof TextDecoder }).TextEncoder =
@@ -45,9 +45,13 @@ jest.mock("@/components", () => {
   const React = require("react");
 
   return {
-    AppBar: ({ children }: { children: unknown }) => <div>{children}</div>,
-    DrawerHeader: () => <div data-testid="drawer-header" />,
-    Main: ({ children }: { children: unknown }) => <main>{children}</main>,
+    AppBar: ({ children, open }: { children: unknown; open: boolean }) => (
+      <div data-testid="app-bar" data-open={open}>
+        {children}
+      </div>
+    ),
+    DrawerHeader: ({ children }: { children: unknown }) => <div data-testid="drawer-header">{children}</div>,
+    Main: ({ children, open }: { children: unknown; open: boolean }) => <main data-open={open}>{children}</main>,
     LanguageSelect: () => <div data-testid="language-select" />,
   };
 });
@@ -71,9 +75,10 @@ jest.mock("react-i18next", () => ({
   }),
 }));
 
-jest.mock("./navigation-tree", () => ({
-  NavigationTree: () => <div>navigation-tree</div>,
-}));
+jest.mock("./navigation-tree", () => {
+  const { Link } = require("react-router-dom");
+  return { NavigationTree: () => <Link to="/node/1/products">navigation-tree</Link> };
+});
 
 const { MemoryRouter, Route, Routes } = require("react-router-dom");
 const { AuthenticatedRoot } = require("./AuthenticatedRoot");
@@ -130,15 +135,16 @@ describe("AuthenticatedRoot", () => {
     expect(screen.getByRole("button", { name: "logout" })).toBeTruthy();
   });
 
-  const renderLayout = () => render(
-    <MemoryRouter initialEntries={["/node/42/products"]}>
-      <Routes>
-        <Route element={<AuthenticatedRoot />}>
-          <Route path="*" element={<div>Outlet</div>} />
-        </Route>
-      </Routes>
-    </MemoryRouter>
-  );
+  const renderLayout = () =>
+    render(
+      <MemoryRouter initialEntries={["/node/42/products"]}>
+        <Routes>
+          <Route element={<AuthenticatedRoot />}>
+            <Route path="*" element={<div>Outlet</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
 
   test("resizes by keyboard, limits the width, and restores the saved preference", () => {
     const view = renderLayout();
@@ -174,7 +180,10 @@ describe("AuthenticatedRoot", () => {
     expect(handle.getAttribute("aria-valuenow")).toBe("380");
   });
 
-  test("keeps the fixed mobile sidebar without a resize handle", () => {
+  test("uses a dismissible mobile overlay without shifting content and closes it on navigation", async () => {
+    const desktopWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    window.localStorage.setItem("administration.sidebarWidth", "450");
     const matchMedia = jest.spyOn(window, "matchMedia");
     matchMedia.mockImplementation((query: string) => ({
       matches: true,
@@ -187,8 +196,19 @@ describe("AuthenticatedRoot", () => {
       dispatchEvent: jest.fn(),
     }));
     renderLayout();
-    fireEvent.click(screen.getByRole("button", { name: "open drawer" }));
+    expect(window.localStorage.getItem("administration.sidebarWidth")).toBe("450");
+    expect(screen.queryByText("navigation-tree")).toBeNull();
+    expect(screen.getByRole("main").getAttribute("data-open")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "portal.openNavigation" }));
     expect(screen.queryByRole("separator", { name: "auth.resizeSidebar" })).toBeNull();
+    expect(screen.getByTestId("app-bar").getAttribute("data-open")).toBe("false");
+    fireEvent.keyDown(screen.getByText("navigation-tree"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByText("navigation-tree")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "portal.openNavigation" }));
+    fireEvent.click(screen.getByText("navigation-tree"));
+    await waitFor(() => expect(screen.queryByText("navigation-tree")).toBeNull());
+    expect(window.localStorage.getItem("administration.sidebarWidth")).toBe("450");
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: desktopWidth });
     matchMedia.mockRestore();
   });
 });

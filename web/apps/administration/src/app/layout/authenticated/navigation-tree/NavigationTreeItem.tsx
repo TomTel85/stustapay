@@ -51,14 +51,14 @@ export const NavigationTreeItem: React.FC<NavigationTreeItemProps> = React.memo(
             alignItems: "center",
             p: 0.5,
             pr: 0,
-            height: "1.4em",
+            minHeight: 30,
             textDecoration: "none",
-            color: theme.palette.text.secondary,
+            color: "inherit",
           }}
           component={to ? (RouterLink as any) : undefined}
           to={to}
         >
-          <Box component={LabelIcon} color="inherit" sx={{ mr: 1 }} />
+          <Box component={LabelIcon} color="inherit" sx={{ mr: 1, fontSize: 20, flexShrink: 0 }} />
           <Typography variant="body2" sx={{ fontWeight: "inherit", flexGrow: 1 }}>
             {labelText}
           </Typography>

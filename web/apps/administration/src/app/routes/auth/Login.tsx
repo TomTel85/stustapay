@@ -1,5 +1,6 @@
 import { useLoginMutation, UserLoginResult } from "@/api";
 import { selectIsAuthenticated, useAppSelector } from "@/store";
+import { logoSrc } from "@/components/BrandLogo";
 import { LockOutlined as LockOutlinedIcon } from "@mui/icons-material";
 import {
   Alert,
@@ -7,7 +8,9 @@ import {
   Avatar,
   Button,
   Container,
-  CssBaseline,
+  Box,
+  Chip,
+  Paper,
   LinearProgress,
   Typography,
   List,
@@ -64,7 +67,7 @@ const SelectNode: React.FC<NodeSelectInfo> = ({ username, password, availableNod
               borderRight: 1,
               borderLeft: 1,
               borderBottom: 1,
-              borderColor: "grey.500",
+              borderColor: "divider",
             }}
           >
             <ListItemText primary={node.name} secondary={node.description} />
@@ -122,70 +125,130 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <Container component="main" maxWidth="xs">
-      <CssBaseline />
-      <Stack alignItems="center" justifyContent="center">
-        <Avatar sx={{ margin: 1, backgroundColor: "primary.main" }}>
-          <LockOutlinedIcon />
-        </Avatar>
-
-        {nodeSelectInfo ? (
-          <SelectNode {...nodeSelectInfo} />
-        ) : (
-          <>
-            <Typography component="h1" variant="h5">
-              {t("auth.signIn")}
+    <Container maxWidth="lg" disableGutters>
+      <Paper
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+          maxWidth: 1040,
+          mx: "auto",
+          overflow: "hidden",
+          borderRadius: 3,
+        }}
+      >
+        <Stack
+          sx={{ display: { xs: "none", md: "flex" }, bgcolor: "#101827", color: "#ffffff", p: 5, minHeight: 560 }}
+          justifyContent="space-between"
+          spacing={5}
+        >
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <Box component="img" src={logoSrc} alt="" width={56} height={56} />
+            <Typography variant="h6">{t("TeamFestlichPay")}</Typography>
+          </Stack>
+          <Box>
+            <Typography variant="overline" sx={{ color: "#27cbbb", display: "block", mb: 2 }}>
+              {t("portal.administration")}
             </Typography>
-            {showInvitationAcceptedHint && (
-              <Alert severity="success" sx={{ mt: 2, width: "100%" }}>
-                {t("auth.invitationLoginHint", { username: prefilledUsername })}
-              </Alert>
-            )}
-            <Formik
-              initialValues={initialValues}
-              enableReinitialize
-              onSubmit={handleSubmit}
-              validationSchema={toFormikValidationSchema(validationSchema)}
+            <Typography
+              variant="h3"
+              component="p"
+              sx={{ fontSize: "3rem", lineHeight: 1.15, whiteSpace: "pre-line", mb: 3 }}
             >
-              {(formik) => (
-                <Form onSubmit={formik.handleSubmit} style={{ width: "100%" }}>
-                  <Stack spacing={2}>
-                    <input type="hidden" name="remember" value="true" />
-                    <FormTextField
-                      variant="outlined"
-                      autoFocus
-                      type="text"
-                      label={t("auth.username")}
-                      name="username"
-                      formik={formik}
-                    />
+              {t("portal.loginTitle")}
+            </Typography>
+            <Typography sx={{ color: "#b6c5d8", maxWidth: 320, lineHeight: 1.8 }}>
+              {t("portal.loginDescription")}
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+            {["sales", "teams", "terminals"].map((key) => (
+              <Chip
+                key={key}
+                label={t(`portal.${key}`)}
+                variant="outlined"
+                sx={{ color: "#d6e1ef", borderColor: "#3a4b63" }}
+              />
+            ))}
+          </Stack>
+        </Stack>
+        <Stack sx={{ p: { xs: 3, sm: 5 }, py: { xs: 4, md: 7 }, minWidth: 0 }} justifyContent="center" spacing={3}>
+          <Avatar
+            sx={{
+              backgroundColor: "primary.main",
+              color: "primary.contrastText",
+              borderRadius: 2,
+              width: 48,
+              height: 48,
+            }}
+          >
+            <LockOutlinedIcon />
+          </Avatar>
 
-                    <FormTextField
-                      variant="outlined"
-                      type="password"
-                      name="password"
-                      label={t("auth.password")}
-                      formik={formik}
-                    />
-
-                    {formik.isSubmitting && <LinearProgress />}
-                    <Button
-                      type="submit"
-                      fullWidth
-                      variant="contained"
-                      color="primary"
-                      disabled={formik.isSubmitting}
-                      sx={{ mt: 1 }}
-                    >
-                      {t("auth.login")}
-                    </Button>
-                  </Stack>
-                </Form>
+          {nodeSelectInfo ? (
+            <SelectNode {...nodeSelectInfo} />
+          ) : (
+            <>
+              <Box>
+                <Typography component="h1" variant="h4">
+                  {t("auth.signIn")}
+                </Typography>
+                <Typography color="text.secondary" sx={{ mt: 1 }}>
+                  {t("portal.loginHint")}
+                </Typography>
+              </Box>
+              {showInvitationAcceptedHint && (
+                <Alert severity="success" sx={{ mt: 2, width: "100%" }}>
+                  {t("auth.invitationLoginHint", { username: prefilledUsername })}
+                </Alert>
               )}
-            </Formik>
-          </>
-        )}
-      </Stack>
+              <Formik
+                initialValues={initialValues}
+                enableReinitialize
+                onSubmit={handleSubmit}
+                validationSchema={toFormikValidationSchema(validationSchema)}
+              >
+                {(formik) => (
+                  <Form onSubmit={formik.handleSubmit} style={{ width: "100%" }}>
+                    <Stack spacing={2}>
+                      <input type="hidden" name="remember" value="true" />
+                      <FormTextField
+                        variant="outlined"
+                        autoFocus
+                        type="text"
+                        label={t("auth.username")}
+                        name="username"
+                        autoComplete="username"
+                        formik={formik}
+                      />
+
+                      <FormTextField
+                        variant="outlined"
+                        type="password"
+                        name="password"
+                        autoComplete="current-password"
+                        label={t("auth.password")}
+                        formik={formik}
+                      />
+
+                      {formik.isSubmitting && <LinearProgress />}
+                      <Button
+                        type="submit"
+                        fullWidth
+                        variant="contained"
+                        color="primary"
+                        disabled={formik.isSubmitting}
+                        sx={{ mt: 1, py: 1.5 }}
+                      >
+                        {t("auth.login")}
+                      </Button>
+                    </Stack>
+                  </Form>
+                )}
+              </Formik>
+            </>
+          )}
+        </Stack>
+      </Paper>
     </Container>
   );
 };

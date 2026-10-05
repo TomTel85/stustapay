@@ -1,4 +1,5 @@
 import * as React from "react";
+import { alpha } from "@mui/material/styles";
 import {
   Stack,
   TextField,
@@ -90,10 +91,10 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
             "& .MuiOutlinedInput-root": {
               transition: "all 0.2s ease-in-out",
               "&:hover": {
-                borderColor: "#73BF69",
+                borderColor: "primary.main",
               },
               "&.Mui-focused": {
-                borderColor: "#73BF69",
+                borderColor: "primary.main",
               },
             },
           }}
@@ -122,7 +123,7 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
                 sx={{
                   transition: "all 0.2s ease-in-out",
                   "&:hover": {
-                    borderColor: "#73BF69",
+                    borderColor: "primary.main",
                   },
                 }}
               >
@@ -140,17 +141,11 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
                 size="small"
                 label={filter.label}
                 value={activeColumnFilters.get(filter.field) || ""}
-                onChange={(e) =>
-                  onColumnFilterChange?.(filter.field, e.target.value === "" ? null : e.target.value)
-                }
+                onChange={(e) => onColumnFilterChange?.(filter.field, e.target.value === "" ? null : e.target.value)}
                 InputProps={{
                   endAdornment: activeColumnFilters.get(filter.field) ? (
                     <InputAdornment position="end">
-                      <IconButton
-                        size="small"
-                        onClick={() => onClearColumnFilter?.(filter.field)}
-                        sx={{ p: 0.5 }}
-                      >
+                      <IconButton size="small" onClick={() => onClearColumnFilter?.(filter.field)} sx={{ p: 0.5 }}>
                         <ClearIcon sx={{ fontSize: "1rem" }} />
                       </IconButton>
                     </InputAdornment>
@@ -197,9 +192,8 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
                 onDelete={() => onSearchChange("")}
                 size="small"
                 sx={{
-                  backgroundColor: (theme) =>
-                    theme.palette.mode === "dark" ? "rgba(115, 191, 105, 0.2)" : "rgba(115, 191, 105, 0.1)",
-                  color: (theme) => (theme.palette.mode === "dark" ? "#73BF69" : "#4a8a3e"),
+                  backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
+                  color: "primary.main",
                   fontSize: { xs: "0.7rem", sm: "0.75rem" },
                   height: { xs: "28px", sm: "auto" },
                   transition: "all 0.2s ease-in-out",
@@ -215,15 +209,16 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
               return (
                 <Chip
                   key={field}
-                  label={`${filterConfig.label}: ${filterConfig.type === "select" && filterConfig.options
-                    ? filterConfig.options.find((o) => o.value === value)?.label || value
-                    : value}`}
+                  label={`${filterConfig.label}: ${
+                    filterConfig.type === "select" && filterConfig.options
+                      ? filterConfig.options.find((o) => o.value === value)?.label || value
+                      : value
+                  }`}
                   onDelete={() => onClearColumnFilter?.(field)}
                   size="small"
                   sx={{
-                    backgroundColor: (theme) =>
-                      theme.palette.mode === "dark" ? "rgba(115, 191, 105, 0.2)" : "rgba(115, 191, 105, 0.1)",
-                    color: (theme) => (theme.palette.mode === "dark" ? "#73BF69" : "#4a8a3e"),
+                    backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
+                    color: "primary.main",
                     fontSize: { xs: "0.7rem", sm: "0.75rem" },
                     height: { xs: "28px", sm: "auto" },
                     maxWidth: { xs: "100%", sm: "none" },

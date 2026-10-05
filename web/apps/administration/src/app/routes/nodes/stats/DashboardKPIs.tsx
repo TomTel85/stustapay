@@ -92,7 +92,7 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
         {
           title: t("overview.productRevenue"),
           value: formatCurrency(selectedProductStats.revenue),
-          color: "success.main",
+          color: "primary.main",
         },
         {
           title: t("overview.productQuantitySold"),
@@ -104,12 +104,12 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
         {
           title: t("overview.totalGuestCredit"),
           value: formatCurrency(overview.total_guest_credit),
-          color: "success.main",
+          color: "primary.main",
         },
         {
           title: t("overview.totalRevenue"),
           value: formatCurrency(overview.total_revenue),
-          color: "success.main",
+          color: "primary.main",
         },
         {
           title: t("overview.guestsWithOrders"),
