@@ -1,16 +1,14 @@
 import { fetchConfig } from "@/api/common";
+import { BrandLogo, logoSrc } from "@/components/BrandLogo";
 import { useAppSelector } from "@/store";
 import { selectTheme } from "@/store/uiSlice";
-import { createTheme, CssBaseline, PaletteMode, ThemeProvider, Typography, useMediaQuery } from "@mui/material";
+import { Box, createTheme, CssBaseline, PaletteMode, ThemeProvider, Typography, useMediaQuery } from "@mui/material";
 import { Loading, MaintenancePage } from "@stustapay/components";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { ToastContainer } from "react-toastify";
 import { UnauthenticatedLayout } from "./layout/UnauthenticatedLayout";
 import { Router } from "./Router";
-
-const TEAMFESTLICHPAY_LOGO_URL =
-  "https://www.teamfestlichpay.de/fileadmin/user_upload/images/logos/logo_teamfestlichpay_tfpay.png";
 
 export function App() {
   const { t } = useTranslation();
@@ -51,16 +49,19 @@ export function App() {
         <CssBaseline />
         <UnauthenticatedLayout
           toolbar={
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              {t("TeamFestlichPay")}
-            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexGrow: 1, minWidth: 0 }}>
+              <BrandLogo />
+              <Typography variant="h6" noWrap>
+                {t("TeamFestlichPay")}
+              </Typography>
+            </Box>
           }
         >
           <MaintenancePage
             brandName={t("errorPage.brand")}
             title={t("errorPage.maintenance")}
             message={t("errorPage.currentlyUnavailable")}
-            logoSrc={TEAMFESTLICHPAY_LOGO_URL}
+            logoSrc={logoSrc}
           />
         </UnauthenticatedLayout>
       </ThemeProvider>

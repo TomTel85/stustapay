@@ -2,6 +2,7 @@ import { useGetProfileQuery, useGetTreeForCurrentUserQuery, useLogoutMutation } 
 import { config } from "@/api/common";
 import { HelpRoutes, getNodeIdFromPath } from "@/app/routes";
 import { AppBar, DrawerHeader, Main, LanguageSelect } from "@/components";
+import { BrandLogo } from "@/components/BrandLogo";
 import { drawerWidth } from "@/components/layouts/constants";
 import { selectCurrentUser, setCurrentUser, useAppDispatch, useAppSelector } from "@/store";
 import {
@@ -37,7 +38,8 @@ import { NavigationTree } from "./navigation-tree";
 const sidebarWidthKey = "administration.sidebarWidth";
 const minSidebarWidth = 220;
 const getMaxSidebarWidth = () => Math.max(minSidebarWidth, Math.min(600, window.innerWidth - 400));
-const clampSidebarWidth = (width: number) => Math.round(Math.max(minSidebarWidth, Math.min(getMaxSidebarWidth(), width)));
+const clampSidebarWidth = (width: number) =>
+  Math.round(Math.max(minSidebarWidth, Math.min(getMaxSidebarWidth(), width)));
 
 const readSidebarWidth = () => {
   try {
@@ -127,15 +129,17 @@ export const AuthenticatedRoot: React.FC = () => {
   };
 
   return (
-    <Box sx={{
-      display: "flex",
-      "--sidebar-width": `${isMobile ? drawerWidth : sidebarWidth}px`,
-      ...(resizing && {
-        cursor: "col-resize",
-        userSelect: "none",
-        "& .MuiAppBar-root, & main": { transition: "none" },
-      }),
-    }}>
+    <Box
+      sx={{
+        display: "flex",
+        "--sidebar-width": `${isMobile ? drawerWidth : sidebarWidth}px`,
+        ...(resizing && {
+          cursor: "col-resize",
+          userSelect: "none",
+          "& .MuiAppBar-root, & main": { transition: "none" },
+        }),
+      }}
+    >
       <CssBaseline />
       <AppBar position="fixed" open={open}>
         <Toolbar sx={{ gap: { xs: 0.5, sm: 1 } }}>
@@ -154,26 +158,41 @@ export const AuthenticatedRoot: React.FC = () => {
               style={{
                 textDecoration: "none",
                 color: "inherit",
-                display: "block",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
               }}
             >
-              <Typography variant="h6" component="div" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {t("TeamFestlichPay")}
-              </Typography>
-              {currentNodePath && currentNodePath.length > 0 ? (
+              <BrandLogo />
+              <Box sx={{ minWidth: 0 }}>
                 <Typography
-                  variant="body2"
+                  variant="h6"
                   component="div"
-                  sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.85 }}
+                  sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                 >
-                  {currentNodePath.map((segment) => t(segment)).join(" > ")}
+                  {t("TeamFestlichPay")}
                 </Typography>
-              ) : null}
+                {currentNodePath && currentNodePath.length > 0 ? (
+                  <Typography
+                    variant="body2"
+                    component="div"
+                    sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.85 }}
+                  >
+                    {currentNodePath.map((segment) => t(segment)).join(" > ")}
+                  </Typography>
+                ) : null}
+              </Box>
             </RouterLink>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1 }, flexShrink: 0 }}>
             {isMobile ? (
-              <IconButton color="inherit" component={RouterLink} to={helpRoute} size="small" aria-label={t("help.open")}>
+              <IconButton
+                color="inherit"
+                component={RouterLink}
+                to={helpRoute}
+                size="small"
+                aria-label={t("help.open")}
+              >
                 <HelpOutlineIcon fontSize="small" />
               </IconButton>
             ) : (
@@ -182,7 +201,13 @@ export const AuthenticatedRoot: React.FC = () => {
               </Button>
             )}
             {isMobile ? (
-              <IconButton color="inherit" component={RouterLink} to="/profile" size="small" aria-label={t("auth.profile")}>
+              <IconButton
+                color="inherit"
+                component={RouterLink}
+                to="/profile"
+                size="small"
+                aria-label={t("auth.profile")}
+              >
                 <AccountCircleIcon fontSize="small" />
               </IconButton>
             ) : (

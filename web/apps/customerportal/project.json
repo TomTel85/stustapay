@@ -22,7 +22,7 @@
         "main": "apps/customerportal/src/main.tsx",
         "polyfills": "apps/customerportal/src/polyfills.ts",
         "tsConfig": "apps/customerportal/tsconfig.app.json",
-        "assets": ["apps/customerportal/src/favicon.svg", "apps/customerportal/src/assets"],
+        "assets": ["apps/customerportal/src/favicon.png", "apps/customerportal/src/assets"],
         "styles": ["apps/customerportal/src/styles.css"],
         "scripts": [],
         "webpackConfig": "@nx/react/plugins/webpack"

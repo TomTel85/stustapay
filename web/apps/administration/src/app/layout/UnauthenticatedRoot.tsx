@@ -1,4 +1,5 @@
 import { config } from "@/api/common";
+import { BrandLogo } from "@/components/BrandLogo";
 import { selectIsAuthenticated, useAppSelector } from "@/store";
 import { Button, CircularProgress, Typography } from "@mui/material";
 import { TestModeDisclaimer } from "@stustapay/components";
@@ -23,9 +24,15 @@ export const UnauthenticatedRoot: React.FC = () => {
     <UnauthenticatedLayout
       toolbar={
         <>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            <RouterLink to="/" style={{ textDecoration: "none", color: "inherit" }}>
-              {t("TeamFestlichPay")}
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1, minWidth: 0 }}>
+            <RouterLink
+              to="/"
+              style={{ textDecoration: "none", color: "inherit", display: "flex", alignItems: "center", gap: 12 }}
+            >
+              <BrandLogo />
+              <Typography variant="h6" component="span" noWrap>
+                {t("TeamFestlichPay")}
+              </Typography>
             </RouterLink>
           </Typography>
           <Button component={RouterLink} color="inherit" to="/login">

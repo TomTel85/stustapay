@@ -30,7 +30,7 @@
         "polyfills": "apps/administration/src/polyfills.ts",
         "tsConfig": "apps/administration/tsconfig.app.json",
         "assets": [
-          "apps/administration/src/favicon.svg",
+          "apps/administration/src/favicon.png",
           "apps/administration/src/assets"
         ],
         "styles": [
