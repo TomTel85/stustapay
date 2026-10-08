@@ -53,6 +53,7 @@ class InfallibleRepository @Inject constructor(
     private val topUpApi: TopUpRemoteDataSource,
     private val ticketApi: TicketRemoteDataSource,
     private val saleApi: SaleRemoteDataSource,
+    private val offlineSales: de.stustapay.stustapay.offline.OfflineSalesRepository,
 ) {
     private val scope: CoroutineScope =
         CoroutineScope(Dispatchers.Default + CoroutineName("infallible"))
@@ -135,6 +136,12 @@ class InfallibleRepository @Inject constructor(
                 }
 
                 Log.i("infallible", "persistent db request has status: ${request.status()}")
+
+                if (request is InfallibleApiRequest.Sale) {
+                    offlineSales.migrateLegacy(request.sale)
+                    clearRequest()
+                    return@collect
+                }
 
                 // don't retry sending failed requests (unless manually requested)
                 if (request.status() is InfallibleApiRequest.Status.Failed) {
@@ -237,18 +244,7 @@ class InfallibleRepository @Inject constructor(
         return ret
     }
 
-    suspend fun bookSale(newSale: NewSale): Response<CompletedSale> {
-        _response.update { null }
-        updateRequest(
-            InfallibleApiRequest.Sale(newSale)
-        )
-
-        val response = _response.waitFor { it != null }!!
-        val ret = (response as InfallibleApiResponse.Sale).sale
-
-        _response.update { null }
-        return ret
-    }
+    suspend fun bookSale(newSale: NewSale): Response<CompletedSale> = offlineSales.book(newSale)
 
     /** when the request was delivered, and its result dismissed */
     suspend fun dismissSuccess() {

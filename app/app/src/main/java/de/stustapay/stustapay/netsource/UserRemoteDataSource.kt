@@ -27,19 +27,20 @@ class UserRemoteDataSource @Inject constructor(
     /**
      * Get the current logged-in user
      */
-    suspend fun currentUser(): UserState {
-        if (!checkNetworkConnectivity()) {
-            return UserState.Error("No internet connection available")
-        }
-        
-        return when (val res = terminalApiAccessor.execute {
-            it.user()?.getCurrentUser()
+    var currentUserTransportFailure = false
+        private set
+
+    suspend fun currentUser(offlinePrepared: Boolean = false): UserState {
+        currentUserTransportFailure = false
+        return when (val res = de.stustapay.stustapay.net.withOfflineRecoveryDeadline(offlinePrepared) {
+            terminalApiAccessor.execute { it.user()?.getCurrentUser() }
         }) {
             is Response.OK -> {
                 UserState.LoggedIn(res.data)
             }
 
             is Response.Error -> {
+                currentUserTransportFailure = res is Response.Error.Request && de.stustapay.stustapay.offline.isOfflineTransportFailure(res)
                 if (res is Response.Error.BadResponse) {
                     UserState.NoLogin
                 } else {

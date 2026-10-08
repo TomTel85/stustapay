@@ -67,6 +67,7 @@ class TerminalConfigRepositoryTest {
         val state = result.state as TerminalConfigState.Success
         assertSame(config, state.config)
         assertEquals("backend timeout", state.refreshErrorMessage)
+        assertFalse(state.refreshTransportError)
         assertNull(result.userTagSecret)
         assertFalse(result.ok)
         assertTrue(result.shouldRetry)
@@ -79,13 +80,14 @@ class TerminalConfigRepositoryTest {
         val freshConfig = terminalConfig("fresh", freshSecret)
 
         val result = terminalConfigFetchResult(
-            currentState = TerminalConfigState.Success(staleConfig, refreshErrorMessage = "backend timeout"),
+            currentState = TerminalConfigState.Success(staleConfig, refreshErrorMessage = "backend timeout", refreshTransportError = true),
             response = Response.OK(freshConfig),
         )
 
         val state = result.state as TerminalConfigState.Success
         assertEquals(freshConfig, state.config)
         assertNull(state.refreshErrorMessage)
+        assertFalse(state.refreshTransportError)
         assertEquals(freshSecret, result.userTagSecret)
         assertTrue(result.ok)
         assertFalse(result.shouldRetry)
@@ -122,6 +124,25 @@ class TerminalConfigRepositoryTest {
         assertNull(result.userTagSecret)
         assertFalse(result.ok)
         assertTrue(result.shouldRetry)
+    }
+
+    @Test
+    fun `network failure is classified separately from configuration errors`() {
+        val config = terminalConfig("cached", userTagSecret())
+        val result = terminalConfigFetchResult(
+            currentState = TerminalConfigState.Success(config),
+            response = Response.Error.Request(msg = "Network is unreachable"),
+        )
+        val state = result.state as TerminalConfigState.Success
+        assertTrue(state.refreshTransportError)
+        assertSame(config, state.config)
+
+        val invalid = terminalConfigFetchResult(
+            currentState = state,
+            response = Response.OK(terminalConfig("invalid", userTagSecret = null)),
+        ).state as TerminalConfigState.Success
+        assertFalse(invalid.refreshTransportError)
+        assertEquals(TERMINAL_CONFIG_MISSING_USER_TAG_SECRET_MESSAGE, invalid.refreshErrorMessage)
     }
 
     private fun terminalConfig(

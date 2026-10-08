@@ -37,7 +37,7 @@ import kotlinx.serialization.Contextual
  * @param email 
  * @param transportAccountId 
  * @param cashRegisterId 
- * @param isDeviceIdentity
+ * @param isDeviceIdentity 
  */
 @Serializable
 
@@ -89,3 +89,4 @@ data class CurrentUser (
 
 
 }
+

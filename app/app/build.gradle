@@ -125,6 +125,10 @@ dependencies {
     // Download latest hmdm-<version>.aar from Headwind MDM and place it as libs/hmdm-1.1.7.aar
     implementation files('libs/hmdm-1.1.7.aar')
 
+    implementation "androidx.room:room-runtime:2.7.2"
+    implementation "androidx.room:room-ktx:2.7.2"
+    ksp "androidx.room:room-compiler:2.7.2"
+    implementation "androidx.work:work-runtime-ktx:2.10.1"
     implementation project(":api")
     implementation project(":libssp")
     implementation "androidx.core:core-ktx:$core_ktx_version"

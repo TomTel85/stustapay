@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from stustapay.core.http.auth_till import CurrentAuthToken
 from stustapay.core.http.context import ContextOrderService
+from stustapay.core.schema.offline import OfflineBookingResult, OfflineImport, OfflineImportResult, OfflineSnapshot
 from stustapay.core.schema.order import (
     CompletedPayOut,
     CompletedSale,
@@ -42,6 +43,21 @@ async def list_orders(
     List all the order of the currently logged in Cashier
     """
     return await order_service.list_orders_terminal(token=token)
+
+
+@router.post("/offline/prepare", response_model=OfflineSnapshot)
+async def prepare_offline(token: CurrentAuthToken, order_service: ContextOrderService):
+    return await order_service.prepare_offline(token=token)
+
+
+@router.post("/offline/import", response_model=OfflineImportResult)
+async def import_offline(payload: OfflineImport, token: CurrentAuthToken, order_service: ContextOrderService):
+    return await order_service.import_offline(token=token, payload=payload)
+
+
+@router.get("/offline/status/{order_uuid}", response_model=OfflineBookingResult)
+async def offline_booking_status(order_uuid: UUID, token: CurrentAuthToken, order_service: ContextOrderService):
+    return await order_service.offline_booking_status(token=token, order_uuid=order_uuid)
 
 
 @router.post("/check-sale", summary="check if a sale is valid", response_model=PendingSale)

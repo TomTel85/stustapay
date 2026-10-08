@@ -64,7 +64,7 @@ tasks.register('modApi') {
             filter { String line ->
                 if (line.contains("kotlin.Int")) {
                     line.replace("kotlin.Int", "@Contextual com.ionspin.kotlin.bignum.integer.BigInteger")
-                            .replace(" = 0", " = com.ionspin.kotlin.bignum.integer.BigInteger(0)")
+                            .replaceAll(/ = (-?\d+)(?=,?\s*$)/, ' = com.ionspin.kotlin.bignum.integer.BigInteger($1)')
                 } else {
                     line
                 }

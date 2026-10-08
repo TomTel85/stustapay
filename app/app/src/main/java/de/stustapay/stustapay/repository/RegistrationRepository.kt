@@ -28,6 +28,7 @@ sealed interface ForceDeregisterState {
 class RegistrationRepository @Inject constructor(
     private val registrationRemoteDataSource: RegistrationRemoteDataSource,
     private val registrationRepositoryInner: RegistrationRepositoryInner,
+    private val salesJournal: de.stustapay.stustapay.offline.SalesJournal,
 ) {
     var registrationState = registrationRepositoryInner.registrationState
     var forceDeregisterState = MutableStateFlow<ForceDeregisterState>(ForceDeregisterState.Disallow)
@@ -39,6 +40,8 @@ class RegistrationRepository @Inject constructor(
     suspend fun register(
         qrcodeB64: String,
     ): Boolean {
+        if (salesJournal.hasUnresolved()) return false
+        salesJournal.dao.revoke()
         registrationRepositoryInner.tryEmit(RegistrationState.NotRegistered("Starting registration..."))
         forceDeregisterState.tryEmit(ForceDeregisterState.Disallow)
 
@@ -56,6 +59,8 @@ class RegistrationRepository @Inject constructor(
     }
 
     suspend fun deregister(force: Boolean = false): Boolean {
+        if (salesJournal.hasUnresolved()) return false
+        salesJournal.dao.revoke()
         return when (val result = registrationRemoteDataSource.deregister()) {
             is DeregistrationState.Error -> {
                 // remote deregistration failed

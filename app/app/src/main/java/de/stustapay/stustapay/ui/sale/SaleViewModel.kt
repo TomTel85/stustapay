@@ -28,6 +28,9 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -189,6 +192,17 @@ class SaleViewModel @Inject constructor(
     // status message
     private val _status = MutableStateFlow("")
     val status = _status.asStateFlow()
+    val offlineMode = saleRepository.offlineSales.offline
+    val offlineReceipt = saleRepository.offlineSales.lastOfflineSale
+    val legacyNeedsOwner = saleRepository.offlineSales.legacyNeedsOwner
+    val onlineAuthenticated = saleRepository.offlineSales.onlineAuthenticated
+    fun retryLegacyAsCurrentOperator() {
+        viewModelScope.launch { saleRepository.offlineSales.retryLegacyAsCurrentOperator() }
+    }
+    val pendingJournalCount = saleRepository.offlineSales.pendingCount
+    val offlineStatus = combine(saleRepository.offlineSales.status, terminalConfigRepository.terminalConfigState) { status, state ->
+        status.copy(offlineMode = status.offlineMode || (state as? TerminalConfigState.Success)?.refreshTransportError == true)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), de.stustapay.stustapay.offline.OfflineStatus())
 
     private val _autoBookRequests = MutableSharedFlow<Unit>()
     val autoBookRequests: SharedFlow<Unit> = _autoBookRequests
@@ -338,6 +352,12 @@ class SaleViewModel @Inject constructor(
 
     suspend fun checkSale() {
         clearAutoBookCountdown()
+        if (offlineStatus.value.offlineMode && (
+                !offlineStatus.value.preparationUsable ||
+                _saleStatus.value.voucherAmount.let { it != null && it != 0 })) {
+            _status.value = context.getString(R.string.offline_requires_connection)
+            return
+        }
         // important to check for the list entries
         // and not fold them and check if sum == 0
         // because one can have negative returnable items!
@@ -443,6 +463,10 @@ class SaleViewModel @Inject constructor(
     }
 
     suspend fun checkSaleCash() {
+        if (offlineStatus.value.offlineMode) {
+            _status.value = context.getString(R.string.offline_requires_connection)
+            return
+        }
         clearAutoBookCountdown()
         if (_saleStatus.value.buttonSelection.isEmpty()) {
             _status.update { context.getString(R.string.sale_status_nothing_ordered) }
@@ -484,6 +508,10 @@ class SaleViewModel @Inject constructor(
     }
 
     suspend fun checkSaleCard() {
+        if (offlineStatus.value.offlineMode) {
+            _status.value = context.getString(R.string.offline_requires_connection)
+            return
+        }
         clearAutoBookCountdown()
         if (_saleStatus.value.buttonSelection.isEmpty()) {
             _status.update { context.getString(R.string.sale_status_nothing_ordered) }
@@ -561,6 +589,10 @@ class SaleViewModel @Inject constructor(
             _status.update { context.getString(R.string.sale_status_unchecked_sale) }
             return
         }
+        if (offlineStatus.value.offlineMode && sale.paymentMethod != PaymentMethod.tag) {
+            _status.value = context.getString(R.string.offline_requires_connection)
+            return
+        }
         val newSale = _saleStatus.value.getNewSale(tag, sale.paymentMethod)
 
         if (sale.paymentMethod == PaymentMethod.sumup) {
@@ -623,13 +655,15 @@ class SaleViewModel @Inject constructor(
             is Response.OK -> {
                 // delete the sale draft
                 clearSale()
-                _status.update { context.getString(R.string.ticket_order_booked) }
+                val offlineAccepted = saleRepository.offlineSales.lastOfflineSale.value == response.data.uuid
+                _status.update { if (offlineAccepted) context.getString(R.string.sale_offline_saved) else context.getString(R.string.ticket_order_booked) }
                 // now we have a completed sale
                 _saleCompleted.update { response.data }
                 _navState.update { SalePage.Success }
                 
                 // Update the customer display with the completed sale information
-                updateCustomerDisplay(response.data)
+                if (offlineAccepted) customerDisplayManager.updateState(CustomerDisplayState.OfflineAccepted(response.data.newBalance, response.data.totalPrice < 0))
+                else updateCustomerDisplay(response.data)
             }
 
             is Response.Error.Service -> {

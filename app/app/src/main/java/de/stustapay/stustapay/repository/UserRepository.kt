@@ -21,6 +21,7 @@ import javax.inject.Singleton
 @Singleton
 class UserRepository @Inject constructor(
     private val userRemoteDataSource: UserRemoteDataSource,
+    private val offlineSales: de.stustapay.stustapay.offline.OfflineSalesRepository,
     private val terminalConfigRepository: TerminalConfigRepository
 ) {
     private var _userState = MutableStateFlow<UserState>(UserState.Error("loading..."))
@@ -32,7 +33,16 @@ class UserRepository @Inject constructor(
     var status = MutableStateFlow<String?>(null)
 
     suspend fun fetchLogin() {
-        _userState.update { userRemoteDataSource.currentUser() }
+        val result = userRemoteDataSource.currentUser(offlinePrepared = offlineSales.restoredConfig() != null)
+        if (result is UserState.LoggedIn) {
+            _userState.value = result
+            offlineSales.rememberUser(result.user)
+        } else {
+            val restored = if (userRemoteDataSource.currentUserTransportFailure) offlineSales.restoredUser() else null
+            if (!userRemoteDataSource.currentUserTransportFailure) offlineSales.revoke()
+            _userState.value = restored?.let { UserState.LoggedIn(it) } ?: result
+            offlineSales.start()
+        }
     }
 
     suspend fun checkLogin(userTag: NfcTag) {
@@ -65,11 +75,14 @@ class UserRepository @Inject constructor(
                 status.update { null }
                 _userState.update { loginResult }
                 terminalConfigRepository.fetchConfig(keepTrying = false)
+                if (loginResult is UserState.LoggedIn) offlineSales.rememberUser(loginResult.user)
             }
         }
     }
 
     suspend fun logout() {
+        offlineSales.revoke()
+        _userState.value = UserState.NoLogin
         val result = userRemoteDataSource.userLogout()
         if (result != null) {
             status.emit(result)

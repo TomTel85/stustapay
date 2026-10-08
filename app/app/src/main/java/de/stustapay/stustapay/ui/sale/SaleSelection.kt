@@ -1,7 +1,7 @@
 package de.stustapay.stustapay.ui.sale
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,15 +15,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
-import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +42,7 @@ import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ui.common.operator.OperatorBackground
 import de.stustapay.stustapay.ui.common.operator.OperatorCompactFlowHeader
 import de.stustapay.stustapay.ui.common.operator.OperatorPalette
+import de.stustapay.stustapay.ui.common.operator.OfflineStatusIndicator
 import de.stustapay.stustapay.ui.common.operator.OperatorPanel
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -61,8 +65,15 @@ fun SaleSelection(
         val saleConfig by viewModel.saleConfig.collectAsStateWithLifecycle()
         val saleStatus by viewModel.saleStatus.collectAsStateWithLifecycle()
         val status by viewModel.status.collectAsStateWithLifecycle()
+        val offlineStatus by viewModel.offlineStatus.collectAsStateWithLifecycle()
+        val legacy by viewModel.legacyNeedsOwner.collectAsStateWithLifecycle(0)
+        val onlineAuthenticated by viewModel.onlineAuthenticated.collectAsStateWithLifecycle()
         val scope = rememberCoroutineScope()
         val config = saleConfig
+        val offline = offlineStatus.offlineMode
+        val offlineBasketSupported = !offline || (offlineStatus.preparationUsable &&
+            saleStatus.voucherAmount.let { it == null || it == 0 } &&
+            saleStatus.buttonSelection.keys.all { it in offlineStatus.supportedButtonIds })
         var totalPrice = 0.0
         var basketCount = 0
         val basketLines = if (config is SaleConfig.Ready) {
@@ -114,12 +125,20 @@ fun SaleSelection(
                     onBack = leaveView,
                     compactHandheld = compactHandheld,
                     tillLabel = if (config is SaleConfig.Ready) config.tillName else null,
+                    offlineStatus = offlineStatus,
                 )
 
+                if (legacy > 0 && onlineAuthenticated) {
+                    androidx.compose.material.Text(stringResource(R.string.sale_legacy_operator_explanation), color = OperatorPalette.title)
+                    androidx.compose.material.Button(onClick = { viewModel.retryLegacyAsCurrentOperator() }) {
+                        androidx.compose.material.Text(stringResource(R.string.sale_legacy_retry))
+                    }
+                }
                 if (compactHandheld) {
                     if (config is SaleConfig.Ready &&
                         config.buttons.size == 1 &&
-                        config.buttons.all { it.value.price is SaleItemPrice.FreePrice }
+                        config.buttons.all { it.value.price is SaleItemPrice.FreePrice } &&
+                        (!offline || (offlineStatus.preparationUsable && config.buttons.keys.all { it in offlineStatus.supportedButtonIds }))
                     ) {
                         OperatorPanel(
                             modifier = Modifier
@@ -147,12 +166,13 @@ fun SaleSelection(
                         basketCount = basketCount,
                         totalPrice = totalPrice,
                         basketLines = basketLines,
-                        ready = config is SaleConfig.Ready,
+                        ready = config is SaleConfig.Ready && offlineBasketSupported,
                         sspEnabled = config is SaleConfig.Ready && config.till.enableSspPayment,
                         cashEnabled = config is SaleConfig.Ready && config.till.enableCashPayment,
                         cardEnabled = config is SaleConfig.Ready && config.till.enableCardPayment,
                         cashierHasRegister = config is SaleConfig.Ready && config.till.cashRegisterId != null,
                         amountIsPositive = totalPrice > 0.0,
+                        offlineMode = offline,
                         onAbort = {
                             scope.launch {
                                 viewModel.clearSale()
@@ -187,7 +207,8 @@ fun SaleSelection(
 
                         if (config is SaleConfig.Ready &&
                             config.buttons.size == 1 &&
-                            config.buttons.all { it.value.price is SaleItemPrice.FreePrice }
+                            config.buttons.all { it.value.price is SaleItemPrice.FreePrice } &&
+                        (!offline || (offlineStatus.preparationUsable && config.buttons.keys.all { it in offlineStatus.supportedButtonIds }))
                         ) {
                             OperatorPanel(
                                 modifier = contentModifier,
@@ -216,12 +237,13 @@ fun SaleSelection(
                             basketCount = basketCount,
                             totalPrice = totalPrice,
                             basketLines = basketLines,
-                            ready = config is SaleConfig.Ready,
+                            ready = config is SaleConfig.Ready && offlineBasketSupported,
                             sspEnabled = config is SaleConfig.Ready && config.till.enableSspPayment,
                             cashEnabled = config is SaleConfig.Ready && config.till.enableCashPayment,
                             cardEnabled = config is SaleConfig.Ready && config.till.enableCardPayment,
                             cashierHasRegister = config is SaleConfig.Ready && config.till.cashRegisterId != null,
                             amountIsPositive = totalPrice > 0.0,
+                            offlineMode = offline,
                             onAbort = {
                                 scope.launch {
                                     viewModel.clearSale()
@@ -255,6 +277,7 @@ private fun CompactSaleHeader(
     onBack: () -> Unit,
     compactHandheld: Boolean,
     tillLabel: String?,
+    offlineStatus: de.stustapay.stustapay.offline.OfflineStatus,
 ) {
     OperatorCompactFlowHeader(
         flowTitle = stringResource(R.string.sale_compact_title),
@@ -262,6 +285,7 @@ private fun CompactSaleHeader(
         onBack = onBack,
         compactHandheld = compactHandheld,
         modifier = Modifier.fillMaxWidth(),
+        trailingContent = { OfflineStatusIndicator(offlineStatus) },
     )
 }
 
@@ -279,6 +303,7 @@ private fun CompactSaleBasketPanel(
     cardEnabled: Boolean,
     cashierHasRegister: Boolean,
     amountIsPositive: Boolean,
+    offlineMode: Boolean,
     onAbort: () -> Unit,
     onSubmitSsp: () -> Unit,
     onSubmitCash: () -> Unit,
@@ -303,7 +328,7 @@ private fun CompactSaleBasketPanel(
             add(
                 CompactPaymentAction(
                     stringResource(R.string.sale_ec_payment),
-                    ready && amountIsPositive,
+                    ready && amountIsPositive && !offlineMode,
                     onSubmitCard,
                 )
             )
@@ -316,7 +341,7 @@ private fun CompactSaleBasketPanel(
                     } else {
                         stringResource(R.string.pay_cash).substringAfter('\n')
                     },
-                    ready && cashierHasRegister,
+                    ready && cashierHasRegister && !offlineMode,
                     onSubmitCash,
                 )
             )
@@ -422,6 +447,13 @@ private fun CompactSaleBasketPanel(
                 )
             }
 
+            if (offlineMode) {
+                Text(
+                    text = stringResource(R.string.offline_sale_restricted_functions),
+                    color = OperatorPalette.subtitle,
+                    fontSize = 12.sp,
+                )
+            }
             if (paymentActions.isEmpty()) {
                 if (stackPaymentActions) {
                     CompactActionButton(

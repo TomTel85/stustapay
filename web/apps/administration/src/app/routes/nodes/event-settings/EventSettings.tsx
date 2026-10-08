@@ -1,7 +1,7 @@
 import { useArchiveNodeMutation, useGetRestrictedEventSettingsQuery } from "@/api";
 import { useCurrentNode } from "@/hooks";
 import { TabContext, TabList, TabPanel } from "@mui/lab";
-import { Alert, AlertTitle, Box, Button, Stack, Tab } from "@mui/material";
+import { Alert, AlertTitle, Box, Button, Stack, Tab, useMediaQuery, useTheme } from "@mui/material";
 import { Loading } from "@stustapay/components";
 import { useQueryVar } from "@stustapay/utils";
 import * as React from "react";
@@ -17,6 +17,7 @@ import { TabPayout } from "./TabPayout";
 import { TabSumUp } from "./TabSumUp";
 import { TabImpressum } from "./TabImpressum";
 import { TabPrivacyPolicy } from "./TabPrivacyPolicy";
+import { TabOffline } from "./TabOffline";
 import { Link as RouterLink } from "react-router-dom";
 import { useOpenModal } from "@stustapay/modal-provider";
 import { toast } from "react-toastify";
@@ -26,6 +27,8 @@ import { CopyEventDialog } from "./CopyEventDialog";
 
 export const EventSettings: React.FC = () => {
   const { t } = useTranslation();
+  const theme = useTheme();
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down("md"));
   const [activeTab, setActiveTab] = useQueryVar("tab", "node");
   const { currentNode } = useCurrentNode();
   const { data: eventSettings, isLoading, error } = useGetRestrictedEventSettingsQuery({ nodeId: currentNode.id });
@@ -65,7 +68,7 @@ export const EventSettings: React.FC = () => {
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" spacing={2} justifyContent="center">
+      <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap" useFlexGap>
         <Button variant="outlined" component={RouterLink} to={`/node/${currentNode.id}/create-node`}>
           {t("settings.createNode.link")}
         </Button>
@@ -77,11 +80,17 @@ export const EventSettings: React.FC = () => {
         </Button>
       </Stack>
       <TabContext value={activeTab}>
-        <Box display="grid" gridTemplateColumns="min-content auto">
-          <Box sx={{ borderRight: 1, borderColor: "divider" }}>
-            <TabList onChange={(_, tab) => setActiveTab(tab)} orientation="vertical">
+          <Box display="grid" gridTemplateColumns={isSmallScreen ? "minmax(0, 1fr)" : "min-content minmax(0, 1fr)"}>
+          <Box sx={{ borderRight: isSmallScreen ? 0 : 1, borderBottom: isSmallScreen ? 1 : 0, borderColor: "divider", minWidth: 0 }}>
+            <TabList
+              onChange={(_, tab) => setActiveTab(tab)}
+              orientation={isSmallScreen ? "horizontal" : "vertical"}
+              variant={isSmallScreen ? "scrollable" : "standard"}
+              scrollButtons={isSmallScreen ? "auto" : false}
+            >
               <Tab label={t("common.node")} value="node" />
               <Tab label={t("settings.general.tabLabel")} value="general" />
+              <Tab label={t("settings.offline.tabLabel")} value="offline" />
               <Tab label={t("settings.customerPortal.tabLabel")} value="customerPortal" />
               <Tab label={t("settings.pretix.tabLabel")} value="pretix" />
               <Tab label={t("settings.agb.tabLabel")} value="agb" />
@@ -95,43 +104,46 @@ export const EventSettings: React.FC = () => {
               <Tab label={t("settings.email.tabLabel")} value="email" />
             </TabList>
           </Box>
-          <TabPanel value="node">
+          <TabPanel value="node" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <NodeConfiguration />
           </TabPanel>
-          <TabPanel value="general">
+          <TabPanel value="general" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <TabGeneral nodeId={currentNode.id} eventSettings={eventSettings} />
           </TabPanel>
-          <TabPanel value="customerPortal">
+          <TabPanel value="offline" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
+            <TabOffline nodeId={currentNode.id} eventSettings={eventSettings} />
+          </TabPanel>
+          <TabPanel value="customerPortal" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <TabCustomerPortal nodeId={currentNode.id} eventSettings={eventSettings} />
           </TabPanel>
-          <TabPanel value="pretix">
+          <TabPanel value="pretix" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <TabPretix nodeId={currentNode.id} eventSettings={eventSettings} />
           </TabPanel>
-          <TabPanel value="agb">
+          <TabPanel value="agb" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <TabAgb nodeId={currentNode.id} eventSettings={eventSettings} />
           </TabPanel>
-          <TabPanel value="faq">
+          <TabPanel value="faq" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <TabFaq nodeId={currentNode.id} eventSettings={eventSettings} />
           </TabPanel>
-          <TabPanel value="impressum">
+          <TabPanel value="impressum" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <TabImpressum nodeId={currentNode.id} eventSettings={eventSettings} />
           </TabPanel>
-          <TabPanel value="privacyPolicy">
+          <TabPanel value="privacyPolicy" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <TabPrivacyPolicy nodeId={currentNode.id} eventSettings={eventSettings} />
           </TabPanel>
-          <TabPanel value="sumup">
+          <TabPanel value="sumup" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <TabSumUp nodeId={currentNode.id} eventSettings={eventSettings} />
           </TabPanel>
-          <TabPanel value="mdm">
+          <TabPanel value="mdm" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <TabMdm nodeId={currentNode.id} eventSettings={eventSettings} />
           </TabPanel>
-          <TabPanel value="payout">
+          <TabPanel value="payout" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <TabPayout nodeId={currentNode.id} eventSettings={eventSettings} />
           </TabPanel>
-          <TabPanel value="bon">
+          <TabPanel value="bon" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <TabBon nodeId={currentNode.id} eventSettings={eventSettings} />
           </TabPanel>
-          <TabPanel value="email">
+          <TabPanel value="email" sx={{ minWidth: 0, px: { xs: 0, md: 2 } }}>
             <TabMail nodeId={currentNode.id} eventSettings={eventSettings} />
           </TabPanel>
         </Box>

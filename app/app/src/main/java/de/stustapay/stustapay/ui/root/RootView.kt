@@ -63,6 +63,7 @@ fun RootView(uictrl: SysUiController? = null) {
             val loginState by viewModel.uiState.collectAsStateWithLifecycle()
             val configLoading by viewModel.configLoading.collectAsStateWithLifecycle()
             val terminalStatusMessage by viewModel.terminalStatusMessage.collectAsStateWithLifecycle()
+            val offlineStatus by viewModel.offlineStatus.collectAsStateWithLifecycle()
             DynamicSystemUiEffect(
                 uictrl = uictrl,
                 hidden = loginState.hasConfig() &&
@@ -87,6 +88,7 @@ fun RootView(uictrl: SysUiController? = null) {
                 loginState = loginState,
                 configLoading = configLoading,
                 terminalStatusMessage = terminalStatusMessage,
+                offlineStatus = offlineStatus,
                 terminalConfigViewModel = terminalConfigViewModel,
             )
         }

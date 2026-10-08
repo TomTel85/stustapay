@@ -50,6 +50,8 @@ open class TerminalApiAccessor(
             } else {
                 Response.Error.Access("terminal not registered")
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: JsonConvertException) {
             Log.e("TeamFestlichPay req", "JSON conversion error: ${e.localizedMessage}")
             Response.Error.BadResponse(e.localizedMessage.orEmpty())

@@ -13,6 +13,7 @@ sealed class CustomerDisplayState {
         val balance: Double,
         val voucherCount: String? = null,
     ) : CustomerDisplayState()
+    data class OfflineAccepted(val estimatedBalance: Double, val pendingReturn: Boolean) : CustomerDisplayState()
     data class SaleCompleted(val sale: CompletedSale) : CustomerDisplayState()
     data class TopUpCompleted(val newBalance: Double, val topUpAmount: Double) : CustomerDisplayState()
     data class ValidatingSale(

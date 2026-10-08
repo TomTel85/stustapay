@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import de.stustapay.stustapay.offline.OfflineStatus
 import de.stustapay.libssp.util.restartApp
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.model.Access
@@ -75,6 +76,7 @@ import de.stustapay.stustapay.ui.common.TerminalLoginState
 import de.stustapay.stustapay.ui.common.operator.OperatorActionCard
 import de.stustapay.stustapay.ui.common.operator.OperatorActionButton
 import de.stustapay.stustapay.ui.common.operator.OperatorInfoCard
+import de.stustapay.stustapay.ui.common.operator.OfflineStatusIndicator
 import de.stustapay.stustapay.ui.common.operator.OperatorPalette
 import de.stustapay.stustapay.ui.common.operator.OperatorPanel
 import de.stustapay.stustapay.ui.common.operator.OperatorScaffold
@@ -95,6 +97,7 @@ fun StartpageView(
     loginState: TerminalLoginState,
     configLoading: Boolean,
     terminalStatusMessage: String?,
+    offlineStatus: OfflineStatus,
     terminalConfigViewModel: TerminalConfigViewModel = hiltViewModel(),
 ) {
     val activity = LocalActivity.current!!
@@ -110,12 +113,12 @@ fun StartpageView(
     var showInfoDialog by remember { mutableStateOf(false) }
 
     val navigateToHook = { dest: NavDest ->
-        if (!configLoading || dest == RootNavDests.settings) {
+        if (isOperatorMenuRouteEnabled(dest, offlineStatus) && (!configLoading || dest == RootNavDests.settings)) {
             navigateTo(dest)
         }
     }
 
-    LaunchedEffect(isEntryMode) {
+    LaunchedEffect(isEntryMode, offlineStatus.offlineMode) {
         if (isEntryMode) {
             navigateToHook(RootNavDests.entry)
         }
@@ -127,7 +130,7 @@ fun StartpageView(
         }
     }
 
-    if (isEntryMode) {
+    if (isEntryMode && isOperatorMenuRouteEnabled(RootNavDests.entry, offlineStatus)) {
         Box(modifier = Modifier.fillMaxSize())
         return
     }
@@ -145,8 +148,8 @@ fun StartpageView(
         ) {
             if (isSelfServiceMode) {
                 SelfServiceLanding(
-                    canCheckBalance = selfServiceAccess.canSelfServiceBalance,
-                    canTopUp = selfServiceAccess.canSelfServiceTopUp,
+                    canCheckBalance = selfServiceAccess.canSelfServiceBalance && !offlineStatus.offlineMode,
+                    canTopUp = selfServiceAccess.canSelfServiceTopUp && !offlineStatus.offlineMode,
                     canOpenSettings = canOpenSelfServiceSettings,
                     configLoading = configLoading,
                     onCheckBalance = { navigateToHook(RootNavDests.status) },
@@ -154,7 +157,8 @@ fun StartpageView(
                     onRefreshConfig = { terminalConfigViewModel.refreshAccessData() },
                     onShowTerminalInfo = { showInfoDialog = true },
                     onOpenSettings = { navigateToHook(RootNavDests.settings) },
-                    fallbackMessage = terminalStatusMessage ?: stringResource(R.string.payinout_no_action_available),
+                    fallbackMessage = if (offlineStatus.offlineMode) stringResource(R.string.offline_requires_connection)
+                        else terminalStatusMessage ?: stringResource(R.string.payinout_no_action_available),
                     modifier = Modifier.weight(1f)
                 )
             } else {
@@ -163,6 +167,7 @@ fun StartpageView(
                     loginState = loginState,
                     configLoading = configLoading,
                     terminalStatusMessage = terminalStatusMessage,
+                    offlineStatus = offlineStatus,
                     onNavigate = navigateToHook,
                     onRefreshConfig = { terminalConfigViewModel.refreshAccessData() },
                     onRestart = { restartApp(activity) },
@@ -227,11 +232,20 @@ fun StartpageView(
     }
 }
 
+internal fun isOperatorMenuRouteEnabled(destination: NavDest?, offlineStatus: OfflineStatus): Boolean = when {
+    destination == RootNavDests.sale -> !offlineStatus.offlineMode || offlineStatus.preparationUsable
+    destination == null -> true
+    destination == RootNavDests.settings || destination == RootNavDests.development -> true
+    else -> !offlineStatus.offlineMode
+}
+
 private data class OperatorMenuCard(
     val icon: ImageVector,
     val title: String,
     val description: String,
     val emphasized: Boolean = false,
+    val enabled: Boolean = true,
+    val showsOfflineStatus: Boolean = false,
     val onClick: () -> Unit,
 )
 
@@ -240,6 +254,7 @@ private fun OperatorLanding(
     loginState: TerminalLoginState,
     configLoading: Boolean,
     terminalStatusMessage: String?,
+    offlineStatus: OfflineStatus,
     onNavigate: (NavDest) -> Unit,
     onRefreshConfig: () -> Unit,
     onRestart: () -> Unit,
@@ -258,14 +273,21 @@ private fun OperatorLanding(
         onNavigate,
         onRefreshConfig,
         onRestart,
+        offlineStatus,
     ) {
         buildList {
             if (loginState.isEntryMode()) {
+                val entryEnabled = isOperatorMenuRouteEnabled(RootNavDests.entry, offlineStatus)
                 add(
                     OperatorMenuCard(
                         icon = Icons.Filled.MeetingRoom,
                         title = operatorStrings.entryTitle,
-                        description = operatorStrings.descriptionByRoute.getValue(RootNavDests.entry.route),
+                        description = if (entryEnabled) {
+                            operatorStrings.descriptionByRoute.getValue(RootNavDests.entry.route)
+                        } else {
+                            operatorStrings.unavailableOfflineDescription
+                        },
+                        enabled = entryEnabled,
                         onClick = { onNavigate(RootNavDests.entry) },
                     )
                 )
@@ -273,7 +295,7 @@ private fun OperatorLanding(
 
             startpageItems.forEach { item ->
                 if (loginState.checkAccess(item.canAccess)) {
-                    add(item.toOperatorCard(operatorStrings, onNavigate))
+                    add(item.toOperatorCard(operatorStrings, onNavigate, offlineStatus))
                 }
             }
 
@@ -458,6 +480,12 @@ private fun OperatorLanding(
                                 description = item.description,
                                 icon = item.icon,
                                 emphasized = item.emphasized,
+                                enabled = item.enabled,
+                                trailingContent = if (item.showsOfflineStatus) {
+                                    { OfflineStatusIndicator(offlineStatus) }
+                                } else {
+                                    null
+                                },
                                 onClick = item.onClick,
                                 modifier = Modifier.weight(1f),
                             )
@@ -581,18 +609,28 @@ private data class OperatorMenuStrings(
     val labelByResource: Map<Int, String>,
     val descriptionByRoute: Map<String, String>,
     val defaultDescription: String,
+    val unavailableOfflineDescription: String,
+    val saleUnavailableDescription: String,
 )
 
 private fun StartpageItem.toOperatorCard(
     strings: OperatorMenuStrings,
-    onNavigate: (NavDest) -> Unit
+    onNavigate: (NavDest) -> Unit,
+    offlineStatus: OfflineStatus,
 ): OperatorMenuCard {
     val destination = navDestination
+    val enabled = isOperatorMenuRouteEnabled(destination, offlineStatus)
     return OperatorMenuCard(
         icon = icon,
         title = strings.labelByResource.getValue(label),
-        description = destination?.route?.let(strings.descriptionByRoute::get) ?: strings.defaultDescription,
+        description = when {
+            !enabled && destination == RootNavDests.sale -> strings.saleUnavailableDescription
+            !enabled -> strings.unavailableOfflineDescription
+            else -> destination?.route?.let(strings.descriptionByRoute::get) ?: strings.defaultDescription
+        },
+        enabled = enabled,
         emphasized = destination == RootNavDests.sale || destination == RootNavDests.topup,
+        showsOfflineStatus = destination == RootNavDests.sale,
         onClick = {
             if (destination != null) {
                 onNavigate(destination)
@@ -613,6 +651,8 @@ private fun rememberOperatorMenuStrings(): OperatorMenuStrings {
     val restartTitle = stringResource(R.string.root_item_restart_app)
     val restartDescription = stringResource(R.string.operator_restart_desc)
     val defaultDescription = stringResource(R.string.operator_workflow_default_desc)
+    val unavailableOfflineDescription = stringResource(R.string.offline_requires_connection)
+    val saleUnavailableDescription = stringResource(R.string.offline_sale_preparation_unavailable)
     val saleTitle = stringResource(R.string.root_item_sale)
     val topUpTitle = stringResource(R.string.root_item_topup)
     val postPaymentTitle = stringResource(R.string.root_item_post_payment)
@@ -708,6 +748,8 @@ private fun rememberOperatorMenuStrings(): OperatorMenuStrings {
         labelByResource,
         descriptionByRoute,
         defaultDescription,
+        unavailableOfflineDescription,
+        saleUnavailableDescription,
     ) {
         OperatorMenuStrings(
             entryTitle = entryTitle,
@@ -722,6 +764,8 @@ private fun rememberOperatorMenuStrings(): OperatorMenuStrings {
             labelByResource = labelByResource,
             descriptionByRoute = descriptionByRoute,
             defaultDescription = defaultDescription,
+            unavailableOfflineDescription = unavailableOfflineDescription,
+            saleUnavailableDescription = saleUnavailableDescription,
         )
     }
 }

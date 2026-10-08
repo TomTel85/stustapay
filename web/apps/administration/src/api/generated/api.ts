@@ -777,6 +777,34 @@ const injectedRtkApi = api
         }),
         invalidatesTags: ["accounts"],
       }),
+      offlineReport: build.query<OfflineReportApiResponse, OfflineReportApiArg>({
+        query: (queryArg) => ({
+          url: `/orders/offline/report`,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        providesTags: ["orders"],
+      }),
+      dismissOffline: build.mutation<DismissOfflineApiResponse, DismissOfflineApiArg>({
+        query: (queryArg) => ({
+          url: `/orders/offline/${queryArg.orderUuid}/dismiss`,
+          method: "POST",
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        invalidatesTags: ["orders"],
+      }),
+      offlineDevices: build.query<OfflineDevicesApiResponse, OfflineDevicesApiArg>({
+        query: (queryArg) => ({
+          url: `/orders/offline/devices`,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        providesTags: ["orders"],
+      }),
       listOrdersByTill: build.query<ListOrdersByTillApiResponse, ListOrdersByTillApiArg>({
         query: (queryArg) => ({
           url: `/orders/by-till/${queryArg.tillId}`,
@@ -2492,6 +2520,19 @@ export type UpdateAccountCommentApiArg = {
   nodeId: number;
   updateAccountCommentPayload: UpdateAccountCommentPayload;
 };
+export type OfflineReportApiResponse = /** status 200 Successful Response */ OfflineReportEntry[];
+export type OfflineReportApiArg = {
+  nodeId: number;
+};
+export type DismissOfflineApiResponse = unknown;
+export type DismissOfflineApiArg = {
+  orderUuid: string;
+  nodeId: number;
+};
+export type OfflineDevicesApiResponse = /** status 200 Successful Response */ OfflineDeviceStatus[];
+export type OfflineDevicesApiArg = {
+  nodeId: number;
+};
 export type ListOrdersByTillApiResponse = /** status 200 Successful Response */ NormalizedListOrderInt;
 export type ListOrdersByTillApiArg = {
   tillId: number;
@@ -3879,6 +3920,29 @@ export type TransferBalancePayload = {
 export type UpdateAccountCommentPayload = {
   comment: string;
 };
+export type OfflineBookingStatus = "booked" | "already_booked" | "clarification_required" | "not_found" | "dismissed";
+export type OfflineReportEntry = {
+  uuid: string;
+  snapshot_id: string;
+  terminal_id: number;
+  till_id: number;
+  user_id: number;
+  recorded_at: string;
+  received_at: string;
+  status: OfflineBookingStatus;
+  message?: string | null;
+  customer_account_id?: number | null;
+  new_balance?: number | null;
+  order_id?: number | null;
+};
+export type OfflineDeviceStatus = {
+  terminal_id: number;
+  till_id: number;
+  user_id: number;
+  snapshot_id: string;
+  last_contact_at: string;
+  valid_until: string;
+};
 export type NormalizedListOrderInt = {
   ids: number[];
   entities: {
@@ -4377,6 +4441,14 @@ export type PublicEventSettings = {
   daily_end_time?: string | null;
   expected_visitors_per_day?: number | null;
   post_payment_allowed?: boolean;
+  offline_enabled?: boolean;
+  offline_validity_seconds?: number;
+  offline_sale_per_transaction_cents?: number;
+  offline_sale_per_customer_cents?: number;
+  offline_sale_per_till_cents?: number;
+  offline_return_per_transaction_cents?: number;
+  offline_return_per_customer_cents?: number;
+  offline_return_per_till_cents?: number;
   sumup_topup_enabled: boolean;
   group_topup_enabled?: boolean;
   sumup_payment_enabled: boolean;
@@ -4500,6 +4572,14 @@ export type NewEvent = {
   daily_end_time?: string | null;
   expected_visitors_per_day?: number | null;
   post_payment_allowed?: boolean;
+  offline_enabled?: boolean;
+  offline_validity_seconds?: number;
+  offline_sale_per_transaction_cents?: number;
+  offline_sale_per_customer_cents?: number;
+  offline_sale_per_till_cents?: number;
+  offline_return_per_transaction_cents?: number;
+  offline_return_per_customer_cents?: number;
+  offline_return_per_till_cents?: number;
   sumup_topup_enabled: boolean;
   group_topup_enabled?: boolean;
   sumup_payment_enabled: boolean;
@@ -4587,6 +4667,14 @@ export type UpdateEvent = {
   daily_end_time?: string | null;
   expected_visitors_per_day?: number | null;
   post_payment_allowed?: boolean;
+  offline_enabled?: boolean;
+  offline_validity_seconds?: number;
+  offline_sale_per_transaction_cents?: number;
+  offline_sale_per_customer_cents?: number;
+  offline_sale_per_till_cents?: number;
+  offline_return_per_transaction_cents?: number;
+  offline_return_per_customer_cents?: number;
+  offline_return_per_till_cents?: number;
   sumup_topup_enabled: boolean;
   group_topup_enabled?: boolean;
   sumup_payment_enabled: boolean;
@@ -4663,6 +4751,14 @@ export type RestrictedEventSettings = {
   daily_end_time?: string | null;
   expected_visitors_per_day?: number | null;
   post_payment_allowed?: boolean;
+  offline_enabled?: boolean;
+  offline_validity_seconds?: number;
+  offline_sale_per_transaction_cents?: number;
+  offline_sale_per_customer_cents?: number;
+  offline_sale_per_till_cents?: number;
+  offline_return_per_transaction_cents?: number;
+  offline_return_per_customer_cents?: number;
+  offline_return_per_till_cents?: number;
   sumup_topup_enabled: boolean;
   group_topup_enabled?: boolean;
   sumup_payment_enabled: boolean;
@@ -5200,6 +5296,11 @@ export const {
   useUpdateVoucherAmountMutation,
   useTransferBalanceMutation,
   useUpdateAccountCommentMutation,
+  useOfflineReportQuery,
+  useLazyOfflineReportQuery,
+  useDismissOfflineMutation,
+  useOfflineDevicesQuery,
+  useLazyOfflineDevicesQuery,
   useListOrdersByTillQuery,
   useLazyListOrdersByTillQuery,
   useListOrdersFilteredQuery,

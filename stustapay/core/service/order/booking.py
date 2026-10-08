@@ -43,6 +43,8 @@ class NewLineItem(BaseModel):
     product_id: int
     product_price: float
     tax_rate_id: int
+    tax_name: str | None = None
+    tax_rate: float | None = None
 
 
 @dataclass
@@ -98,8 +100,10 @@ async def book_order(
     customer_account_id: Optional[int] = None,
     cash_register_id: Optional[int] = None,
     booked_at: Optional[datetime] = None,
+    z_nr: int | None = None,
 ) -> OrderInfo:
-    z_nr = await conn.fetchval("select z_nr from till where id = $1", till_id)
+    if z_nr is None:
+        z_nr = await conn.fetchval("select z_nr from till where id = $1", till_id)
     if z_nr is None:
         raise InvalidArgument("Till does not exist")
 
@@ -127,10 +131,19 @@ async def book_order(
         await conn.executemany(
             "insert into line_item (order_id, item_id, product_id, product_price, quantity, tax_rate_id, "
             "   tax_name, tax_rate) "
-            "select $1, $2, $3, $4, $5, $6, t.name, t.rate "
-            "from tax_rate t where t.id = $6",
+            "values ($1,$2,$3,$4,$5,$6,coalesce($7,(select name from tax_rate where id=$6)),"
+            "coalesce($8,(select rate from tax_rate where id=$6)))",
             [
-                (order_id, i, item.product_id, item.product_price, item.quantity, item.tax_rate_id)
+                (
+                    order_id,
+                    i,
+                    item.product_id,
+                    item.product_price,
+                    item.quantity,
+                    item.tax_rate_id,
+                    item.tax_name,
+                    item.tax_rate,
+                )
                 for i, item in enumerate(line_items)
             ],
         )

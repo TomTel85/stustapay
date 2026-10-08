@@ -99,6 +99,7 @@ from stustapay.core.service.tree.common import (
 
 from ..till.common import get_cash_register_account_id
 from .booking import BookingIdentifier, NewLineItem, book_order
+from .offline import OfflineOrderMixin, cents, json_object
 from .stats import OrderStatsService
 from .voucher import VoucherService
 
@@ -275,7 +276,7 @@ async def fetch_transaction(*, conn: Connection, node: Node, transaction_id: int
     )
 
 
-class OrderService(Service[Config]):
+class OrderService(OfflineOrderMixin, Service[Config]):
     def __init__(self, db_pool: asyncpg.Pool, config: Config, auth_service: AuthService):
         super().__init__(db_pool, config)
         self.auth_service = auth_service
@@ -498,7 +499,9 @@ class OrderService(Service[Config]):
         )
 
         # Get the appropriate balance limit based on VIP status
-        max_limit = event_settings.vip_max_account_balance if customer_account.is_vip else event_settings.max_account_balance
+        max_limit = (
+            event_settings.vip_max_account_balance if customer_account.is_vip else event_settings.max_account_balance
+        )
         new_balance = customer_account.balance + new_topup.amount
         if new_balance > max_limit:
             too_much = new_balance - max_limit
@@ -713,14 +716,17 @@ class OrderService(Service[Config]):
                 # Disallow post-payment; ensure sufficient funds
                 if customer_account.balance < order.total_price:
                     raise NotEnoughFundsException(
-                        needed_fund=order.total_price, 
-                        available_fund=customer_account.balance
+                        needed_fund=order.total_price, available_fund=customer_account.balance
                     )
 
                 order.new_balance = customer_account.balance - order.total_price
 
                 # Get the appropriate balance limit based on VIP status
-                max_limit = event_settings.vip_max_account_balance if customer_account.is_vip else event_settings.max_account_balance
+                max_limit = (
+                    event_settings.vip_max_account_balance
+                    if customer_account.is_vip
+                    else event_settings.max_account_balance
+                )
 
                 # Ensure the balance does not exceed maximum allowed balance
                 if order.new_balance > max_limit:
@@ -737,7 +743,6 @@ class OrderService(Service[Config]):
                     )
 
         return order
-
 
     @with_db_transaction(read_only=True)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
@@ -946,6 +951,7 @@ class OrderService(Service[Config]):
         *,
         conn: Connection,
         current_till: Till,
+        current_terminal: CurrentTerminal,
         node: Node,
         current_user: CurrentUser,
         new_sale: NewSale,
@@ -954,6 +960,21 @@ class OrderService(Service[Config]):
         prepare the given order: checks all requirements.
         To finish the order, book_order is used.
         """
+        await conn.execute("select pg_advisory_xact_lock(hashtextextended($1,0))", str(new_sale.uuid))
+        existing = await conn.fetchrow("select * from terminal_sale_journal where uuid=$1", new_sale.uuid)
+        if existing is not None:
+            if existing["terminal_id"] != current_terminal.id or json_object(
+                existing["request"]
+            ) != new_sale.model_dump(mode="json"):
+                raise InvalidArgument("Booking UUID reused with different content")
+            return CompletedSale.model_validate(json_object(existing["result"]))
+        if new_sale.customer_tag_uid is not None:
+            await conn.fetchrow(
+                "select a.id from account a join user_tag ut on ut.id=a.user_tag_id "
+                "where ut.uid=$1 and a.node_id=any($2) for update of a",
+                new_sale.customer_tag_uid,
+                node.ids_to_root,
+            )
         event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=node.id)
         internal_new_sale = InternalNewSale(
             uuid=new_sale.uuid,
@@ -970,6 +991,69 @@ class OrderService(Service[Config]):
                 for b in new_sale.buttons
             ],
         )
+        legacy_order = await conn.fetch_maybe_one(Order, "select * from order_value where uuid=$1", new_sale.uuid)
+        if legacy_order is not None:
+            if (
+                legacy_order.order_type != OrderType.sale
+                or legacy_order.till_id != current_till.id
+                or legacy_order.payment_method != new_sale.payment_method
+                or legacy_order.customer_tag_uid != new_sale.customer_tag_uid
+                or legacy_order.cashier_id is None
+            ):
+                raise InvalidArgument("Legacy booking UUID does not match this sale")
+            products = await self._get_products_from_buttons(
+                conn=conn,
+                node=node,
+                till_profile_id=current_till.active_profile_id,
+                buttons=internal_new_sale.buttons,
+            )
+            quantities: dict[int, int] = defaultdict(int)
+            variable_prices: dict[int, float] = defaultdict(float)
+            for item in products:
+                quantities[item.product.id] += item.quantity if item.quantity is not None else 1
+                if item.price is not None:
+                    variable_prices[item.product.id] += item.price
+            historical = {line.product.id: line for line in legacy_order.line_items}
+            if {k: v for k, v in quantities.items() if v} != {k: line.quantity for k, line in historical.items()}:
+                raise InvalidArgument("Legacy booking UUID has different positions; manual clarification required")
+            if any(cents(historical[k].product_price) != cents(v) for k, v in variable_prices.items()):
+                raise InvalidArgument("Legacy booking UUID has a different variable price")
+            used_vouchers = await conn.fetchval(
+                "select coalesce(sum(vouchers),0) from transaction where order_id=$1",
+                legacy_order.id,
+            )
+            if used_vouchers != 0 or new_sale.used_vouchers not in (None, 0):
+                raise InvalidArgument("Legacy voucher bookings require manual clarification")
+            account = (
+                await get_account_by_id(conn=conn, node=node, account_id=legacy_order.customer_account_id)
+                if legacy_order.customer_account_id is not None
+                else None
+            )
+            current_balance = account.balance if account else 0.0
+            result = CompletedSale(
+                id=legacy_order.id,
+                uuid=legacy_order.uuid,
+                booked_at=legacy_order.booked_at,
+                cashier_id=legacy_order.cashier_id,
+                till_id=current_till.id,
+                buttons=new_sale.buttons,
+                line_items=legacy_order.line_items,
+                customer_account_id=legacy_order.customer_account_id,
+                payment_method=legacy_order.payment_method,
+                old_balance=current_balance + legacy_order.total_price,
+                new_balance=current_balance,
+                old_voucher_balance=account.vouchers if account else 0,
+                new_voucher_balance=account.vouchers if account else 0,
+                bon_url=event_settings.customer_portal_url + "/bon/" + str(legacy_order.uuid),
+            )
+            await conn.execute(
+                "insert into terminal_sale_journal(uuid,terminal_id,request,result) values($1,$2,$3,$4)",
+                new_sale.uuid,
+                current_terminal.id,
+                new_sale.model_dump(mode="json"),
+                result.model_dump(mode="json"),
+            )
+            return result
         completed_sale = await self._book_sale(
             conn=conn,
             event_settings=event_settings,
@@ -979,7 +1063,7 @@ class OrderService(Service[Config]):
             current_user=current_user,
         )
         bon_url = event_settings.customer_portal_url + "/bon/" + str(completed_sale.uuid)
-        return CompletedSale(
+        result = CompletedSale(
             id=completed_sale.id,
             booked_at=completed_sale.booked_at,
             cashier_id=completed_sale.cashier_id,
@@ -995,6 +1079,14 @@ class OrderService(Service[Config]):
             buttons=new_sale.buttons,
             bon_url=bon_url,
         )
+        await conn.execute(
+            "insert into terminal_sale_journal(uuid,terminal_id,request,result) values($1,$2,$3,$4)",
+            new_sale.uuid,
+            current_terminal.id,
+            new_sale.model_dump(mode="json"),
+            result.model_dump(mode="json"),
+        )
+        return result
 
     @with_db_transaction(read_only=False)
     @requires_node()
@@ -1226,9 +1318,7 @@ class OrderService(Service[Config]):
         if order is None:
             raise InvalidArgument("Order does not exist")
         till = await self._resolve_admin_cancel_till(conn=conn, node=node, order=order)
-        await self._cancel_sale(
-            conn=conn, node=node, till_id=till.id, current_user=current_user, order_id=order_id
-        )
+        await self._cancel_sale(conn=conn, node=node, till_id=till.id, current_user=current_user, order_id=order_id)
 
     @with_db_transaction(read_only=False)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
@@ -1236,9 +1326,7 @@ class OrderService(Service[Config]):
         self, *, conn: Connection, node: Node, current_till: Till, new_pay_out: NewPayOut
     ) -> PendingPayOut:
         # Check for duplicate UUID
-        uuid_exists = await conn.fetchval(
-            "SELECT EXISTS(SELECT FROM ordr WHERE uuid = $1)", new_pay_out.uuid
-        )
+        uuid_exists = await conn.fetchval("SELECT EXISTS(SELECT FROM ordr WHERE uuid = $1)", new_pay_out.uuid)
         if uuid_exists:
             raise AlreadyProcessedException("Successfully booked order")
 
@@ -1274,7 +1362,9 @@ class OrderService(Service[Config]):
 
             # Get the appropriate balance limit based on VIP status
             max_negative_balance = -1 * (
-                event_settings.vip_max_account_balance if customer_account.is_vip else event_settings.max_account_balance
+                event_settings.vip_max_account_balance
+                if customer_account.is_vip
+                else event_settings.max_account_balance
             )  # Should be negative
             if new_balance < max_negative_balance:
                 too_much = max_negative_balance - new_balance
@@ -1302,8 +1392,7 @@ class OrderService(Service[Config]):
             # Regular payouts can only happen if the customer has a positive balance
             if customer_account.balance <= 0:
                 raise InvalidArgument(
-                    f"Cannot payout from a zero or negative balance. "
-                    f"Current balance: {customer_account.balance:.02f}€"
+                    f"Cannot payout from a zero or negative balance. Current balance: {customer_account.balance:.02f}€"
                 )
 
             # Customer cannot payout more than they have
@@ -1319,7 +1408,9 @@ class OrderService(Service[Config]):
 
             # Get the appropriate balance limit based on VIP status
             max_positive_balance = (
-                event_settings.vip_max_account_balance if customer_account.is_vip else event_settings.max_account_balance
+                event_settings.vip_max_account_balance
+                if customer_account.is_vip
+                else event_settings.max_account_balance
             )
 
             # Ensure the payout does not violate any constraints
@@ -1341,7 +1432,6 @@ class OrderService(Service[Config]):
             old_balance=customer_account.balance,
             new_balance=new_balance,
         )
-
 
     @with_db_transaction(read_only=False)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
@@ -1382,7 +1472,7 @@ class OrderService(Service[Config]):
         cash_register_account_id = await get_cash_register_account_id(
             conn=conn, node=node, cash_register_id=current_till.active_cash_register_id
         )
-        
+
         # For payouts, positive amounts mean money leaving the customer account
         # The bookings use positive amounts to transfer from customer -> cash_topup (money leaves customer)
         # and from cash_register -> cash_exit (cash leaves register)
@@ -1413,11 +1503,10 @@ class OrderService(Service[Config]):
             conn=conn,
             customer_account_ids=[pending_pay_out.customer_account_id],
         )
-        
+
         # Fetch the current account balance after the transaction
         updated_account = await conn.fetchrow(
-            "SELECT balance FROM account WHERE id = $1", 
-            pending_pay_out.customer_account_id
+            "SELECT balance FROM account WHERE id = $1", pending_pay_out.customer_account_id
         )
         actual_new_balance = updated_account["balance"] if updated_account else 0.0
 

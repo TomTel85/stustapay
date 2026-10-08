@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -7,6 +8,7 @@ from stustapay.bon.bon import BonJson
 from stustapay.core.http.auth_user import CurrentAuthToken
 from stustapay.core.http.context import ContextOrderService
 from stustapay.core.http.normalize_data import NormalizedList, normalize_list
+from stustapay.core.schema.offline import OfflineDeviceStatus, OfflineReportEntry
 from stustapay.core.schema.order import CompletedSaleProducts, EditSaleProducts, Order
 
 router = APIRouter(
@@ -14,6 +16,21 @@ router = APIRouter(
     tags=["orders"],
     responses={404: {"description": "Not found"}},
 )
+
+
+@router.get("/offline/report", response_model=list[OfflineReportEntry])
+async def offline_report(token: CurrentAuthToken, order_service: ContextOrderService, node_id: int):
+    return await order_service.offline_report(token=token, node_id=node_id)
+
+
+@router.post("/offline/{order_uuid}/dismiss", status_code=204)
+async def dismiss_offline(order_uuid: UUID, token: CurrentAuthToken, order_service: ContextOrderService, node_id: int):
+    await order_service.dismiss_offline(token=token, node_id=node_id, order_uuid=order_uuid)
+
+
+@router.get("/offline/devices", response_model=list[OfflineDeviceStatus])
+async def offline_devices(token: CurrentAuthToken, order_service: ContextOrderService, node_id: int):
+    return await order_service.offline_devices(token=token, node_id=node_id)
 
 
 @router.get("/by-till/{till_id}", response_model=NormalizedList[Order, int])

@@ -311,6 +311,126 @@
         ]
       }
     },
+    "/order/offline/prepare": {
+      "post": {
+        "tags": [
+          "order"
+        ],
+        "summary": "Prepare Offline",
+        "operationId": "prepare_offline",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfflineSnapshot"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/order/offline/import": {
+      "post": {
+        "tags": [
+          "order"
+        ],
+        "summary": "Import Offline",
+        "operationId": "import_offline",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OfflineImport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfflineImportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/order/offline/status/{order_uuid}": {
+      "get": {
+        "tags": [
+          "order"
+        ],
+        "summary": "Offline Booking Status",
+        "operationId": "offline_booking_status",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Order Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfflineBookingResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/order/check-sale": {
       "post": {
         "tags": [
@@ -3232,6 +3352,293 @@
           "customer_tag_uid"
         ],
         "title": "NewTopUp"
+      },
+      "OfflineBooking": {
+        "properties": {
+          "snapshot_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Snapshot Id"
+          },
+          "sale": {
+            "$ref": "#/components/schemas/NewSale"
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Sequence"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "snapshot_id",
+          "sale",
+          "sequence",
+          "recorded_at"
+        ],
+        "title": "OfflineBooking"
+      },
+      "OfflineBookingResult": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OfflineBookingStatus"
+          },
+          "sale": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompletedSale"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "status"
+        ],
+        "title": "OfflineBookingResult"
+      },
+      "OfflineBookingStatus": {
+        "type": "string",
+        "enum": [
+          "booked",
+          "already_booked",
+          "clarification_required",
+          "not_found",
+          "dismissed"
+        ],
+        "title": "OfflineBookingStatus"
+      },
+      "OfflineButton": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "products": {
+            "items": {
+              "$ref": "#/components/schemas/Product"
+            },
+            "type": "array",
+            "title": "Products"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "products"
+        ],
+        "title": "OfflineButton"
+      },
+      "OfflineCustomer": {
+        "properties": {
+          "customer_account_id": {
+            "type": "integer",
+            "title": "Customer Account Id"
+          },
+          "customer_tag_uid": {
+            "type": "integer",
+            "title": "Customer Tag Uid"
+          },
+          "balance_cents": {
+            "type": "integer",
+            "title": "Balance Cents"
+          },
+          "restriction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductRestriction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "customer_account_id",
+          "customer_tag_uid",
+          "balance_cents"
+        ],
+        "title": "OfflineCustomer"
+      },
+      "OfflineImport": {
+        "properties": {
+          "bookings": {
+            "items": {
+              "$ref": "#/components/schemas/OfflineBooking"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Bookings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bookings"
+        ],
+        "title": "OfflineImport"
+      },
+      "OfflineImportResult": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/OfflineBookingResult"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "title": "OfflineImportResult"
+      },
+      "OfflineLimits": {
+        "properties": {
+          "validity_seconds": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Validity Seconds",
+            "default": 7200
+          },
+          "sale_per_transaction_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Sale Per Transaction Cents",
+            "default": 2000
+          },
+          "sale_per_customer_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Sale Per Customer Cents",
+            "default": 3000
+          },
+          "sale_per_till_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Sale Per Till Cents",
+            "default": 50000
+          },
+          "return_per_transaction_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Return Per Transaction Cents",
+            "default": 2000
+          },
+          "return_per_customer_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Return Per Customer Cents",
+            "default": 3000
+          },
+          "return_per_till_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Return Per Till Cents",
+            "default": 50000
+          }
+        },
+        "type": "object",
+        "title": "OfflineLimits"
+      },
+      "OfflineSnapshot": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Server Time"
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Valid Until"
+          },
+          "terminal_id": {
+            "type": "integer",
+            "title": "Terminal Id"
+          },
+          "till_id": {
+            "type": "integer",
+            "title": "Till Id"
+          },
+          "event_node_id": {
+            "type": "integer",
+            "title": "Event Node Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/OfflineLimits"
+          },
+          "customers": {
+            "items": {
+              "$ref": "#/components/schemas/OfflineCustomer"
+            },
+            "type": "array",
+            "title": "Customers"
+          },
+          "buttons": {
+            "items": {
+              "$ref": "#/components/schemas/OfflineButton"
+            },
+            "type": "array",
+            "title": "Buttons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "server_time",
+          "valid_until",
+          "terminal_id",
+          "till_id",
+          "event_node_id",
+          "user_id",
+          "rules",
+          "customers",
+          "buttons"
+        ],
+        "title": "OfflineSnapshot"
       },
       "Order": {
         "properties": {

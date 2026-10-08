@@ -31,6 +31,7 @@ class ManagedConfigWatcher @Inject constructor(
     private val registrationRepositoryInner: RegistrationRepositoryInner,
     private val terminalConfigRepository: TerminalConfigRepository,
     private val managedWifiSuggestionRepository: ManagedWifiSuggestionRepository,
+    private val salesJournal: de.stustapay.stustapay.offline.SalesJournal,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val headwindMDM: HeadwindMDM = HeadwindMDM.getInstance()
@@ -101,6 +102,11 @@ class ManagedConfigWatcher @Inject constructor(
                 return@launch
             }
 
+            if (salesJournal.hasUnresolved()) {
+                Log.w(TAG, "Managed registration change deferred until pending sales are reconciled")
+                return@launch
+            }
+            salesJournal.dao.revoke()
             Log.i(
                 TAG,
                 "Applying Headwind managed registration for ${managedConfig.baseUrl} (terminal=${managedConfig.terminalName ?: "n/a"})",

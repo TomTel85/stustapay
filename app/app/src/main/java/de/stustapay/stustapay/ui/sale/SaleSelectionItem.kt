@@ -19,6 +19,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -132,6 +133,7 @@ fun SaleSelectionItem(
     caption: String,
     compactHandheld: Boolean = false,
     type: SaleSelectionItemType,
+    enabled: Boolean = true,
 ) {
     val haptic = LocalHapticFeedback.current
     val isReturnable = type is SaleSelectionItemType.Returnable
@@ -231,6 +233,7 @@ fun SaleSelectionItem(
     }
 
     Surface(
+        modifier = Modifier.alpha(if (enabled) 1f else 0.45f),
         shape = RoundedCornerShape(18.dp),
         color = OperatorPalette.interactivePanel,
         border = BorderStroke(1.dp, OperatorPalette.panelBorder),
@@ -325,7 +328,7 @@ fun SaleSelectionItem(
             ) {
                 Button(
                     onClick = secondaryAction,
-                    enabled = secondaryEnabled,
+                    enabled = enabled && secondaryEnabled,
                     modifier = Modifier
                         .height(46.dp)
                         .widthIn(min = if (isReturnable) 132.dp else if (secondaryText.length > 1) 96.dp else 64.dp),
@@ -344,6 +347,7 @@ fun SaleSelectionItem(
                 }
 
                 Button(
+                    enabled = enabled,
                     onClick = {
                         if (compactHandheld && primaryTriggersAddHaptic) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)

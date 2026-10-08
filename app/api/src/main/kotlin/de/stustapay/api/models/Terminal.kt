@@ -32,15 +32,15 @@ import kotlinx.serialization.Contextual
  * @param tillId 
  * @param sessionUuid 
  * @param registrationUuid 
- * @param loginMode
- * @param deviceRoleId
- * @param deviceCashRegisterId
+ * @param loginMode 
+ * @param deviceRoleId 
+ * @param deviceCashRegisterId 
  * @param description 
  * @param mode 
  * @param entryAreaId 
  * @param selfService 
  * @param appDisplayMode 
- * @param deviceUserId
+ * @param deviceUserId 
  * @param activeUserId 
  * @param activeUserRoleId 
  */
@@ -103,3 +103,4 @@ data class Terminal (
 
 
 }
+

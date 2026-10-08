@@ -4464,6 +4464,167 @@
         }
       }
     },
+    "/orders/offline/report": {
+      "get": {
+        "tags": [
+          "orders"
+        ],
+        "summary": "Offline Report",
+        "operationId": "offline_report",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OfflineReportEntry"
+                  },
+                  "title": "Response Offline Report Orders Offline Report Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/offline/{order_uuid}/dismiss": {
+      "post": {
+        "tags": [
+          "orders"
+        ],
+        "summary": "Dismiss Offline",
+        "operationId": "dismiss_offline",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Order Uuid"
+            }
+          },
+          {
+            "name": "node_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/offline/devices": {
+      "get": {
+        "tags": [
+          "orders"
+        ],
+        "summary": "Offline Devices",
+        "operationId": "offline_devices",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OfflineDeviceStatus"
+                  },
+                  "title": "Response Offline Devices Orders Offline Devices Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/orders/by-till/{till_id}": {
       "get": {
         "tags": [
@@ -17029,6 +17190,54 @@
             "title": "Post Payment Allowed",
             "default": false
           },
+          "offline_enabled": {
+            "type": "boolean",
+            "title": "Offline Enabled",
+            "default": false
+          },
+          "offline_validity_seconds": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Offline Validity Seconds",
+            "default": 7200
+          },
+          "offline_sale_per_transaction_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Sale Per Transaction Cents",
+            "default": 2000
+          },
+          "offline_sale_per_customer_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Sale Per Customer Cents",
+            "default": 3000
+          },
+          "offline_sale_per_till_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Sale Per Till Cents",
+            "default": 50000
+          },
+          "offline_return_per_transaction_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Return Per Transaction Cents",
+            "default": 2000
+          },
+          "offline_return_per_customer_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Return Per Customer Cents",
+            "default": 3000
+          },
+          "offline_return_per_till_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Return Per Till Cents",
+            "default": 50000
+          },
           "sumup_topup_enabled": {
             "type": "boolean",
             "title": "Sumup Topup Enabled"
@@ -18907,6 +19116,153 @@
         ],
         "title": "ObjectType"
       },
+      "OfflineBookingStatus": {
+        "type": "string",
+        "enum": [
+          "booked",
+          "already_booked",
+          "clarification_required",
+          "not_found",
+          "dismissed"
+        ],
+        "title": "OfflineBookingStatus"
+      },
+      "OfflineDeviceStatus": {
+        "properties": {
+          "terminal_id": {
+            "type": "integer",
+            "title": "Terminal Id"
+          },
+          "till_id": {
+            "type": "integer",
+            "title": "Till Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "snapshot_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Snapshot Id"
+          },
+          "last_contact_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Contact At"
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Valid Until"
+          }
+        },
+        "type": "object",
+        "required": [
+          "terminal_id",
+          "till_id",
+          "user_id",
+          "snapshot_id",
+          "last_contact_at",
+          "valid_until"
+        ],
+        "title": "OfflineDeviceStatus"
+      },
+      "OfflineReportEntry": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "snapshot_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Snapshot Id"
+          },
+          "terminal_id": {
+            "type": "integer",
+            "title": "Terminal Id"
+          },
+          "till_id": {
+            "type": "integer",
+            "title": "Till Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Received At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OfflineBookingStatus"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "customer_account_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Account Id"
+          },
+          "new_balance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Balance"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "snapshot_id",
+          "terminal_id",
+          "till_id",
+          "user_id",
+          "recorded_at",
+          "received_at",
+          "status"
+        ],
+        "title": "OfflineReportEntry"
+      },
       "Order": {
         "properties": {
           "id": {
@@ -20032,6 +20388,54 @@
             "title": "Post Payment Allowed",
             "default": false
           },
+          "offline_enabled": {
+            "type": "boolean",
+            "title": "Offline Enabled",
+            "default": false
+          },
+          "offline_validity_seconds": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Offline Validity Seconds",
+            "default": 7200
+          },
+          "offline_sale_per_transaction_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Sale Per Transaction Cents",
+            "default": 2000
+          },
+          "offline_sale_per_customer_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Sale Per Customer Cents",
+            "default": 3000
+          },
+          "offline_sale_per_till_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Sale Per Till Cents",
+            "default": 50000
+          },
+          "offline_return_per_transaction_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Return Per Transaction Cents",
+            "default": 2000
+          },
+          "offline_return_per_customer_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Return Per Customer Cents",
+            "default": 3000
+          },
+          "offline_return_per_till_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Return Per Till Cents",
+            "default": 50000
+          },
           "sumup_topup_enabled": {
             "type": "boolean",
             "title": "Sumup Topup Enabled"
@@ -20593,6 +20997,54 @@
             "type": "boolean",
             "title": "Post Payment Allowed",
             "default": false
+          },
+          "offline_enabled": {
+            "type": "boolean",
+            "title": "Offline Enabled",
+            "default": false
+          },
+          "offline_validity_seconds": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Offline Validity Seconds",
+            "default": 7200
+          },
+          "offline_sale_per_transaction_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Sale Per Transaction Cents",
+            "default": 2000
+          },
+          "offline_sale_per_customer_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Sale Per Customer Cents",
+            "default": 3000
+          },
+          "offline_sale_per_till_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Sale Per Till Cents",
+            "default": 50000
+          },
+          "offline_return_per_transaction_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Return Per Transaction Cents",
+            "default": 2000
+          },
+          "offline_return_per_customer_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Return Per Customer Cents",
+            "default": 3000
+          },
+          "offline_return_per_till_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Return Per Till Cents",
+            "default": 50000
           },
           "sumup_topup_enabled": {
             "type": "boolean",
@@ -22595,6 +23047,54 @@
             "type": "boolean",
             "title": "Post Payment Allowed",
             "default": false
+          },
+          "offline_enabled": {
+            "type": "boolean",
+            "title": "Offline Enabled",
+            "default": false
+          },
+          "offline_validity_seconds": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Offline Validity Seconds",
+            "default": 7200
+          },
+          "offline_sale_per_transaction_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Sale Per Transaction Cents",
+            "default": 2000
+          },
+          "offline_sale_per_customer_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Sale Per Customer Cents",
+            "default": 3000
+          },
+          "offline_sale_per_till_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Sale Per Till Cents",
+            "default": 50000
+          },
+          "offline_return_per_transaction_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Return Per Transaction Cents",
+            "default": 2000
+          },
+          "offline_return_per_customer_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Return Per Customer Cents",
+            "default": 3000
+          },
+          "offline_return_per_till_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offline Return Per Till Cents",
+            "default": 50000
           },
           "sumup_topup_enabled": {
             "type": "boolean",

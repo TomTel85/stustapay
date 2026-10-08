@@ -141,6 +141,7 @@ async def make_sale_bookings(
     booked_at: datetime | None = None,
     cash_register_id: int | None = None,
     buttons: list[Button] | None = None,
+    z_nr: int | None = None,
 ) -> CompletedSale:
     line_items = [
         NewLineItem(
@@ -148,6 +149,8 @@ async def make_sale_bookings(
             product_id=line_item.product.id,
             product_price=line_item.product_price,
             tax_rate_id=line_item.tax_rate_id,
+            tax_name=line_item.tax_name,
+            tax_rate=line_item.tax_rate,
         )
         for line_item in sale.line_items
     ]
@@ -196,6 +199,7 @@ async def make_sale_bookings(
     order_info = await book_order(
         conn=conn,
         booked_at=booked_at,
+        z_nr=z_nr,
         order_type=OrderType.sale,
         uuid=sale.uuid,
         payment_method=sale.payment_method,

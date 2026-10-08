@@ -152,6 +152,15 @@ def _build_event_db_values(event: NewEvent, available_columns: set[str]) -> list
         ("pretix_event", event.pretix_event),
         ("pretix_ticket_ids", event.pretix_ticket_ids),
         ("post_payment_allowed", event.post_payment_allowed),
+        ("offline_enabled", event.offline_enabled),
+        ("offline_validity_seconds", event.offline_validity_seconds),
+        ("offline_sale_per_transaction_cents", event.offline_sale_per_transaction_cents),
+        ("offline_sale_per_customer_cents", event.offline_sale_per_customer_cents),
+        ("offline_sale_per_till_cents", event.offline_sale_per_till_cents),
+        ("offline_return_per_transaction_cents", event.offline_return_per_transaction_cents),
+        ("offline_return_per_customer_cents", event.offline_return_per_customer_cents),
+        ("offline_return_per_till_cents", event.offline_return_per_till_cents),
+
         ("donation_enabled", event.donation_enabled),
     ]
     optional_values = {

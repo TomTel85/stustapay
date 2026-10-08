@@ -8,7 +8,9 @@ import javax.inject.Inject
 class TerminalConfigRemoteDataSource @Inject constructor(
     private val terminalApiAccessor: TerminalApiAccessor
 ){
-    suspend fun getTerminalConfig(): Response<TerminalConfig> {
-        return terminalApiAccessor.execute { it.base()?.config() }
+    suspend fun getTerminalConfig(offlinePrepared: Boolean = false): Response<TerminalConfig> {
+        return de.stustapay.stustapay.net.withOfflineRecoveryDeadline(offlinePrepared) {
+            terminalApiAccessor.execute { it.base()?.config() }
+        }
     }
 }

@@ -11,6 +11,8 @@ import de.stustapay.stustapay.ui.common.TerminalLoginState
 import de.stustapay.libssp.util.Result
 import de.stustapay.libssp.util.asResult
 import de.stustapay.stustapay.repository.InfallibleRepository
+import de.stustapay.stustapay.offline.OfflineSalesRepository
+import de.stustapay.stustapay.offline.OfflineStatus
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 
@@ -18,7 +20,8 @@ import javax.inject.Inject
 @HiltViewModel
 class StartpageViewModel @Inject constructor(
     userRepository: UserRepository,
-    terminalConfigRepository: TerminalConfigRepository
+    terminalConfigRepository: TerminalConfigRepository,
+    offlineSalesRepository: OfflineSalesRepository,
 ) : ViewModel() {
 
     val configLoading = terminalConfigRepository.fetching.stateIn(
@@ -38,8 +41,17 @@ class StartpageViewModel @Inject constructor(
         initialValue = TerminalLoginState(),
     )
 
-    val terminalStatusMessage = terminalConfigRepository.terminalConfigState.map { state ->
-        terminalConfigStatusMessage(state)
+    val offlineStatus = combine(offlineSalesRepository.status, terminalConfigRepository.terminalConfigState) { status, configState ->
+        val refreshTransportFailed = (configState as? TerminalConfigState.Success)?.refreshTransportError == true
+        status.copy(offlineMode = status.offlineMode || refreshTransportFailed)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = OfflineStatus(),
+    )
+
+    val terminalStatusMessage = combine(terminalConfigRepository.terminalConfigState, offlineStatus) { state, status ->
+        terminalConfigStatusMessage(state, status.offlineMode)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -47,12 +59,14 @@ class StartpageViewModel @Inject constructor(
     )
 }
 
-internal fun terminalConfigStatusMessage(state: TerminalConfigState): String? {
+internal fun terminalConfigStatusMessage(state: TerminalConfigState, offlineMode: Boolean = false): String? {
     return when (state) {
         is TerminalConfigState.NoConfig -> null
         is TerminalConfigState.Error -> "Configuration error: ${state.message}"
-        is TerminalConfigState.Success -> state.refreshErrorMessage?.let {
-            "Configuration refresh failed: $it"
-        } ?: state.config.testModeMessage.takeIf { state.config.testMode }
+        is TerminalConfigState.Success -> {
+            val refreshError = state.refreshErrorMessage?.takeUnless { offlineMode && state.refreshTransportError }
+            refreshError?.let { "Configuration refresh failed: $it" }
+                ?: state.config.testModeMessage.takeIf { state.config.testMode }
+        }
     }
 }

@@ -13,13 +13,20 @@ import javax.inject.Singleton
 @Singleton
 class SaleRepository @Inject constructor(
     private val saleRemoteDataSource: SaleRemoteDataSource,
+    val offlineSales: de.stustapay.stustapay.offline.OfflineSalesRepository,
 ) {
     suspend fun checkSale(newSale: NewSale): Response<PendingSale> {
-        return saleRemoteDataSource.checkSale(newSale)
+        if (offlineSales.offline.value && newSale.paymentMethod == de.stustapay.api.models.PaymentMethod.tag) return offlineSales.check(newSale)
+        val prepared = newSale.paymentMethod == de.stustapay.api.models.PaymentMethod.tag &&
+            offlineSales.restoredConfig() != null
+        val response = de.stustapay.stustapay.net.withOfflineRecoveryDeadline(prepared) {
+            saleRemoteDataSource.checkSale(newSale)
+        }
+        return if (response is Response.Error.Request && de.stustapay.stustapay.offline.isOfflineTransportFailure(response)) offlineSales.check(newSale) else response
     }
 
     suspend fun bookSale(newSale: NewSale): Response<CompletedSale> {
-        return saleRemoteDataSource.bookSale(newSale)
+        return offlineSales.book(newSale)
     }
 
     suspend fun registerPendingSale(newSale: NewSale): Response<PendingSale> {

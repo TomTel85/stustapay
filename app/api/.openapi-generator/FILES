@@ -49,6 +49,15 @@ src/main/kotlin/de/stustapay/api/models/NewSale.kt
 src/main/kotlin/de/stustapay/api/models/NewTicketSale.kt
 src/main/kotlin/de/stustapay/api/models/NewTicketScan.kt
 src/main/kotlin/de/stustapay/api/models/NewTopUp.kt
+src/main/kotlin/de/stustapay/api/models/OfflineBooking.kt
+src/main/kotlin/de/stustapay/api/models/OfflineBookingResult.kt
+src/main/kotlin/de/stustapay/api/models/OfflineBookingStatus.kt
+src/main/kotlin/de/stustapay/api/models/OfflineButton.kt
+src/main/kotlin/de/stustapay/api/models/OfflineCustomer.kt
+src/main/kotlin/de/stustapay/api/models/OfflineImport.kt
+src/main/kotlin/de/stustapay/api/models/OfflineImportResult.kt
+src/main/kotlin/de/stustapay/api/models/OfflineLimits.kt
+src/main/kotlin/de/stustapay/api/models/OfflineSnapshot.kt
 src/main/kotlin/de/stustapay/api/models/Order.kt
 src/main/kotlin/de/stustapay/api/models/OrderType.kt
 src/main/kotlin/de/stustapay/api/models/PaymentMethod.kt

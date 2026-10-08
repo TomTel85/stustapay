@@ -39,6 +39,54 @@ class TerminalConfigStateUiTest {
         )
     }
 
+    @Test
+    fun `offline transport refresh failure is hidden only in offline mode`() {
+        val state = TerminalConfigState.Success(
+            config = terminalConfig(),
+            refreshErrorMessage = "request error: Network is unreachable",
+            refreshTransportError = true,
+        )
+
+        assertEquals(
+            "Configuration refresh failed: request error: Network is unreachable",
+            terminalConfigStatusMessage(state, offlineMode = false),
+        )
+        assertEquals(null, terminalConfigStatusMessage(state, offlineMode = true))
+    }
+
+    @Test
+    fun `offline transport failure suppression preserves test mode warning`() {
+        val state = TerminalConfigState.Success(
+            config = terminalConfig().copy(testMode = true, testModeMessage = "Test mode enabled"),
+            refreshErrorMessage = "request error: Network is unreachable",
+            refreshTransportError = true,
+        )
+
+        assertEquals("Test mode enabled", terminalConfigStatusMessage(state, offlineMode = true))
+    }
+
+    @Test
+    fun `business refresh failure remains visible during offline mode`() {
+        val state = TerminalConfigState.Success(
+            config = terminalConfig(),
+            refreshErrorMessage = "terminal config missing user tag secret",
+            refreshTransportError = false,
+        )
+
+        assertEquals(
+            "Configuration refresh failed: terminal config missing user tag secret",
+            terminalConfigStatusMessage(state, offlineMode = true),
+        )
+    }
+
+    @Test
+    fun `configuration error remains visible during offline mode`() {
+        assertEquals(
+            "Configuration error: terminal config missing user tag secret",
+            terminalConfigStatusMessage(TerminalConfigState.Error("terminal config missing user tag secret"), offlineMode = true),
+        )
+    }
+
     private fun terminalConfig(): TerminalConfig {
         return TerminalConfig(
             id = 1.toBigInteger(),

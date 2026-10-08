@@ -68,12 +68,13 @@ fun SaleSelectionList(
 ) {
     val saleConfig by viewModel.saleConfig.collectAsStateWithLifecycle()
     val saleStatus by viewModel.saleStatus.collectAsStateWithLifecycle()
+    val offlineStatus by viewModel.offlineStatus.collectAsStateWithLifecycle()
     var priceTargetButtonId by remember { mutableStateOf(-1) }
     var priceTargetCaption by remember { mutableStateOf("") }
     val priceSelectionState = rememberDialogDisplayState()
     val config = saleConfig
 
-    SaleAmountSelectionDialog(
+    if (!offlineStatus.offlineMode || (offlineStatus.preparationUsable && priceTargetButtonId in offlineStatus.supportedButtonIds)) SaleAmountSelectionDialog(
         state = priceSelectionState,
         productCaption = priceTargetCaption,
         config = AmountConfig.Money(cents = true, limit = 15000u),
@@ -206,6 +207,8 @@ fun SaleSelectionList(
                         caption = entry.caption,
                         compactHandheld = compactHandheld,
                         type = entry.type,
+                        enabled = !offlineStatus.offlineMode || (offlineStatus.preparationUsable && entry.stableKey in offlineStatus.supportedButtonIds &&
+                            entry.type !is SaleSelectionItemType.Vouchers),
                     )
                 }
             }
@@ -220,6 +223,8 @@ fun SaleSelectionList(
                         caption = entry.caption,
                         compactHandheld = compactHandheld,
                         type = entry.type,
+                        enabled = !offlineStatus.offlineMode || (offlineStatus.preparationUsable && entry.stableKey in offlineStatus.supportedButtonIds &&
+                            entry.type !is SaleSelectionItemType.Vouchers),
                     )
                 }
             }

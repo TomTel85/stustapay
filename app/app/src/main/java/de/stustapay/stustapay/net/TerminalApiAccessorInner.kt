@@ -53,6 +53,7 @@ data class APIs(
     val entryApi: EntryApi,
     val orderApi: OrderApi,
     val userApi: UserApi,
+    val offlineApi: de.stustapay.stustapay.offline.OfflineApi,
     val mgmtApi: MgmtApi
 )
 
@@ -172,7 +173,10 @@ internal class TerminalApiAccessorInner(
             httpClientConfig = ::configureApi,
         )
 
+        val offlineApi = de.stustapay.stustapay.offline.OfflineApi(apiUrl, engine, ::configureApi)
+
         if (token != null) {
+            offlineApi.setAccessToken(token)
             authApi.setAccessToken(token)
             baseApi.setAccessToken(token)
             cashierApi.setAccessToken(token)
@@ -184,6 +188,7 @@ internal class TerminalApiAccessorInner(
         }
 
         return APIs(
+            offlineApi = offlineApi,
             authApi = authApi,
             baseApi = baseApi,
             cashierApi = cashierApi,
@@ -325,6 +330,8 @@ internal class TerminalApiAccessorInner(
         closeEngineHandle(activeSnapshot?.engineHandle, "active close")
         retiredHandles.forEach { closeEngineHandle(it, "retired close") }
     }
+
+    fun offline(): de.stustapay.stustapay.offline.OfflineApi? = currentSnapshot?.apis?.offlineApi
 
     fun auth(): AuthApi? = currentSnapshot?.apis?.authApi
 

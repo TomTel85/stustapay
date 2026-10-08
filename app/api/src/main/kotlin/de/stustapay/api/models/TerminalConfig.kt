@@ -46,7 +46,7 @@ import kotlinx.serialization.Contextual
  * @param till 
  * @param testMode 
  * @param testModeMessage 
- * @param loginMode
+ * @param loginMode 
  */
 @Serializable
 
@@ -104,3 +104,4 @@ data class TerminalConfig (
 
 
 }
+

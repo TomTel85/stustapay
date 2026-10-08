@@ -23,6 +23,7 @@ sealed interface TerminalConfigState {
     data class Success(
         var config: TerminalConfig,
         val refreshErrorMessage: String? = null,
+        val refreshTransportError: Boolean = false,
     ) : TerminalConfigState
 
     data class Error(
@@ -66,6 +67,7 @@ internal fun terminalConfigFetchResult(
             staleOrErrorResult(
                 currentState = currentState,
                 message = response.msg(),
+                transportError = response is Response.Error.Request,
             )
         }
     }
@@ -74,11 +76,12 @@ internal fun terminalConfigFetchResult(
 private fun staleOrErrorResult(
     currentState: TerminalConfigState,
     message: String,
+    transportError: Boolean = false,
 ): TerminalConfigFetchResult {
     return when (currentState) {
         is TerminalConfigState.Success -> {
             TerminalConfigFetchResult(
-                state = currentState.copy(refreshErrorMessage = message),
+                state = currentState.copy(refreshErrorMessage = message, refreshTransportError = transportError),
                 userTagSecret = null,
                 ok = false,
                 shouldRetry = true,
@@ -106,6 +109,7 @@ class TerminalConfigRepository @Inject constructor(
     private val registrationRepository: RegistrationRepository,
     private val terminalConfigRemoteDataSource: TerminalConfigRemoteDataSource,
     private val nfcRepository: NfcRepository,
+    private val offlineSales: de.stustapay.stustapay.offline.OfflineSalesRepository,
 ) {
     private val _terminalConfigState =
         MutableStateFlow<TerminalConfigState>(TerminalConfigState.NoConfig)
@@ -130,16 +134,24 @@ class TerminalConfigRepository @Inject constructor(
             return true
         }
 
+        val preparedConfig = offlineSales.restoredConfig()
+        preparedConfig?.let {
+            _terminalConfigState.value = TerminalConfigState.Success(it)
+            it.secrets?.userTagSecret?.let { key -> nfcRepository.setTagKeys(key) }
+            offlineSales.rememberConfig(it)
+        }
         var ok: Boolean
         var retryAttempt = 0
         while (true) {
             val result = terminalConfigFetchResult(
                 currentState = _terminalConfigState.value,
-                response = terminalConfigRemoteDataSource.getTerminalConfig(),
+                response = terminalConfigRemoteDataSource.getTerminalConfig(offlinePrepared = preparedConfig != null),
             )
             _terminalConfigState.update { result.state }
             result.userTagSecret?.let { nfcRepository.setTagKeys(it) }
             ok = result.ok
+            if (result.ok) (result.state as? TerminalConfigState.Success)?.let { offlineSales.rememberConfig(it.config) }
+            if (!ok && _terminalConfigState.value is TerminalConfigState.Success) break
 
             if (!ok && keepTrying && result.shouldRetry) {
                 retryAttempt = (retryAttempt + 1).coerceAtMost(6)

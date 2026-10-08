@@ -285,7 +285,7 @@ data class SaleStatus(
             }.toList(),
             paymentMethod = method,
             customerTagUid = tag?.uid,
-            usedVouchers = voucherAmount?.toBigInteger(),
+            usedVouchers = voucherAmount?.toBigInteger() ?: checkedSale?.usedVouchers,
             uuid = checkedSale?.uuid ?: UUID.randomUUID()
         )
     }

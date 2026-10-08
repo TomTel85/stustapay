@@ -38,7 +38,7 @@ import kotlinx.serialization.Contextual
  * @param taxRate 
  * @param type 
  * @param priceInVouchers 
- * @param isDonation
+ * @param isDonation 
  * @param targetAccountId 
  * @param hasBookings 
  * @param pricePerVoucher 
@@ -102,3 +102,4 @@ data class Product (
 
 
 }
+

@@ -24,6 +24,14 @@ class _BaseEvent(BaseModel):
     daily_end_time: time | None = None
     expected_visitors_per_day: int | None = None
     post_payment_allowed: bool = False
+    offline_enabled: bool = False
+    offline_validity_seconds: int = Field(default=7200, ge=60, le=86400)
+    offline_sale_per_transaction_cents: int = Field(default=2000, ge=0)
+    offline_sale_per_customer_cents: int = Field(default=3000, ge=0)
+    offline_sale_per_till_cents: int = Field(default=50000, ge=0)
+    offline_return_per_transaction_cents: int = Field(default=2000, ge=0)
+    offline_return_per_customer_cents: int = Field(default=3000, ge=0)
+    offline_return_per_till_cents: int = Field(default=50000, ge=0)
 
     sumup_topup_enabled: bool
     group_topup_enabled: bool = False

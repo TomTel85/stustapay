@@ -28,6 +28,10 @@ import de.stustapay.api.models.NewSale
 import de.stustapay.api.models.NewTicketSale
 import de.stustapay.api.models.NewTicketScan
 import de.stustapay.api.models.NewTopUp
+import de.stustapay.api.models.OfflineBookingResult
+import de.stustapay.api.models.OfflineImport
+import de.stustapay.api.models.OfflineImportResult
+import de.stustapay.api.models.OfflineSnapshot
 import de.stustapay.api.models.Order
 import de.stustapay.api.models.PendingPayOut
 import de.stustapay.api.models.PendingSale
@@ -482,6 +486,39 @@ import io.ktor.http.ParametersBuilder
             }
 
         /**
+        * POST /order/offline/import
+        * Import Offline
+        * 
+         * @param offlineImport  
+         * @return OfflineImportResult
+        */
+            @Suppress("UNCHECKED_CAST")
+        open suspend fun importOffline(offlineImport: OfflineImport): HttpResponse<OfflineImportResult> {
+
+            val localVariableAuthNames = listOf<String>("OAuth2PasswordBearer")
+
+            val localVariableBody = offlineImport
+
+            val localVariableQuery = mutableMapOf<String, List<String>>()
+
+            val localVariableHeaders = mutableMapOf<String, String>()
+
+            val localVariableConfig = RequestConfig<kotlin.Any?>(
+            RequestMethod.POST,
+            "/order/offline/import",
+            query = localVariableQuery,
+            headers = localVariableHeaders,
+            requiresAuthentication = true,
+            )
+
+            return jsonRequest(
+            localVariableConfig,
+            localVariableBody,
+            localVariableAuthNames
+            ).wrap()
+            }
+
+        /**
         * GET /order
         * list all orders
         * List all the order of the currently logged in Cashier
@@ -502,6 +539,73 @@ import io.ktor.http.ParametersBuilder
             val localVariableConfig = RequestConfig<kotlin.Any?>(
             RequestMethod.GET,
             "/order",
+            query = localVariableQuery,
+            headers = localVariableHeaders,
+            requiresAuthentication = true,
+            )
+
+            return request(
+            localVariableConfig,
+            localVariableBody,
+            localVariableAuthNames
+            ).wrap()
+            }
+
+        /**
+        * GET /order/offline/status/{order_uuid}
+        * Offline Booking Status
+        * 
+         * @param orderUuid  
+         * @return OfflineBookingResult
+        */
+            @Suppress("UNCHECKED_CAST")
+        open suspend fun offlineBookingStatus(orderUuid: java.util.UUID): HttpResponse<OfflineBookingResult> {
+
+            val localVariableAuthNames = listOf<String>("OAuth2PasswordBearer")
+
+            val localVariableBody = 
+                    io.ktor.client.utils.EmptyContent
+
+            val localVariableQuery = mutableMapOf<String, List<String>>()
+
+            val localVariableHeaders = mutableMapOf<String, String>()
+
+            val localVariableConfig = RequestConfig<kotlin.Any?>(
+            RequestMethod.GET,
+            "/order/offline/status/{order_uuid}".replace("{" + "order_uuid" + "}", "$orderUuid"),
+            query = localVariableQuery,
+            headers = localVariableHeaders,
+            requiresAuthentication = true,
+            )
+
+            return request(
+            localVariableConfig,
+            localVariableBody,
+            localVariableAuthNames
+            ).wrap()
+            }
+
+        /**
+        * POST /order/offline/prepare
+        * Prepare Offline
+        * 
+         * @return OfflineSnapshot
+        */
+            @Suppress("UNCHECKED_CAST")
+        open suspend fun prepareOffline(): HttpResponse<OfflineSnapshot> {
+
+            val localVariableAuthNames = listOf<String>("OAuth2PasswordBearer")
+
+            val localVariableBody = 
+                    io.ktor.client.utils.EmptyContent
+
+            val localVariableQuery = mutableMapOf<String, List<String>>()
+
+            val localVariableHeaders = mutableMapOf<String, String>()
+
+            val localVariableConfig = RequestConfig<kotlin.Any?>(
+            RequestMethod.POST,
+            "/order/offline/prepare",
             query = localVariableQuery,
             headers = localVariableHeaders,
             requiresAuthentication = true,

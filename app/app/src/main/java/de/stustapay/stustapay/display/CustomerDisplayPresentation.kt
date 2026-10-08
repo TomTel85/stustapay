@@ -86,6 +86,17 @@ class CustomerDisplayPresentation(
                 is CustomerDisplayState.AccountBalance -> {
                     showAccountBalanceView(state, rootView)
                 }
+                is CustomerDisplayState.OfflineAccepted -> {
+                    rootView?.addView(android.widget.TextView(context).apply {
+                        gravity = android.view.Gravity.CENTER
+                        textSize = 30f
+                        setTextColor(android.graphics.Color.WHITE)
+                        setBackgroundColor(android.graphics.Color.parseColor("#805500"))
+                        text = context.getString(de.stustapay.stustapay.R.string.sale_offline_saved) + "\n" +
+                            context.getString(de.stustapay.stustapay.R.string.sale_offline_balance, state.estimatedBalance) +
+                            if (state.pendingReturn) "\n" + context.getString(de.stustapay.stustapay.R.string.sale_offline_pending_return) else ""
+                    })
+                }
                 is CustomerDisplayState.SaleCompleted -> {
                     showSaleCompletedView(state, rootView)
                 }

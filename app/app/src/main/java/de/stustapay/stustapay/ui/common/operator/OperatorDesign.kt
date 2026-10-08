@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,13 +33,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.stustapay.stustapay.ui.common.selfservice.AppDisplayMode
@@ -134,6 +138,7 @@ fun OperatorCompactFlowHeader(
     onBack: (() -> Unit)?,
     compactHandheld: Boolean,
     modifier: Modifier = Modifier,
+    trailingContent: (@Composable () -> Unit)? = null,
 ) {
     if (compactHandheld) {
         Surface(
@@ -171,6 +176,8 @@ fun OperatorCompactFlowHeader(
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
+                    maxLines = if (trailingContent != null) 1 else Int.MAX_VALUE,
+                    overflow = if (trailingContent != null) TextOverflow.Ellipsis else TextOverflow.Clip,
                 )
                 if (!tillLabel.isNullOrBlank()) {
                     Text(
@@ -179,8 +186,10 @@ fun OperatorCompactFlowHeader(
                         fontSize = 13.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = if (trailingContent != null) Modifier.widthIn(max = 84.dp) else Modifier,
                     )
                 }
+                trailingContent?.invoke()
             }
         }
         return
@@ -210,12 +219,14 @@ fun OperatorCompactFlowHeader(
                     )
                 }
             }
-            Column {
+            Column(modifier = if (trailingContent != null) Modifier.weight(1f) else Modifier) {
                 Text(
                     text = flowTitle,
                     color = OperatorPalette.title,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.ExtraBold,
+                    maxLines = if (trailingContent != null) 1 else Int.MAX_VALUE,
+                    overflow = if (trailingContent != null) TextOverflow.Ellipsis else TextOverflow.Clip,
                 )
                 if (!tillLabel.isNullOrBlank()) {
                     Text(
@@ -225,6 +236,7 @@ fun OperatorCompactFlowHeader(
                     )
                 }
             }
+            trailingContent?.invoke()
         }
     }
 }
@@ -639,10 +651,13 @@ fun OperatorActionCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     emphasized: Boolean = false,
+    enabled: Boolean = true,
+    trailingContent: (@Composable () -> Unit)? = null,
 ) {
     OperatorPanel(
         modifier = modifier.then(
-            if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+            (if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick) else Modifier)
+                .then(if (enabled) Modifier else Modifier.alpha(0.55f).semantics { disabled() })
         ),
         backgroundColor = if (emphasized) OperatorPalette.highlightedPanel else OperatorPalette.panel,
         borderColor = if (emphasized) OperatorPalette.accent else OperatorPalette.panelBorder,
@@ -658,13 +673,27 @@ fun OperatorActionCard(
 
             if (stackedLayout) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OperatorCircleIcon(
-                        icon = icon,
-                        backgroundColor = if (emphasized) OperatorPalette.accent else OperatorPalette.pill,
-                        tint = if (emphasized) OperatorPalette.accentText else OperatorPalette.accent,
-                        containerSize = iconContainer,
-                        iconSize = iconSize,
-                    )
+                    if (trailingContent == null) {
+                        OperatorCircleIcon(
+                            icon = icon,
+                            backgroundColor = if (emphasized) OperatorPalette.accent else OperatorPalette.pill,
+                            tint = if (emphasized) OperatorPalette.accentText else OperatorPalette.accent,
+                            containerSize = iconContainer,
+                            iconSize = iconSize,
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.Top) {
+                            OperatorCircleIcon(
+                                icon = icon,
+                                backgroundColor = if (emphasized) OperatorPalette.accent else OperatorPalette.pill,
+                                tint = if (emphasized) OperatorPalette.accentText else OperatorPalette.accent,
+                                containerSize = iconContainer,
+                                iconSize = iconSize,
+                            )
+                            Spacer(Modifier.weight(1f))
+                            trailingContent()
+                        }
+                    }
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = title,
@@ -684,7 +713,10 @@ fun OperatorActionCard(
                     }
                 }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(if (compactLayout) 10.dp else 14.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(if (compactLayout) 10.dp else 14.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
                     OperatorCircleIcon(
                         icon = icon,
                         backgroundColor = if (emphasized) OperatorPalette.accent else OperatorPalette.pill,
@@ -692,7 +724,10 @@ fun OperatorActionCard(
                         containerSize = iconContainer,
                         iconSize = iconSize,
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(
+                        modifier = if (trailingContent != null) Modifier.weight(1f) else Modifier,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         Text(
                             text = title,
                             color = OperatorPalette.title,
@@ -709,6 +744,7 @@ fun OperatorActionCard(
                             fontWeight = FontWeight.Medium,
                         )
                     }
+                    trailingContent?.invoke()
                 }
             }
         }
