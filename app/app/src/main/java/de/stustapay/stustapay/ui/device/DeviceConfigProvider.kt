@@ -14,6 +14,8 @@ import javax.inject.Singleton
 data class DeviceConfig(
     // Whether this device is an imin Falcons 2 terminal
     val isIminFalcons2: Boolean = false,
+    // Whether this is a Sunmi D3 Mini dual-screen terminal
+    val isSunmiD3Mini: Boolean = false,
     // The offset for NFC scan dialog for this specific device
     val nfcScanDialogOffset: DpOffset = DpOffset(0.dp, 0.dp),
     // Scaling factor for the NFC scan dialog (1.0f is standard size)
@@ -31,49 +33,60 @@ data class DeviceConfig(
 class DeviceConfigProvider @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val deviceConfig: DeviceConfig = determineDeviceConfig()
+    private val deviceConfig: DeviceConfig = determineDeviceConfig(Build.MODEL, Build.MANUFACTURER)
 
     /**
      * Get the device-specific configuration.
      */
     fun getDeviceConfig(): DeviceConfig = deviceConfig
 
-    private fun determineDeviceConfig(): DeviceConfig {
-        val modelRaw = Build.MODEL.lowercase()
+    companion object {
+        internal fun determineDeviceConfig(modelInput: String, manufacturerInput: String): DeviceConfig {
+            val modelRaw = modelInput.lowercase()
         // MODEL sometimes includes spaces (e.g. "L2 PRO"); Sunmi L2s Pro often reports as "T8920" with no "l2" in MODEL.
-        val model = modelRaw.replace(" ", "")
-        val manufacturer = Build.MANUFACTURER.lowercase()
+            val model = modelRaw.replace(" ", "")
+            val manufacturer = manufacturerInput.lowercase()
 
         // imin Falcon 2 configuration - NFC reader is on the left side
-        if (model.contains("i24t01")) {
-            return DeviceConfig(
-                isIminFalcons2 = true,
-                nfcScanDialogOffset = DpOffset((-350).dp, 0.dp) // Moved dialog even further to the left
-            )
-        }
+            if (model.contains("i24t01")) {
+                return DeviceConfig(
+                    isIminFalcons2 = true,
+                    nfcScanDialogOffset = DpOffset((-350).dp, 0.dp)
+                )
+            }
 
-        val sunmiL2Handheld = manufacturer.contains("sunmi") && (
-            model.contains("l2") ||
-            model.contains("t892") ||
-            model.contains("t891")
-        )
-        val legacyModelMatch =
-            model.contains("l2s") ||
-                model.contains("l2k") ||
-                model.contains("l2pro") ||
-                modelRaw.contains("sunmi")
+            val sunmiD3Mini = manufacturer.contains("sunmi") && (
+                model.contains("d3mini") ||
+                    model.contains("d3-mini") ||
+                    model == "d3"
+                )
+            if (sunmiD3Mini) {
+                return DeviceConfig(
+                    isSunmiD3Mini = true
+                )
+            }
 
-        // Sunmi L2 family and similar small-screen handhelds
-        if (sunmiL2Handheld || legacyModelMatch) {
-            return DeviceConfig(
-                isSmallScreen = true,
-                nfcScanDialogScale = 0.7f, // Reduce the size by 30%
-                useCenteredDialog = true, // Use centered positioning instead of offset
-                nfcScanDialogOffset = DpOffset(0.dp, 0.dp) // No offset needed with centered positioning
-            )
+            val sunmiL2Handheld = manufacturer.contains("sunmi") && (
+                model.contains("l2") ||
+                    model.contains("t892") ||
+                    model.contains("t891")
+                )
+            val legacyModelMatch =
+                model.contains("l2s") ||
+                    model.contains("l2k") ||
+                    model.contains("l2pro") ||
+                    (modelRaw.contains("sunmi") && !modelRaw.contains("d3"))
+
+            if (sunmiL2Handheld || legacyModelMatch) {
+                return DeviceConfig(
+                    isSmallScreen = true,
+                    nfcScanDialogScale = 0.7f,
+                    useCenteredDialog = true,
+                    nfcScanDialogOffset = DpOffset(0.dp, 0.dp)
+                )
+            }
+
+            return DeviceConfig()
         }
-        
-        // Default configuration for other devices
-        return DeviceConfig()
     }
-} 
+}

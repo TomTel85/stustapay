@@ -146,6 +146,7 @@ describe("TerminalForm", () => {
       const checkbox = screen.getByLabelText("terminal.selfService") as HTMLInputElement;
       expect(checkbox.disabled).toBe(true);
       expect(checkbox.checked).toBe(false);
+      expect(screen.queryByLabelText("terminal.tapToPayEnabled")).toBeNull();
       expect(screen.queryByLabelText("terminal.appDisplayMode.label")).toBeNull();
     });
   });

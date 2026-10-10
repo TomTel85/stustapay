@@ -424,8 +424,10 @@ async def test_basic_till_workflow(
             enable_ssp_payment=True,
             enable_cash_payment=False,
             enable_card_payment=False,
+            tap_to_pay_enabled=True,
         ),
     )
+    assert till_profile.tap_to_pay_enabled is True
     till = await till_service.create_till(
         token=event_admin_token,
         node_id=event_node.id,
@@ -508,11 +510,14 @@ async def test_delete_unused_till_profile(
     )
 
     assert deleted
-    assert await till_service.profile.get_profile(
-        token=event_admin_token,
-        node_id=event_node.id,
-        profile_id=profile.id,
-    ) is None
+    assert (
+        await till_service.profile.get_profile(
+            token=event_admin_token,
+            node_id=event_node.id,
+            profile_id=profile.id,
+        )
+        is None
+    )
 
 
 async def test_child_node_till_create_and_update_keep_terminal_assignment_local(

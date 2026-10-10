@@ -177,6 +177,9 @@ export const api = generatedApi.enhanceEndpoints({
     configureSumupToken: {
       invalidatesTags: (result, error, arg) => [{ type: "node-sumup-link", id: arg.nodeId }],
     },
+    configureSumupSandboxKey: {
+      invalidatesTags: (result, error, arg) => [{ type: "node-sumup-link", id: arg.nodeId }],
+    },
     getRestrictedEventSettings: {
       providesTags: (result, error, arg) => [{ type: "event-settings", id: arg.nodeId }],
     },

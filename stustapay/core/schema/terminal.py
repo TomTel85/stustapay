@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from stustapay.core.schema.entry import EntryAreaConfig
+from stustapay.core.schema.sumup import SumUpEnvironment
 from stustapay.core.schema.till import Till
 from stustapay.core.schema.user import Privilege, UserRole
 
@@ -68,6 +69,7 @@ class TerminalSumupSecrets(BaseModel):
     sumup_api_key: str
     sumup_merchant_code: str
     sumup_api_key_expires_at: datetime | None
+    sumup_environment: SumUpEnvironment
 
 
 # Combined secrets class for Android app compatibility
@@ -106,6 +108,8 @@ class TerminalTillConfig(BaseModel):
     enable_ssp_payment: bool
     enable_cash_payment: bool
     enable_card_payment: bool
+    tap_to_pay_enabled: bool
+    tap_to_pay_available: bool
     buttons: Optional[list[TerminalButton]]
     sumup_secrets: Optional[TerminalSumupSecrets]
     post_payment_allowed: bool

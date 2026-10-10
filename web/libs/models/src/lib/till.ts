@@ -50,6 +50,7 @@ export const NewTillProfileSchema = z.object({
   enable_ssp_payment: z.boolean(),
   enable_cash_payment: z.boolean(),
   enable_card_payment: z.boolean(),
+  tap_to_pay_enabled: z.boolean().default(false),
 });
 
 export type NewTillProfile = z.infer<typeof NewTillProfileSchema>;

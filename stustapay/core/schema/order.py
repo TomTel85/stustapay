@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, computed_field, field_validator, model_validator
 
 from stustapay.core.schema.product import Product
+from stustapay.core.schema.sumup import SumUpEnvironment
 from stustapay.core.schema.ticket import TicketScanResultEntry
 from stustapay.core.schema.user import format_user_tag_uid
 from stustapay.core.schema.user_tag import UserTagScan
@@ -385,3 +386,4 @@ class PendingOrder(BaseModel):
     order_content_version: int
     order_content: str
     status: PendingOrderStatus
+    sumup_environment: SumUpEnvironment = SumUpEnvironment.live

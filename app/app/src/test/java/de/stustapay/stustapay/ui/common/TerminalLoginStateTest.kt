@@ -249,6 +249,8 @@ class TerminalLoginStateTest {
                 enableSspPayment = true,
                 enableCashPayment = false,
                 enableCardPayment = enableCardPayment,
+                tapToPayEnabled = false,
+                tapToPayAvailable = false,
                 buttons = emptyList(),
                 sumupSecrets = null,
                 postPaymentAllowed = false,

@@ -32,6 +32,8 @@ class CustomerDisplayManager @Inject constructor(
         presentation?.get()?.updateContent(state)
     }
 
+    fun currentState(): CustomerDisplayState = currentState
+
     /**
      * Check for available displays and show the customer presentation on secondary screens
      */

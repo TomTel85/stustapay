@@ -26,6 +26,14 @@
 -dontwarn com.sumup.mixpanel.**
 -dontwarn com.sumup.observabilitylib.**
 -dontwarn com.sumup.observablib.crashreporting.exception.CrashlyticsExporter
+-dontwarn kotlinx.parcelize.Parcelize
+
+# SumUp's merchant SDK intentionally excludes the optional Balloon tooltip library.
+-dontwarn com.skydoves.balloon.ArrowOrientation
+-dontwarn com.skydoves.balloon.ArrowPositionRules
+-dontwarn com.skydoves.balloon.Balloon$Builder
+-dontwarn com.skydoves.balloon.Balloon
+-dontwarn com.skydoves.balloon.BalloonAnimation
 
 # OpenTelemetry related warnings
 -dontwarn io.opentelemetry.**
@@ -58,3 +66,7 @@
 
 # Keep SumUp SDK classes that might be used reflectively
 -keep class com.sumup.merchant.** { *; }
+
+# Keep SumUp Tap To Pay SDK classes used by the dedicated Tap-to-Pay variant.
+-keep class com.sumup.taptopay.** { *; }
+-dontwarn com.sumup.taptopay.**

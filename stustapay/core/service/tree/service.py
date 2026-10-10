@@ -13,6 +13,7 @@ from stustapay.core.banner_image import http_response_for_stored_banner, validat
 from stustapay.core.config import Config
 from stustapay.core.schema.account import AccountType
 from stustapay.core.schema.product import ProductType
+from stustapay.core.schema.sumup import SumUpEnvironment
 from stustapay.core.schema.tree import (
     CopyEventOptions,
     CopyEventRequest,
@@ -32,14 +33,15 @@ from stustapay.core.service.sumup_link import (
     delete_node_sumup_link,
     enrich_event_sumup_settings,
     get_node_sumup_connection_status,
-    upsert_node_sumup_link,
+    upsert_node_sumup_api_key_link,
+    upsert_node_sumup_oauth_link,
 )
 from stustapay.core.service.tree.common import (
     fetch_node,
     fetch_restricted_event_settings_for_node,
     get_tree_for_current_user,
 )
-from stustapay.payment.sumup.api import fetch_merchant_profile, fetch_refresh_token_from_auth_code
+from stustapay.payment.sumup.api import fetch_merchant, fetch_merchant_profile, fetch_refresh_token_from_auth_code
 
 EVENT_SYSTEM_ACCOUNT_TYPES = {
     AccountType.cash_entry.value,
@@ -95,6 +97,8 @@ COPY_EVENT_SUMUP_RESET_VALUES = {
     "sumup_topup_enabled": False,
     "group_topup_enabled": False,
     "sumup_payment_enabled": False,
+    "tap_to_pay_enabled": False,
+    "sumup_environment": SumUpEnvironment.live,
 }
 
 
@@ -126,6 +130,8 @@ def _build_event_db_values(event: NewEvent, available_columns: set[str]) -> list
         ("customer_portal_about_page_url", event.customer_portal_about_page_url),
         ("customer_portal_data_privacy_url", event.customer_portal_data_privacy_url),
         ("sumup_payment_enabled", event.sumup_payment_enabled),
+        ("tap_to_pay_enabled", event.tap_to_pay_enabled),
+        ("sumup_environment", event.sumup_environment.value),
         ("sumup_api_key", event.sumup_api_key),
         ("sumup_affiliate_key", event.sumup_affiliate_key),
         ("sumup_merchant_code", event.sumup_merchant_code),
@@ -160,7 +166,6 @@ def _build_event_db_values(event: NewEvent, available_columns: set[str]) -> list
         ("offline_return_per_transaction_cents", event.offline_return_per_transaction_cents),
         ("offline_return_per_customer_cents", event.offline_return_per_customer_cents),
         ("offline_return_per_till_cents", event.offline_return_per_till_cents),
-
         ("donation_enabled", event.donation_enabled),
     ]
     optional_values = {
@@ -736,7 +741,7 @@ class TreeService(Service[Config]):
             redirect_uri=redirect_uri,
         )
         merchant_profile = await fetch_merchant_profile(token.access_token)
-        return await upsert_node_sumup_link(
+        return await upsert_node_sumup_oauth_link(
             conn=conn,
             node=node,
             merchant_code=merchant_profile.merchant_code,
@@ -744,21 +749,49 @@ class TreeService(Service[Config]):
             refresh_token=token.refresh_token,
         )
 
+    @with_db_transaction
+    @requires_node()
+    @requires_user(privileges=[Privilege.node_administration])
+    async def configure_sumup_sandbox_api_key(self, *, conn: Connection, node: Node, api_key: str):
+        if node.event is not None or node.event_node_id is not None:
+            raise InvalidArgument("SumUp merchant links can only be configured on nodes above events")
+        normalized_api_key = api_key.strip()
+        if not normalized_api_key:
+            raise InvalidArgument("SumUp sandbox API key must not be empty")
+
+        merchant_profile = await fetch_merchant_profile(normalized_api_key)
+        merchant = await fetch_merchant(normalized_api_key, merchant_profile.merchant_code)
+        if merchant.sandbox is not True:
+            raise InvalidArgument("The supplied SumUp API key does not belong to a sandbox merchant")
+
+        return await upsert_node_sumup_api_key_link(
+            conn=conn,
+            node=node,
+            environment=SumUpEnvironment.sandbox,
+            merchant_code=merchant_profile.merchant_code,
+            merchant_name=merchant_profile.company_name,
+            api_key=normalized_api_key,
+        )
+
     @with_db_transaction(read_only=True)
     @requires_node()
     @requires_user(privileges=[Privilege.node_administration])
-    async def get_node_sumup_link_status(self, *, conn: Connection, node: Node):
+    async def get_node_sumup_link_status(
+        self, *, conn: Connection, node: Node, environment: SumUpEnvironment = SumUpEnvironment.live
+    ):
         if node.event is not None or node.event_node_id is not None:
             raise InvalidArgument("SumUp merchant links can only be configured on nodes above events")
-        return await get_node_sumup_connection_status(conn=conn, node=node)
+        return await get_node_sumup_connection_status(conn=conn, node=node, environment=environment)
 
     @with_db_transaction
     @requires_node()
     @requires_user(privileges=[Privilege.node_administration])
-    async def delete_node_sumup_link(self, *, conn: Connection, node: Node):
+    async def delete_node_sumup_link(
+        self, *, conn: Connection, node: Node, environment: SumUpEnvironment = SumUpEnvironment.live
+    ):
         if node.event is not None or node.event_node_id is not None:
             raise InvalidArgument("SumUp merchant links can only be configured on nodes above events")
-        return await delete_node_sumup_link(conn=conn, node=node)
+        return await delete_node_sumup_link(conn=conn, node=node, environment=environment)
 
     @with_db_transaction
     @requires_node(event_only=True)
@@ -1033,7 +1066,7 @@ class TreeService(Service[Config]):
         for profile_id in referenced_profile_ids_set:
             profile = await conn.fetchrow(
                 "SELECT id, name, description, allow_top_up, allow_cash_out, allow_ticket_sale, allow_ticket_vouchers, "
-                "enable_ssp_payment, enable_cash_payment, enable_card_payment, layout_id "
+                "enable_ssp_payment, enable_cash_payment, enable_card_payment, tap_to_pay_enabled, layout_id "
                 "FROM till_profile WHERE id = $1",
                 profile_id,
             )
@@ -1054,7 +1087,8 @@ class TreeService(Service[Config]):
                 await conn.execute(
                     "UPDATE till_profile SET description = $2, allow_top_up = $3, allow_cash_out = $4, "
                     "allow_ticket_sale = $5, allow_ticket_vouchers = $6, enable_ssp_payment = $7, "
-                    "enable_cash_payment = $8, enable_card_payment = $9, layout_id = $10 WHERE id = $1",
+                    "enable_cash_payment = $8, enable_card_payment = $9, tap_to_pay_enabled = $10, layout_id = $11 "
+                    "WHERE id = $1",
                     existing,
                     profile["description"],
                     profile["allow_top_up"],
@@ -1064,6 +1098,7 @@ class TreeService(Service[Config]):
                     profile["enable_ssp_payment"],
                     profile["enable_cash_payment"],
                     profile["enable_card_payment"],
+                    profile["tap_to_pay_enabled"],
                     new_layout_id,
                 )
             else:
@@ -1074,8 +1109,9 @@ class TreeService(Service[Config]):
                 used_profile_names.add(unique_name)
                 new_profile_id = await conn.fetchval(
                     "INSERT INTO till_profile (name, description, allow_top_up, allow_cash_out, allow_ticket_sale, "
-                    "allow_ticket_vouchers, enable_ssp_payment, enable_cash_payment, enable_card_payment, layout_id, node_id) "
-                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
+                    "allow_ticket_vouchers, enable_ssp_payment, enable_cash_payment, enable_card_payment, "
+                    "tap_to_pay_enabled, layout_id, node_id) "
+                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
                     unique_name,
                     profile["description"],
                     profile["allow_top_up"],
@@ -1085,6 +1121,7 @@ class TreeService(Service[Config]):
                     profile["enable_ssp_payment"],
                     profile["enable_cash_payment"],
                     profile["enable_card_payment"],
+                    profile["tap_to_pay_enabled"],
                     new_layout_id,
                     target_node_id,
                 )

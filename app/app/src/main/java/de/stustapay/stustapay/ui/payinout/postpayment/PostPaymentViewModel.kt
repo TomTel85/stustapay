@@ -49,6 +49,10 @@ enum class PostPaymentPage(val route: String) {
     Failure("aborted"),
 }
 
+internal fun shouldCancelPendingCardPayment(paymentResult: ECPaymentResult.Failure): Boolean {
+    return !paymentResult.mayHaveCreatedCharge
+}
+
 @HiltViewModel
 class PostPaymentViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -312,6 +316,29 @@ class PostPaymentViewModel @Inject constructor(
 
     private fun topUpTypeCash(): String = context.getString(R.string.topup_payment_type_cash)
 
+    private suspend fun registerTopUp(topUpType: String, newTopUp: NewTopUp): Boolean {
+        _status.update { context.getString(R.string.topup_status_announcing, topUpType) }
+        return when (val response = topUpApi.registerTopUp(newTopUp)) {
+            is Response.OK -> {
+                _status.update { context.getString(R.string.topup_status_announced, topUpType) }
+                true
+            }
+
+            is Response.Error.Service -> {
+                _status.update { response.msg() }
+                _errorMessage.update { response.msg() }
+                _navState.update { PostPaymentPage.Failure }
+                false
+            }
+
+            is Response.Error -> {
+                _status.update { response.msg() }
+                _errorMessage.update { response.msg() }
+                false
+            }
+        }
+    }
+
     /** called from the card payment button */
     suspend fun topUpWithCard(context: Activity, tag: NfcTag) {
         _status.update { this.context.getString(R.string.topup_status_card_in_progress) }
@@ -352,13 +379,14 @@ class PostPaymentViewModel @Inject constructor(
         // perform ec transaction
         when (val paymentResult = ecPaymentRepository.pay(context, payment)) {
             is ECPaymentResult.Failure -> {
-                _status.update { this.context.getString(R.string.topup_status_ec_result, paymentResult.msg) }
-                if (!paymentResult.mayHaveCreatedCharge) {
+                if (shouldCancelPendingCardPayment(paymentResult)) {
                     topUpApi.cancelPendingTopUp(newTopUp.uuid)
                     clearDraft()
-                } else {
-                    _navState.update { PostPaymentPage.Failure }
                 }
+                _status.update {
+                    this.context.getString(R.string.topup_status_ec_result, paymentResult.msg)
+                }
+                _navState.update { PostPaymentPage.Failure }
                 return
             }
 
@@ -369,30 +397,6 @@ class PostPaymentViewModel @Inject constructor(
 
         // when successful, book the transaction
         bookTopUp(topUpTypeCard(), newTopUp)
-    }
-
-    private suspend fun registerTopUp(topUpType: String, newTopUp: NewTopUp): Boolean {
-        _status.update { context.getString(R.string.topup_status_announcing, topUpType) }
-
-        return when (val response = topUpApi.registerTopUp(newTopUp)) {
-            is Response.OK -> {
-                _status.update { context.getString(R.string.topup_status_announced, topUpType) }
-                true
-            }
-
-            is Response.Error.Service -> {
-                _status.update { response.msg() }
-                _navState.update { PostPaymentPage.Failure }
-                false
-            }
-
-            is Response.Error -> {
-                val msg = response.msg()
-                _status.update { msg }
-                _errorMessage.update { msg }
-                false
-            }
-        }
     }
 
     suspend fun topUpWithCash(tag: NfcTag) {

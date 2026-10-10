@@ -9345,6 +9345,15 @@
               "type": "integer",
               "title": "Node Id"
             }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SumUpEnvironment",
+              "default": "live"
+            }
           }
         ],
         "responses": {
@@ -9392,6 +9401,15 @@
             "schema": {
               "type": "integer",
               "title": "Node Id"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SumUpEnvironment",
+              "default": "live"
             }
           }
         ],
@@ -9451,6 +9469,66 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SumUpTokenPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeSumUpConnectionStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tree/nodes/{node_id}/configure-sumup-sandbox-key": {
+      "put": {
+        "tags": [
+          "tree"
+        ],
+        "summary": "Configure Sumup Sandbox Key",
+        "operationId": "configure_sumup_sandbox_key",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SumUpApiKeyPayload"
               }
             }
           }
@@ -17286,6 +17364,15 @@
             "type": "boolean",
             "title": "Sumup Payment Enabled"
           },
+          "tap_to_pay_enabled": {
+            "type": "boolean",
+            "title": "Tap To Pay Enabled",
+            "default": false
+          },
+          "sumup_environment": {
+            "$ref": "#/components/schemas/SumUpEnvironment",
+            "default": "live"
+          },
           "customer_portal_url": {
             "type": "string",
             "title": "Customer Portal Url"
@@ -18035,6 +18122,11 @@
           "enable_card_payment": {
             "type": "boolean",
             "title": "Enable Card Payment"
+          },
+          "tap_to_pay_enabled": {
+            "type": "boolean",
+            "title": "Tap To Pay Enabled",
+            "default": false
           }
         },
         "type": "object",
@@ -18526,6 +18618,19 @@
             "type": "string",
             "title": "Node Name"
           },
+          "environment": {
+            "$ref": "#/components/schemas/SumUpEnvironment"
+          },
+          "auth_method": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SumUpAuthMethod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "connected": {
             "type": "boolean",
             "title": "Connected"
@@ -18577,6 +18682,7 @@
         "required": [
           "node_id",
           "node_name",
+          "environment",
           "connected"
         ],
         "title": "NodeSumUpConnectionStatus"
@@ -20538,6 +20644,15 @@
             "type": "boolean",
             "title": "Sumup Payment Enabled"
           },
+          "tap_to_pay_enabled": {
+            "type": "boolean",
+            "title": "Tap To Pay Enabled",
+            "default": false
+          },
+          "sumup_environment": {
+            "$ref": "#/components/schemas/SumUpEnvironment",
+            "default": "live"
+          },
           "customer_portal_url": {
             "type": "string",
             "title": "Customer Portal Url"
@@ -20838,6 +20953,12 @@
           "source": {
             "$ref": "#/components/schemas/SumUpConnectionSource"
           },
+          "environment": {
+            "$ref": "#/components/schemas/SumUpEnvironment"
+          },
+          "auth_method": {
+            "$ref": "#/components/schemas/SumUpAuthMethod"
+          },
           "source_node_id": {
             "type": "integer",
             "title": "Source Node Id"
@@ -20870,6 +20991,8 @@
         "type": "object",
         "required": [
           "source",
+          "environment",
+          "auth_method",
           "source_node_id",
           "source_node_name",
           "merchant_code"
@@ -21147,6 +21270,15 @@
           "sumup_payment_enabled": {
             "type": "boolean",
             "title": "Sumup Payment Enabled"
+          },
+          "tap_to_pay_enabled": {
+            "type": "boolean",
+            "title": "Tap To Pay Enabled",
+            "default": false
+          },
+          "sumup_environment": {
+            "$ref": "#/components/schemas/SumUpEnvironment",
+            "default": "live"
           },
           "customer_portal_url": {
             "type": "string",
@@ -21624,6 +21756,28 @@
         ],
         "title": "StatInterval"
       },
+      "SumUpApiKeyPayload": {
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Api Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "api_key"
+        ],
+        "title": "SumUpApiKeyPayload"
+      },
+      "SumUpAuthMethod": {
+        "type": "string",
+        "enum": [
+          "oauth",
+          "api_key"
+        ],
+        "title": "SumUpAuthMethod"
+      },
       "SumUpCheckout": {
         "properties": {
           "checkout_reference": {
@@ -21737,6 +21891,14 @@
           "legacy_event_api_key"
         ],
         "title": "SumUpConnectionSource"
+      },
+      "SumUpEnvironment": {
+        "type": "string",
+        "enum": [
+          "live",
+          "sandbox"
+        ],
+        "title": "SumUpEnvironment"
       },
       "SumUpTokenPayload": {
         "properties": {
@@ -22501,6 +22663,11 @@
             "type": "boolean",
             "title": "Enable Card Payment"
           },
+          "tap_to_pay_enabled": {
+            "type": "boolean",
+            "title": "Tap To Pay Enabled",
+            "default": false
+          },
           "node_id": {
             "type": "integer",
             "title": "Node Id"
@@ -23197,6 +23364,15 @@
           "sumup_payment_enabled": {
             "type": "boolean",
             "title": "Sumup Payment Enabled"
+          },
+          "tap_to_pay_enabled": {
+            "type": "boolean",
+            "title": "Tap To Pay Enabled",
+            "default": false
+          },
+          "sumup_environment": {
+            "$ref": "#/components/schemas/SumUpEnvironment",
+            "default": "live"
           },
           "customer_portal_url": {
             "type": "string",

@@ -34,6 +34,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.StuStaPay"
         tools:targetApi="s"
+        tools:replace="android:theme"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

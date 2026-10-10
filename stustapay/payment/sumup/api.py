@@ -106,6 +106,11 @@ class SumUpMerchantProfile(BaseModel):
     company_name: str | None = None
 
 
+class SumUpMerchant(BaseModel):
+    merchant_code: str
+    sandbox: bool | None = None
+
+
 standard_headers = {
     "Accept": "application/json",
 }
@@ -180,6 +185,37 @@ async def fetch_merchant_profile(access_token: str) -> SumUpMerchantProfile:
                         raise SumUpError("SumUp API returned an unknown error") from exc
                 resp = await response.json(content_type=None)
                 return SumUpMerchantProfile.model_validate(resp)
+        except asyncio.TimeoutError as exc:
+            raise SumUpError("SumUp API timeout") from exc
+        except Exception as exc:  # pylint: disable=bare-except
+            if isinstance(exc, SumUpError):
+                raise exc
+            raise SumUpError(f"SumUp API returned an unknown error {exc}") from exc
+
+
+async def fetch_merchant(access_token: str, merchant_code: str) -> SumUpMerchant:
+    url = f"{SUMUP_API_BASE_URL}/v1/merchants/{merchant_code}"
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {access_token}",
+    }
+
+    async with aiohttp.ClientSession(trust_env=True, headers=headers) as session:
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                if not response.ok:
+                    try:
+                        resp = await response.json(content_type=None)
+                        err = _SumUpErrorFormat.model_validate(resp)
+                        error_message = err.message or ""
+                        error_code = err.code or err.error_code or err.error or "UNKNOWN"
+                        raise SumUpError(f"SumUp API returned an error: {error_code} - {error_message}")
+                    except SumUpError:
+                        raise
+                    except Exception as exc:
+                        logger.error("SumUp merchant API returned an unreadable error with status %s", response.status)
+                        raise SumUpError("SumUp API returned an unknown error") from exc
+                return SumUpMerchant.model_validate(await response.json(content_type=None))
         except asyncio.TimeoutError as exc:
             raise SumUpError("SumUp API timeout") from exc
         except Exception as exc:  # pylint: disable=bare-except

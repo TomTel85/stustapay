@@ -3,15 +3,15 @@ plugins {
     id 'org.jetbrains.kotlin.android'
     id 'org.jetbrains.kotlin.plugin.compose'
     id 'org.jetbrains.kotlin.plugin.serialization'
-    id 'com.google.devtools.ksp'
-    id 'com.google.dagger.hilt.android'
+    id 'com.google.devtools.ksp' version '2.3.0'
+    id 'com.google.dagger.hilt.android' version '2.57.2'
     id 'com.google.protobuf'
 }
 
 
 android {
     namespace 'de.stustapay.chip_debug'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId "de.stustapay.chip_debug"
@@ -56,7 +56,8 @@ dependencies {
     implementation "androidx.compose.ui:ui:$compose_ui_version"
     implementation "androidx.compose.ui:ui-tooling-preview:$compose_ui_version"
     implementation "androidx.compose.material:material:$compose_ui_version"
-    implementation "androidx.compose.material:material-icons-core:$compose_ui_version"
+    // Material icons libraries use different versioning than main compose libraries
+    implementation "androidx.compose.material:material-icons-core:1.7.8"
     implementation "androidx.navigation:navigation-compose:$navigation_compose_version"
     implementation "androidx.preference:preference-ktx:$preference_ktx_version"
     debugImplementation "androidx.compose.ui:ui-tooling:$compose_ui_version"
@@ -70,4 +71,9 @@ dependencies {
     implementation "androidx.lifecycle:lifecycle-runtime-compose:$lifecycle_version"
     implementation "com.ionspin.kotlin:bignum:$bignum_version"
     implementation "com.ionspin.kotlin:bignum-serialization-kotlinx:$bignum_version"
+}
+
+// Disable Hilt aggregating task to fix JavaPoet compatibility issue
+hilt {
+    enableAggregatingTask = false
 }

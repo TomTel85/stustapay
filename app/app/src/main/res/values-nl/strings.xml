@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sumup_sandbox_banner">SUMUP SANDBOX — TESTBETALINGEN</string>
     <string name="done">Klaar</string>
     <string name="common_status_failed">Mislukt</string>
 

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from sftkit.database import Connection
 
 from stustapay.core.schema.entry import NewEntryArea
+from stustapay.core.schema.sumup import SumUpEnvironment
 from stustapay.core.schema.terminal import AppDisplayMode, NewTerminal, Terminal, TerminalLoginMode, TerminalMode
 from stustapay.core.schema.tree import Node
 from stustapay.core.service.entry import EntryService
@@ -165,12 +166,174 @@ async def test_terminal_config_exposes_resolved_sumup_merchant_code(
 
     monkeypatch.setattr("stustapay.core.service.terminal.fetch_new_oauth_token", fake_fetch_new_oauth_token)
 
-    terminal_config = await terminal_service.get_terminal_config(token=terminal_token)
+    terminal_service.config.core.sumup_enabled = True
+    try:
+        terminal_config = await terminal_service.get_terminal_config(token=terminal_token)
+    finally:
+        terminal_service.config.core.sumup_enabled = False
 
     assert terminal_config is not None
     assert terminal_config.till is not None
     assert terminal_config.till.sumup_secrets is not None
     assert terminal_config.till.sumup_secrets.sumup_merchant_code == "TERMINAL-MERCHANT"
+
+
+async def test_terminal_config_exposes_tap_to_pay_flags(
+    db_connection: Connection,
+    terminal_service: TerminalService,
+    terminal_token: str,
+    terminal: Terminal,
+    event_node: Node,
+    monkeypatch,
+):
+    await db_connection.execute(
+        "update event set "
+        "sumup_payment_enabled = true, "
+        "sumup_affiliate_key = $1, "
+        "sumup_merchant_code = $2, "
+        "sumup_oauth_client_id = $3, "
+        "sumup_oauth_client_secret = $4, "
+        "sumup_oauth_refresh_token = $5 "
+        "where id = (select event_id from node where id = $6)",
+        "sup_afk_terminal",
+        "TERMINAL-MERCHANT",
+        "terminal-client-id",
+        "terminal-client-secret",
+        "terminal-refresh-token",
+        event_node.id,
+    )
+    await db_connection.execute(
+        "update till_profile set enable_card_payment = true, tap_to_pay_enabled = true "
+        "where id = (select active_profile_id from till where terminal_id = $1)",
+        terminal.id,
+    )
+
+    async def fake_fetch_new_oauth_token(client_id: str, client_secret: str, refresh_token: str):
+        assert client_id == "terminal-client-id"
+        assert client_secret == "terminal-client-secret"
+        assert refresh_token == "terminal-refresh-token"
+        return SumUpOAuthToken(
+            access_token="terminal-access-token",
+            refresh_token=refresh_token,
+            expires_in=3600,
+            token_type="bearer",
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+
+    monkeypatch.setattr("stustapay.core.service.terminal.fetch_new_oauth_token", fake_fetch_new_oauth_token)
+
+    terminal_service.config.core.sumup_enabled = True
+    try:
+        terminal_config = await terminal_service.get_terminal_config(token=terminal_token)
+    finally:
+        terminal_service.config.core.sumup_enabled = False
+
+    assert terminal_config is not None
+    assert terminal_config.till is not None
+    assert terminal_config.till.tap_to_pay_enabled is True
+    assert terminal_config.till.tap_to_pay_available is True
+
+
+async def test_terminal_config_exposes_static_sandbox_key(
+    db_connection: Connection,
+    terminal_service: TerminalService,
+    terminal_token: str,
+    terminal: Terminal,
+    event_node: Node,
+):
+    await db_connection.execute(
+        "insert into node_sumup_link "
+        "(node_id, environment, auth_method, merchant_code, merchant_name, api_key, refresh_token) "
+        "values (0, 'sandbox', 'api_key', 'SANDBOX-MERCHANT', 'Sandbox Merchant', 'sandbox-key', null)"
+    )
+    await db_connection.execute(
+        "update event set "
+        "sumup_payment_enabled = true, "
+        "tap_to_pay_enabled = true, "
+        "sumup_environment = 'sandbox', "
+        "sumup_affiliate_key = 'sup_afk_terminal' "
+        "where id = (select event_id from node where id = $1)",
+        event_node.id,
+    )
+    await db_connection.execute(
+        "update till_profile set enable_card_payment = true, tap_to_pay_enabled = true "
+        "where id = (select active_profile_id from till where terminal_id = $1)",
+        terminal.id,
+    )
+
+    terminal_service.config.core.sumup_enabled = True
+    try:
+        terminal_config = await terminal_service.get_terminal_config(token=terminal_token)
+    finally:
+        terminal_service.config.core.sumup_enabled = False
+
+    assert terminal_config is not None
+    assert terminal_config.till is not None
+    assert terminal_config.till.tap_to_pay_available is True
+    assert terminal_config.till.sumup_secrets is not None
+    assert terminal_config.till.sumup_secrets.sumup_api_key == "sandbox-key"
+    assert terminal_config.till.sumup_secrets.sumup_api_key_expires_at is None
+    assert terminal_config.till.sumup_secrets.sumup_environment == SumUpEnvironment.sandbox
+
+
+async def test_terminal_config_disables_sumup_and_tap_to_pay_when_sumup_is_globally_disabled(
+    db_connection: Connection,
+    terminal_service: TerminalService,
+    terminal_token: str,
+    terminal: Terminal,
+    event_node: Node,
+    monkeypatch,
+):
+    await db_connection.execute(
+        "update event set "
+        "sumup_payment_enabled = true, "
+        "tap_to_pay_enabled = true, "
+        "sumup_affiliate_key = $1, "
+        "sumup_merchant_code = $2, "
+        "sumup_oauth_client_id = $3, "
+        "sumup_oauth_client_secret = $4, "
+        "sumup_oauth_refresh_token = $5 "
+        "where id = (select event_id from node where id = $6)",
+        "sup_afk_terminal",
+        "TERMINAL-MERCHANT",
+        "terminal-client-id",
+        "terminal-client-secret",
+        "terminal-refresh-token",
+        event_node.id,
+    )
+    await db_connection.execute(
+        "update till_profile set enable_card_payment = true, tap_to_pay_enabled = true "
+        "where id = (select active_profile_id from till where terminal_id = $1)",
+        terminal.id,
+    )
+
+    async def fake_fetch_new_oauth_token(client_id: str, client_secret: str, refresh_token: str):
+        assert client_id == "terminal-client-id"
+        assert client_secret == "terminal-client-secret"
+        assert refresh_token == "terminal-refresh-token"
+        return SumUpOAuthToken(
+            access_token="terminal-access-token",
+            refresh_token=refresh_token,
+            expires_in=3600,
+            token_type="bearer",
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+
+    monkeypatch.setattr("stustapay.core.service.terminal.fetch_new_oauth_token", fake_fetch_new_oauth_token)
+
+    terminal_service.config.core.sumup_enabled = True
+    try:
+        terminal_service.config.core.sumup_enabled = False
+        terminal_config = await terminal_service.get_terminal_config(token=terminal_token)
+    finally:
+        terminal_service.config.core.sumup_enabled = False
+
+    assert terminal_config is not None
+    assert terminal_config.till is not None
+    assert terminal_config.till.sumup_payment_enabled is False
+    assert terminal_config.till.sumup_secrets is None
+    assert terminal_config.till.tap_to_pay_enabled is True
+    assert terminal_config.till.tap_to_pay_available is False
 
 
 async def test_entry_and_exit_terminals_clear_self_service(

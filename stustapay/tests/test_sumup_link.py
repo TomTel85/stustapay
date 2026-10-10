@@ -1,16 +1,25 @@
 # pylint: disable=missing-kwoa,unexpected-keyword-arg,no-value-for-parameter
 import secrets
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import pytest
 from sftkit.database import Connection
+from sftkit.error import InvalidArgument
 
-from stustapay.core.schema.sumup import SumUpConnectionSource
+from stustapay.core.schema.order import CompletedTopUp, PaymentMethod
+from stustapay.core.schema.sumup import SumUpAuthMethod, SumUpConnectionSource, SumUpEnvironment
 from stustapay.core.schema.tree import ROOT_NODE_ID, NewEvent, NewNode, Node
-from stustapay.core.service.sumup_link import create_sumup_api_for_node, resolve_terminal_sumup_access
+from stustapay.core.service.order.pending_order import fetch_order_by_uuid, save_pending_topup
+from stustapay.core.service.sumup_link import (
+    create_sumup_api_for_node,
+    delete_node_sumup_link,
+    resolve_terminal_sumup_access,
+    upsert_node_sumup_api_key_link,
+)
 from stustapay.core.service.tree.common import fetch_restricted_event_settings_for_node
 from stustapay.core.service.tree.service import TreeService
-from stustapay.payment.sumup.api import SumUpMerchantProfile, SumUpOAuthToken
+from stustapay.payment.sumup.api import SumUpMerchant, SumUpMerchantProfile, SumUpOAuthToken
 
 GLOBAL_SUMUP_CONFIG_KEYS = (
     "sumup.affiliate_key",
@@ -233,6 +242,7 @@ async def test_sumup_auth_code_flow_saves_link_on_non_event_node(
     db_connection: Connection,
     tree_service: TreeService,
     global_admin_token: str,
+    event_node: Node,
     monkeypatch,
 ):
     parent = await tree_service.create_node(
@@ -309,6 +319,183 @@ async def test_get_restricted_event_settings_reports_resolved_node_link(
     assert settings.resolved_sumup_link.merchant_code == "NODE-MERCHANT"
     assert settings.sumup_global_oauth_configured is True
     assert settings.sumup_global_affiliate_key_configured is True
+
+
+async def test_configure_sumup_sandbox_api_key_validates_and_stores_sandbox_merchant(
+    db_connection: Connection,
+    tree_service: TreeService,
+    global_admin_token: str,
+    event_node: Node,
+    monkeypatch,
+):
+    parent = await tree_service.create_node(
+        token=global_admin_token,
+        node_id=ROOT_NODE_ID,
+        new_node=NewNode(name="Sandbox Organizer", description=""),
+    )
+
+    async def fake_fetch_merchant_profile(access_token: str):
+        assert access_token == "sandbox-secret-key"
+        return SumUpMerchantProfile(merchant_code="SANDBOX-MERCHANT", company_name="Sandbox Merchant")
+
+    async def fake_fetch_merchant(access_token: str, merchant_code: str):
+        assert access_token == "sandbox-secret-key"
+        assert merchant_code == "SANDBOX-MERCHANT"
+        return SumUpMerchant(merchant_code=merchant_code, sandbox=True)
+
+    monkeypatch.setattr("stustapay.core.service.tree.service.fetch_merchant_profile", fake_fetch_merchant_profile)
+    monkeypatch.setattr("stustapay.core.service.tree.service.fetch_merchant", fake_fetch_merchant)
+
+    status = await tree_service.configure_sumup_sandbox_api_key(
+        token=global_admin_token,
+        node_id=parent.id,
+        api_key=" sandbox-secret-key ",
+    )
+
+    assert status.connected is True
+    assert status.environment == SumUpEnvironment.sandbox
+    assert status.auth_method == SumUpAuthMethod.api_key
+    stored = await db_connection.fetchrow(
+        "select environment, auth_method, merchant_code, api_key, refresh_token "
+        "from node_sumup_link where node_id = $1 and environment = 'sandbox'",
+        parent.id,
+    )
+    assert dict(stored) == {
+        "environment": "sandbox",
+        "auth_method": "api_key",
+        "merchant_code": "SANDBOX-MERCHANT",
+        "api_key": "sandbox-secret-key",
+        "refresh_token": None,
+    }
+    assert "api_key" not in status.model_dump()
+
+    scoped_event = await _copy_event_under_parent(
+        db_connection,
+        tree_service,
+        global_admin_token,
+        event_node,
+        parent.id,
+    )
+    await db_connection.execute(
+        "update event set sumup_environment = 'sandbox' where id = (select event_id from node where id = $1)",
+        scoped_event.id,
+    )
+    resolved = await create_sumup_api_for_node(conn=db_connection, node_id=scoped_event.id)
+    assert resolved is not None
+    api, access = resolved
+    assert api.api_key == "sandbox-secret-key"
+    assert api.merchant_code == "SANDBOX-MERCHANT"
+    assert access.environment == SumUpEnvironment.sandbox
+
+
+async def test_configure_sumup_sandbox_api_key_rejects_live_merchant(
+    tree_service: TreeService,
+    global_admin_token: str,
+    monkeypatch,
+):
+    parent = await tree_service.create_node(
+        token=global_admin_token,
+        node_id=ROOT_NODE_ID,
+        new_node=NewNode(name="Live Organizer", description=""),
+    )
+
+    async def fake_fetch_merchant_profile(access_token: str):
+        return SumUpMerchantProfile(merchant_code="LIVE-MERCHANT", company_name="Live Merchant")
+
+    async def fake_fetch_merchant(access_token: str, merchant_code: str):
+        return SumUpMerchant(merchant_code=merchant_code, sandbox=False)
+
+    monkeypatch.setattr("stustapay.core.service.tree.service.fetch_merchant_profile", fake_fetch_merchant_profile)
+    monkeypatch.setattr("stustapay.core.service.tree.service.fetch_merchant", fake_fetch_merchant)
+
+    with pytest.raises(InvalidArgument, match="does not belong to a sandbox merchant"):
+        await tree_service.configure_sumup_sandbox_api_key(
+            token=global_admin_token,
+            node_id=parent.id,
+            api_key="live-secret-key",
+        )
+
+
+async def test_pending_sumup_order_keeps_environment_after_event_switch(
+    db_connection: Connection,
+    tree_service: TreeService,
+    global_admin_token: str,
+    event_node: Node,
+):
+    parent = await tree_service.create_node(
+        token=global_admin_token,
+        node_id=ROOT_NODE_ID,
+        new_node=NewNode(name="Pending Payment Organizer", description=""),
+    )
+    scoped_event = await _copy_event_under_parent(
+        db_connection,
+        tree_service,
+        global_admin_token,
+        event_node,
+        parent.id,
+    )
+    await db_connection.execute(
+        "insert into node_sumup_link "
+        "(node_id, environment, auth_method, merchant_code, merchant_name, api_key, refresh_token) "
+        "values ($1, 'sandbox', 'api_key', 'SANDBOX-MERCHANT', 'Sandbox Merchant', 'sandbox-key', null)",
+        parent.id,
+    )
+    await db_connection.execute(
+        "update event set sumup_environment = 'sandbox' where id = (select event_id from node where id = $1)",
+        scoped_event.id,
+    )
+    till_id = await db_connection.fetchval(
+        "select id from till where node_id = $1 order by id limit 1",
+        event_node.id,
+    )
+    order_uuid = uuid4()
+    await save_pending_topup(
+        conn=db_connection,
+        till_id=till_id,
+        node_id=scoped_event.id,
+        cashier_id=None,
+        topup=CompletedTopUp(
+            payment_method=PaymentMethod.sumup,
+            customer_tag_uid=1,
+            customer_account_id=1,
+            amount=10,
+            old_balance=0,
+            new_balance=10,
+            uuid=order_uuid,
+            booked_at=datetime.now(timezone.utc),
+            cashier_id=None,
+            till_id=till_id,
+        ),
+    )
+    await db_connection.execute(
+        "update event set sumup_environment = 'live' where id = (select event_id from node where id = $1)",
+        scoped_event.id,
+    )
+
+    pending_order = await fetch_order_by_uuid(conn=db_connection, uuid=order_uuid)
+    assert pending_order.sumup_environment == SumUpEnvironment.sandbox
+
+    with pytest.raises(InvalidArgument, match="while payments are pending"):
+        await delete_node_sumup_link(
+            conn=db_connection,
+            node=parent,
+            environment=SumUpEnvironment.sandbox,
+        )
+    with pytest.raises(InvalidArgument, match="while payments are pending"):
+        await upsert_node_sumup_api_key_link(
+            conn=db_connection,
+            node=parent,
+            environment=SumUpEnvironment.sandbox,
+            merchant_code="OTHER-SANDBOX-MERCHANT",
+            merchant_name="Other Sandbox Merchant",
+            api_key="other-sandbox-key",
+        )
+    await db_connection.execute("delete from pending_sumup_order where uuid = $1", order_uuid)
+    await delete_node_sumup_link(
+        conn=db_connection,
+        node=parent,
+        environment=SumUpEnvironment.sandbox,
+    )
 
 
 async def test_clear_legacy_sumup_settings_removes_event_credentials_and_keeps_parent_link(

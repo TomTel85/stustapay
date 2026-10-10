@@ -7,7 +7,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 from stustapay.core.config import CoreConfig
 from stustapay.core.schema.config import SEPAConfig
 from stustapay.core.schema.language import Language
-from stustapay.core.schema.sumup import ResolvedSumUpLink
+from stustapay.core.schema.sumup import ResolvedSumUpLink, SumUpEnvironment
 from stustapay.core.schema.user import Privilege
 
 ROOT_NODE_ID = 0
@@ -36,6 +36,8 @@ class _BaseEvent(BaseModel):
     sumup_topup_enabled: bool
     group_topup_enabled: bool = False
     sumup_payment_enabled: bool
+    tap_to_pay_enabled: bool = False
+    sumup_environment: SumUpEnvironment = SumUpEnvironment.live
 
     customer_portal_url: str
     customer_portal_about_page_url: str

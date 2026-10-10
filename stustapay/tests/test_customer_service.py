@@ -269,9 +269,7 @@ async def order_with_bon(
     return order
 
 
-async def test_auth_customer(
-    customer_service: CustomerService, test_customer: Customer, event_node: Node
-):
+async def test_auth_customer(customer_service: CustomerService, test_customer: Customer, event_node: Node):
     auth = await customer_service.login_customer(
         uid=test_customer.user_tag_uid, pin=test_customer.user_tag_pin, node_id=event_node.id
     )
@@ -539,12 +537,15 @@ async def test_create_online_topup_checkout_reuses_pending_checkout(
     assert first_order_uuid == second_order_uuid
     assert first_checkout.id == second_checkout.id
     assert sumup_api.create_calls == 1
-    assert await db_connection.fetchval(
-        "select count(*) from pending_sumup_order "
-        "where status = 'pending' "
-        "  and order_type = 'topup' "
-        "  and cashier_id is null",
-    ) == 1
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from pending_sumup_order "
+            "where status = 'pending' "
+            "  and order_type = 'topup' "
+            "  and cashier_id is null",
+        )
+        == 1
+    )
 
 
 async def test_create_online_topup_checkout_replaces_timed_out_pending_checkout(
@@ -579,10 +580,13 @@ async def test_create_online_topup_checkout_replaces_timed_out_pending_checkout(
 
     assert new_order_uuid != old_order_uuid
     assert sumup_api.create_calls == 2
-    assert await db_connection.fetchval(
-        "select status from pending_sumup_order where uuid = $1",
-        old_order_uuid,
-    ) == PendingOrderStatus.cancelled.value
+    assert (
+        await db_connection.fetchval(
+            "select status from pending_sumup_order where uuid = $1",
+            old_order_uuid,
+        )
+        == PendingOrderStatus.cancelled.value
+    )
 
 
 async def test_create_online_topup_checkout_reuses_timed_out_pending_checkout_when_sumup_is_still_pending(
@@ -617,10 +621,13 @@ async def test_create_online_topup_checkout_reuses_timed_out_pending_checkout_wh
     assert second_order_uuid == first_order_uuid
     assert second_checkout.id == first_checkout.id
     assert sumup_api.create_calls == 1
-    assert await db_connection.fetchval(
-        "select status from pending_sumup_order where uuid = $1",
-        first_order_uuid,
-    ) == PendingOrderStatus.pending.value
+    assert (
+        await db_connection.fetchval(
+            "select status from pending_sumup_order where uuid = $1",
+            first_order_uuid,
+        )
+        == PendingOrderStatus.pending.value
+    )
 
 
 async def test_create_online_topup_checkout_books_timed_out_paid_checkout_instead_of_creating_a_new_one(
@@ -656,10 +663,13 @@ async def test_create_online_topup_checkout_books_timed_out_paid_checkout_instea
     assert reused_order_uuid == old_order_uuid
     assert reused_checkout.id == sumup_api.checkouts[old_order_uuid].id
     assert sumup_api.create_calls == 1
-    assert await db_connection.fetchval(
-        "select status from pending_sumup_order where uuid = $1",
-        old_order_uuid,
-    ) == PendingOrderStatus.booked.value
+    assert (
+        await db_connection.fetchval(
+            "select status from pending_sumup_order where uuid = $1",
+            old_order_uuid,
+        )
+        == PendingOrderStatus.booked.value
+    )
     assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", old_order_uuid) == 1
     assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 140
 
@@ -699,10 +709,13 @@ async def test_create_online_topup_checkout_rejects_paid_checkout_when_booking_f
         )
 
     assert sumup_api.create_calls == 1
-    assert await db_connection.fetchval(
-        "select status from pending_sumup_order where uuid = $1",
-        order_uuid,
-    ) == PendingOrderStatus.pending.value
+    assert (
+        await db_connection.fetchval(
+            "select status from pending_sumup_order where uuid = $1",
+            order_uuid,
+        )
+        == PendingOrderStatus.pending.value
+    )
     assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", order_uuid) == 0
     assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 120
 
@@ -741,10 +754,13 @@ async def test_check_online_topup_checkout_books_paid_checkout_before_returning_
         )
         == SumUpCheckoutStatus.PAID
     )
-    assert await db_connection.fetchval(
-        "select status from pending_sumup_order where uuid = $1",
-        order_uuid,
-    ) == PendingOrderStatus.booked.value
+    assert (
+        await db_connection.fetchval(
+            "select status from pending_sumup_order where uuid = $1",
+            order_uuid,
+        )
+        == PendingOrderStatus.booked.value
+    )
     assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", order_uuid) == 1
     assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 140
 
@@ -793,10 +809,13 @@ async def test_check_online_topup_checkout_keeps_paid_checkout_pending_when_book
         )
         == SumUpCheckoutStatus.PENDING
     )
-    assert await db_connection.fetchval(
-        "select status from pending_sumup_order where uuid = $1",
-        order_uuid,
-    ) == PendingOrderStatus.pending.value
+    assert (
+        await db_connection.fetchval(
+            "select status from pending_sumup_order where uuid = $1",
+            order_uuid,
+        )
+        == PendingOrderStatus.pending.value
+    )
     assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", order_uuid) == 0
     assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 120
 
@@ -831,10 +850,13 @@ async def test_check_online_topup_checkout_books_late_paid_checkout_after_local_
         )
         == SumUpCheckoutStatus.PAID
     )
-    assert await db_connection.fetchval(
-        "select status from pending_sumup_order where uuid = $1",
-        order_uuid,
-    ) == PendingOrderStatus.booked.value
+    assert (
+        await db_connection.fetchval(
+            "select status from pending_sumup_order where uuid = $1",
+            order_uuid,
+        )
+        == PendingOrderStatus.booked.value
+    )
     assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", order_uuid) == 1
     assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 140
 
@@ -864,10 +886,13 @@ async def test_concurrent_check_online_topup_checkout_books_paid_checkout_once(
 
     assert first == SumUpCheckoutStatus.PAID
     assert second == SumUpCheckoutStatus.PAID
-    assert await db_connection.fetchval(
-        "select status from pending_sumup_order where uuid = $1",
-        order_uuid,
-    ) == PendingOrderStatus.booked.value
+    assert (
+        await db_connection.fetchval(
+            "select status from pending_sumup_order where uuid = $1",
+            order_uuid,
+        )
+        == PendingOrderStatus.booked.value
+    )
     assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", order_uuid) == 1
     assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 140
 
@@ -1018,8 +1043,12 @@ async def test_shared_topup_checkout_books_contributor_without_reserving_pending
         )
 
     contributions = await customer_service.list_shared_topup_contributions(token=auth.token)
-    first_contribution = next(contribution for contribution in contributions if contribution.order_uuid == first_order_uuid)
-    second_contribution = next(contribution for contribution in contributions if contribution.order_uuid == second_order_uuid)
+    first_contribution = next(
+        contribution for contribution in contributions if contribution.order_uuid == first_order_uuid
+    )
+    second_contribution = next(
+        contribution for contribution in contributions if contribution.order_uuid == second_order_uuid
+    )
     assert first_contribution.contributor_name == "Alice"
     assert first_contribution.amount == 20
     assert first_contribution.status == PendingOrderStatus.pending.value
@@ -1075,10 +1104,13 @@ async def test_shared_topup_checkout_books_late_paid_checkout_after_local_cancel
         )
         == SumUpCheckoutStatus.PAID
     )
-    assert await db_connection.fetchval(
-        "select status from pending_sumup_order where uuid = $1",
-        order_uuid,
-    ) == PendingOrderStatus.booked.value
+    assert (
+        await db_connection.fetchval(
+            "select status from pending_sumup_order where uuid = $1",
+            order_uuid,
+        )
+        == PendingOrderStatus.booked.value
+    )
     assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", order_uuid) == 1
     assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 140
 
@@ -1344,10 +1376,13 @@ async def test_pending_order_processor_books_timed_out_paid_online_topup(
     with pytest.raises(StopProcessing):
         await customer_service.sumup.run_sumup_pending_order_processing()
 
-    assert await db_connection.fetchval(
-        "select status from pending_sumup_order where uuid = $1",
-        order_uuid,
-    ) == PendingOrderStatus.booked.value
+    assert (
+        await db_connection.fetchval(
+            "select status from pending_sumup_order where uuid = $1",
+            order_uuid,
+        )
+        == PendingOrderStatus.booked.value
+    )
     assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", order_uuid) == 1
     assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 140
 

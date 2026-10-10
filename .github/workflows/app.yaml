@@ -21,14 +21,14 @@ jobs:
       - name: build with gradle
         uses: gradle/gradle-build-action@v3
         with:
-          arguments: assembleDebug
+          arguments: :app:assembleStandardDebug :chip_debug:assembleDebug
           build-root-directory: app/
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-build
           path: |
-            ./app/app/build/outputs/apk/debug/app-debug.apk
+            ./app/app/build/outputs/apk/standard/debug/app-standard-debug.apk
             ./app/chip_debug/build/outputs/apk/debug/chip_debug-debug.apk
 
   test:
@@ -47,17 +47,17 @@ jobs:
       - name: test with gradle
         uses: gradle/gradle-build-action@v3
         with:
-          arguments: test
+          arguments: :app:testStandardDebugUnitTest
           build-root-directory: app/
 
       - name: lint with gradle
         uses: gradle/gradle-build-action@v3
         with:
-          arguments: lint
+          arguments: :app:lintStandardDebug
           build-root-directory: app/
 
       - name: Upload lint report
         uses: actions/upload-artifact@v4
         with:
           name: app-lint-report
-          path: ./app/app/build/reports/lint-results-debug.html
+          path: ./app/app/build/reports/lint-results-standardDebug.html

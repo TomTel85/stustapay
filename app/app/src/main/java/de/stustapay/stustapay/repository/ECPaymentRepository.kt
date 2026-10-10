@@ -3,11 +3,14 @@ package de.stustapay.stustapay.repository
 import android.app.Activity
 import de.stustapay.libssp.util.waitFor
 import de.stustapay.stustapay.ec.ECPayment
+import de.stustapay.stustapay.ec.PaymentCapability
 import de.stustapay.stustapay.ec.SumUp
 import de.stustapay.stustapay.ec.SumUpState
+import de.stustapay.stustapay.ec.TapToPay
+import de.stustapay.stustapay.ec.isTapToPayEnabledForTill
+import kotlinx.coroutines.delay
 import javax.inject.Inject
 import javax.inject.Singleton
-
 
 sealed interface ECPaymentResult {
     data class Success(val result: SumUpState.Success) : ECPaymentResult
@@ -15,6 +18,43 @@ sealed interface ECPaymentResult {
         val msg: String,
         val mayHaveCreatedCharge: Boolean = false,
     ) : ECPaymentResult
+}
+
+internal sealed interface TapToPayResolution {
+    data object FallbackToReader : TapToPayResolution
+    data class Complete(val result: ECPaymentResult) : TapToPayResolution
+}
+
+internal fun resolveTapToPayState(paymentState: SumUpState): TapToPayResolution = when (paymentState) {
+    is SumUpState.None,
+    is SumUpState.Started -> TapToPayResolution.Complete(
+        ECPaymentResult.Failure("Tap To Pay not finished? ${paymentState.msg()}")
+    )
+
+    is SumUpState.Failed -> TapToPayResolution.Complete(
+        ECPaymentResult.Failure(
+            msg = if (paymentState.canceled) {
+                "Payment canceled by user"
+            } else {
+                "Tap To Pay failed: ${paymentState.msg}"
+            },
+        )
+    )
+
+    is SumUpState.Error -> {
+        if (paymentState.readerFallbackAllowed && !paymentState.mayHaveCreatedCharge) {
+            TapToPayResolution.FallbackToReader
+        } else {
+            TapToPayResolution.Complete(
+                ECPaymentResult.Failure(
+                    msg = "Tap To Pay failed: ${paymentState.msg}",
+                    mayHaveCreatedCharge = paymentState.mayHaveCreatedCharge,
+                )
+            )
+        }
+    }
+
+    is SumUpState.Success -> TapToPayResolution.Complete(ECPaymentResult.Success(paymentState))
 }
 
 internal fun verifiedCardPaymentResult(
@@ -36,9 +76,18 @@ internal fun verifiedCardPaymentResult(
 @Singleton
 class ECPaymentRepository @Inject constructor(
     private val sumUp: SumUp,
+    private val tapToPay: TapToPay,
     private val terminalConfigRepository: TerminalConfigRepository,
-)
-{
+) {
+    private fun isTapToPayEnabledForTill(): Boolean {
+        val currentConfig = terminalConfigRepository.terminalConfigState.value
+        if (currentConfig !is TerminalConfigState.Success) {
+            return false
+        }
+        val tillConfig = currentConfig.config.till
+        return isTapToPayEnabledForTill(tillConfig?.tapToPayEnabled, tillConfig?.tapToPayAvailable)
+    }
+
     fun isReady(): Boolean {
         return sumUp.isLoggedIn()
     }
@@ -75,51 +124,73 @@ class ECPaymentRepository @Inject constructor(
     }
 
     suspend fun pay(context: Activity, ecPayment: ECPayment): ECPaymentResult {
-        // Refresh terminal configuration to ensure we have the latest SumUp token
         terminalConfigRepository.fetchConfig(keepTrying = false)
 
-        // perform sumup flow
+        return if (PaymentCapability.supportsTapToPay(context) && isTapToPayEnabledForTill()) {
+            payWithTapToPay(context, ecPayment)
+        } else {
+            payWithCardReader(context, ecPayment)
+        }
+    }
+
+    private suspend fun payWithTapToPay(context: Activity, ecPayment: ECPayment): ECPaymentResult {
+        if (!tapToPay.initialize(context)) {
+            android.util.Log.w(
+                "ECPaymentRepository",
+                "Tap To Pay initialization failed, falling back to card reader: ${tapToPay.status.value}",
+            )
+            return payWithCardReader(context, ecPayment)
+        }
+
+        tapToPay.pay(ecPayment)
+
+        val paymentState = tapToPay.paymentStatus.waitFor {
+            when (it) {
+                is SumUpState.Success,
+                is SumUpState.Error,
+                is SumUpState.Failed -> true
+                else -> false
+            }
+        }
+
+        if (paymentState is SumUpState.Failed || paymentState is SumUpState.Error) {
+            delay(1200)
+        }
+        tapToPay.restoreCustomerDisplayState()
+
+        return when (val resolution = resolveTapToPayState(paymentState)) {
+            TapToPayResolution.FallbackToReader -> payWithCardReader(context, ecPayment)
+            is TapToPayResolution.Complete -> resolution.result
+        }
+    }
+
+    private suspend fun payWithCardReader(context: Activity, ecPayment: ECPayment): ECPaymentResult {
         sumUp.pay(context, ecPayment)
 
         val sumUpState = sumUp.paymentStatus.waitFor {
             when (it) {
                 is SumUpState.Success,
                 is SumUpState.Error,
-                is SumUpState.Failed -> {
-                    true
-                }
-
-                else -> {
-                    false
-                }
+                is SumUpState.Failed -> true
+                else -> false
             }
         }
 
-        // proceed to notify the server about the new topup.
-        when (sumUpState) {
+        return when (sumUpState) {
             is SumUpState.None,
-            is SumUpState.Started -> {
-                return ECPaymentResult.Failure("SumUp not finished? ${sumUpState.msg()}")
-            }
+            is SumUpState.Started -> ECPaymentResult.Failure("SumUp not finished? ${sumUpState.msg()}")
 
-            is SumUpState.Error -> {
-                return ECPaymentResult.Failure(
-                    msg = "SumUp failed: ${sumUpState.msg()}",
-                    mayHaveCreatedCharge = sumUpState.mayHaveCreatedCharge,
-                )
-            }
+            is SumUpState.Error -> ECPaymentResult.Failure(
+                msg = "SumUp failed: ${sumUpState.msg()}",
+                mayHaveCreatedCharge = sumUpState.mayHaveCreatedCharge,
+            )
 
-            is SumUpState.Failed -> {
-                return ECPaymentResult.Failure("SumUp failed: ${sumUpState.msg()}")
-            }
-
-            is SumUpState.Success -> {
-                return verifiedCardPaymentResult(
-                    result = sumUpState,
-                    expectedTransactionId = ecPayment.id,
-                    actualTransactionId = sumUpState.txInfo?.foreignTransactionId,
-                )
-            }
+            is SumUpState.Failed -> ECPaymentResult.Failure("SumUp failed: ${sumUpState.msg()}")
+            is SumUpState.Success -> verifiedCardPaymentResult(
+                result = sumUpState,
+                expectedTransactionId = ecPayment.id,
+                actualTransactionId = sumUpState.txInfo?.foreignTransactionId,
+            )
         }
     }
 }

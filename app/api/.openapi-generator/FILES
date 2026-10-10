@@ -73,6 +73,7 @@ src/main/kotlin/de/stustapay/api/models/ProductType.kt
 src/main/kotlin/de/stustapay/api/models/RegisterStockUpPayload.kt
 src/main/kotlin/de/stustapay/api/models/RevenueStats.kt
 src/main/kotlin/de/stustapay/api/models/StatInterval.kt
+src/main/kotlin/de/stustapay/api/models/SumUpEnvironment.kt
 src/main/kotlin/de/stustapay/api/models/SwitchTagPayload.kt
 src/main/kotlin/de/stustapay/api/models/Terminal.kt
 src/main/kotlin/de/stustapay/api/models/TerminalButton.kt

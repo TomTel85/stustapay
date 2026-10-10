@@ -92,8 +92,14 @@ async def save_pending_ticket_sale(
     conn: Connection, till_id: int, node_id: int, cashier_id: int | None, ticket_sale: CompletedTicketSale
 ):
     await conn.execute(
-        "insert into pending_sumup_order (uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content) "
-        "values ($1, $2, $3, $4, 'ticket', 1, $5)",
+        "insert into pending_sumup_order "
+        "(uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content, sumup_environment) "
+        "values ($1, $2, $3, $4, 'ticket', 1, $5, ("
+        "  select e.sumup_environment from node n "
+        "  join node en on en.id = n.event_node_id "
+        "  join event e on e.id = en.event_id "
+        "  where n.id = $2"
+        "))",
         ticket_sale.uuid,
         node_id,
         till_id,
@@ -113,8 +119,13 @@ def load_pending_ticket_sale(pending_order: PendingOrder) -> CompletedTicketSale
 async def save_pending_sale(conn: Connection, till_id: int, node_id: int, cashier_id: int | None, sale: PendingSale):
     await conn.execute(
         "insert into pending_sumup_order "
-        "(uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content) "
-        "values ($1, $2, $3, $4, 'sale', 1, $5)",
+        "(uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content, sumup_environment) "
+        "values ($1, $2, $3, $4, 'sale', 1, $5, ("
+        "  select e.sumup_environment from node n "
+        "  join node en on en.id = n.event_node_id "
+        "  join event e on e.id = en.event_id "
+        "  where n.id = $2"
+        "))",
         sale.uuid,
         node_id,
         till_id,
@@ -378,8 +389,14 @@ async def save_pending_topup(
     conn: Connection, till_id: int, node_id: int, cashier_id: int | None, topup: CompletedTopUp
 ):
     await conn.execute(
-        "insert into pending_sumup_order (uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content) "
-        "values ($1, $2, $3, $4, 'topup', 1, $5)",
+        "insert into pending_sumup_order "
+        "(uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content, sumup_environment) "
+        "values ($1, $2, $3, $4, 'topup', 1, $5, ("
+        "  select e.sumup_environment from node n "
+        "  join node en on en.id = n.event_node_id "
+        "  join event e on e.id = en.event_id "
+        "  where n.id = $2"
+        "))",
         topup.uuid,
         node_id,
         till_id,

@@ -83,6 +83,46 @@ class CustomerDisplayPresentation(
                 is CustomerDisplayState.ScanChip -> {
                     showScanChipView(rootView)
                 }
+                is CustomerDisplayState.TapToPayReady -> {
+                    showTapToPayStatusView(
+                        rootView = rootView,
+                        title = "Ready to pay",
+                        subtitle = "Please hold your card or phone near the payment reader.",
+                        accentColor = "#0E7490",
+                        backgroundTop = "#F0FDFF",
+                        backgroundBottom = "#DFF7FB",
+                    )
+                }
+                is CustomerDisplayState.TapToPayCardRequested -> {
+                    showTapToPayStatusView(
+                        rootView = rootView,
+                        title = "Tap now",
+                        subtitle = "Keep your card or phone still until the payment is confirmed.",
+                        accentColor = "#0F766E",
+                        backgroundTop = "#F2FFFB",
+                        backgroundBottom = "#DCFCE7",
+                    )
+                }
+                is CustomerDisplayState.TapToPayProcessing -> {
+                    showTapToPayStatusView(
+                        rootView = rootView,
+                        title = "Processing payment",
+                        subtitle = state.message,
+                        accentColor = "#1D4ED8",
+                        backgroundTop = "#F4F8FF",
+                        backgroundBottom = "#DCE8FF",
+                    )
+                }
+                is CustomerDisplayState.TapToPayFailed -> {
+                    showTapToPayStatusView(
+                        rootView = rootView,
+                        title = "Payment not completed",
+                        subtitle = state.message,
+                        accentColor = "#B91C1C",
+                        backgroundTop = "#FFF5F5",
+                        backgroundBottom = "#FFE1E1",
+                    )
+                }
                 is CustomerDisplayState.AccountBalance -> {
                     showAccountBalanceView(state, rootView)
                 }
@@ -312,6 +352,78 @@ class CustomerDisplayPresentation(
         card.addView(arrowText)
         card.addView(iconPanel)
         container.addView(card)
+        rootView?.addView(container)
+    }
+
+    private fun showTapToPayStatusView(
+        rootView: FrameLayout?,
+        title: String,
+        subtitle: String,
+        accentColor: String,
+        backgroundTop: String,
+        backgroundBottom: String,
+    ) {
+        val container = android.widget.LinearLayout(context).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setPadding(dp(40), dp(40), dp(40), dp(40))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                orientation = android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM
+                colors = intArrayOf(
+                    android.graphics.Color.parseColor(backgroundTop),
+                    android.graphics.Color.parseColor(backgroundBottom)
+                )
+            }
+        }
+
+        val statusCard = android.widget.LinearLayout(context).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(android.graphics.Color.WHITE)
+                cornerRadius = dp(28).toFloat()
+                setStroke(dp(2), android.graphics.Color.parseColor(accentColor))
+            }
+            setPadding(dp(32), dp(32), dp(32), dp(32))
+        }
+
+        val titleText = android.widget.TextView(context).apply {
+            text = title
+            textSize = 34f
+            gravity = android.view.Gravity.CENTER
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(android.graphics.Color.parseColor(accentColor))
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, 0, 0, dp(18))
+            }
+        }
+
+        val subtitleText = android.widget.TextView(context).apply {
+            text = subtitle
+            textSize = 24f
+            gravity = android.view.Gravity.CENTER
+            setLineSpacing(0f, 1.15f)
+            setTextColor(android.graphics.Color.parseColor("#243B53"))
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        statusCard.addView(titleText)
+        statusCard.addView(subtitleText)
+        container.addView(statusCard)
         rootView?.addView(container)
     }
 

@@ -1,5 +1,19 @@
 name: App Release
-on: [workflow_call]
+on:
+  workflow_call:
+    secrets:
+      ANDROID_KEY_STORE:
+        required: true
+      ANDROID_KEY_STORE_PASSWORD:
+        required: true
+      ANDROID_KEY_ALIAS:
+        required: true
+      ANDROID_KEY_PASSWORD:
+        required: true
+      SUMUP_TTP_USERNAME:
+        required: true
+      SUMUP_TTP_PASSWORD:
+        required: true
 
 jobs:
   build:
@@ -28,21 +42,45 @@ jobs:
           test -n "$ANDROID_KEY_STORE_PASSWORD"
           test -n "$ANDROID_KEY_ALIAS"
           test -n "$ANDROID_KEY_PASSWORD"
-          echo $ANDROID_KEY_STORE | base64 --decode > keystore.jks
+          printf '%s' "$ANDROID_KEY_STORE" | base64 --decode > keystore.jks
           mkdir -p ~/.gradle
           echo "ANDROID_KEY_STORE_FILE=$(pwd)/keystore.jks" >> ~/.gradle/gradle.properties
           echo "ANDROID_KEY_STORE_PASSWORD=${ANDROID_KEY_STORE_PASSWORD}" >> ~/.gradle/gradle.properties
           echo "ANDROID_KEY_ALIAS=${ANDROID_KEY_ALIAS}" >> ~/.gradle/gradle.properties
           echo "ANDROID_KEY_PASSWORD=${ANDROID_KEY_PASSWORD}" >> ~/.gradle/gradle.properties
           ./gradlew app:signingReport
-      - name: build app
+      - name: validate Tap-to-Pay repository credentials
+        env:
+          SUMUP_TTP_USERNAME: ${{ secrets.SUMUP_TTP_USERNAME }}
+          SUMUP_TTP_PASSWORD: ${{ secrets.SUMUP_TTP_PASSWORD }}
+        run: |
+          test -n "$SUMUP_TTP_USERNAME"
+          test -n "$SUMUP_TTP_PASSWORD"
+      - name: build standard and Tap-to-Pay apps
+        env:
+          SUMUP_TTP_USERNAME: ${{ secrets.SUMUP_TTP_USERNAME }}
+          SUMUP_TTP_PASSWORD: ${{ secrets.SUMUP_TTP_PASSWORD }}
         working-directory: ./app
-        run: ./gradlew -PrequireReleaseSigning app:assembleRelease
-      - name: verify signed artifact
+        run: ./gradlew -PrequireReleaseSigning :app:assembleStandardRelease :app:assembleTapToPayRelease
+      - name: verify signed artifacts and SDK contents
         working-directory: ./app
-        run: test -f ./app/build/outputs/apk/release/app-release.apk
-      - name: upload apk
+        run: |
+          STANDARD_APK=./app/build/outputs/apk/standard/release/app-standard-release.apk
+          TAP_TO_PAY_APK=./app/build/outputs/apk/tapToPay/release/app-tapToPay-release.apk
+          test -f "$STANDARD_APK"
+          test -f "$TAP_TO_PAY_APK"
+          unzip -p "$TAP_TO_PAY_APK" 'classes*.dex' | strings | grep -F "Lcom/sumup/taptopay/TapToPayApiProvider;" >/dev/null
+          if unzip -p "$STANDARD_APK" 'classes*.dex' | strings | grep -F "Lcom/sumup/taptopay/TapToPayApiProvider;" >/dev/null; then
+            echo "Standard APK unexpectedly contains the Tap-to-Pay SDK"
+            exit 1
+          fi
+      - name: upload standard apk
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-build
-          path: ./app/app/build/outputs/apk/release/app-release.apk
+          name: app-standard-release-build
+          path: ./app/app/build/outputs/apk/standard/release/app-standard-release.apk
+      - name: upload Tap-to-Pay apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-tap-to-pay-release-build
+          path: ./app/app/build/outputs/apk/tapToPay/release/app-tapToPay-release.apk

@@ -8,6 +8,10 @@ import de.stustapay.api.models.PendingSale
 sealed class CustomerDisplayState {
     data object Welcome : CustomerDisplayState()
     data object ScanChip : CustomerDisplayState()
+    data object TapToPayReady : CustomerDisplayState()
+    data object TapToPayCardRequested : CustomerDisplayState()
+    data class TapToPayProcessing(val message: String) : CustomerDisplayState()
+    data class TapToPayFailed(val message: String) : CustomerDisplayState()
     data class AccountBalance(
         val accountName: String?,
         val balance: Double,

@@ -103,6 +103,12 @@ export const TillProfileList: React.FC = () => {
       width: 120,
     },
     {
+      field: "tap_to_pay_enabled",
+      headerName: t("profile.tapToPayEnabled"),
+      type: "boolean",
+      width: 150,
+    },
+    {
       field: "layout",
       headerName: t("profile.layout"),
       flex: 0.5,

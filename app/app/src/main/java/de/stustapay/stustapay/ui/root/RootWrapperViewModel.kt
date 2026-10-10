@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.stustapay.api.models.AppDisplayMode as RemoteAppDisplayMode
+import de.stustapay.api.models.SumUpEnvironment
 import de.stustapay.libssp.util.mapState
 import de.stustapay.stustapay.repository.InfallibleRepository
 import de.stustapay.stustapay.repository.InfallibleState
@@ -48,6 +49,15 @@ class RootWrapperViewModel @Inject constructor(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = null,
+    )
+
+    val sumUpSandboxActive = terminalConfigRepository.terminalConfigState.map { state ->
+        state is TerminalConfigState.Success &&
+            state.config.till?.sumupSecrets?.sumupEnvironment == SumUpEnvironment.sandbox
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = false,
     )
 
     val infallibleVisible = infallibleRepository.state.map {

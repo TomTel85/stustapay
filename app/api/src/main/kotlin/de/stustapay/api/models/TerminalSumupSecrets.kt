@@ -15,6 +15,7 @@
 
 package de.stustapay.api.models
 
+import de.stustapay.api.models.SumUpEnvironment
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
@@ -27,6 +28,7 @@ import kotlinx.serialization.Contextual
  * @param sumupApiKey 
  * @param sumupMerchantCode 
  * @param sumupApiKeyExpiresAt 
+ * @param sumupEnvironment
  */
 @Serializable
 
@@ -42,10 +44,12 @@ data class TerminalSumupSecrets (
     val sumupMerchantCode: kotlin.String,
 
     @Contextual @SerialName(value = "sumup_api_key_expires_at")
-    val sumupApiKeyExpiresAt: java.time.OffsetDateTime?
+    val sumupApiKeyExpiresAt: java.time.OffsetDateTime?,
+
+    @Contextual @SerialName(value = "sumup_environment")
+    val sumupEnvironment: SumUpEnvironment
 
 ) {
 
 
 }
-

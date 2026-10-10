@@ -42,6 +42,8 @@ import kotlinx.serialization.Contextual
  * @param enableSspPayment 
  * @param enableCashPayment 
  * @param enableCardPayment 
+ * @param tapToPayEnabled
+ * @param tapToPayAvailable
  * @param buttons 
  * @param sumupSecrets 
  * @param postPaymentAllowed 
@@ -97,6 +99,12 @@ data class TerminalTillConfig (
     @SerialName(value = "enable_card_payment")
     val enableCardPayment: kotlin.Boolean,
 
+    @SerialName(value = "tap_to_pay_enabled")
+    val tapToPayEnabled: kotlin.Boolean,
+
+    @SerialName(value = "tap_to_pay_available")
+    val tapToPayAvailable: kotlin.Boolean,
+
     @SerialName(value = "buttons")
     val buttons: kotlin.collections.List<TerminalButton>?,
 
@@ -125,4 +133,3 @@ data class TerminalTillConfig (
 
 
 }
-

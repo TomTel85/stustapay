@@ -54,6 +54,8 @@ class SaleStatusTest {
                 enableSspPayment = true,
                 enableCashPayment = true,
                 enableCardPayment = true,
+                tapToPayEnabled = false,
+                tapToPayAvailable = false,
                 buttons = emptyList(),
                 sumupSecrets = null,
                 postPaymentAllowed = false,

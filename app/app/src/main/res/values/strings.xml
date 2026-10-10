@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sumup_sandbox_banner">SUMUP SANDBOX — TEST PAYMENTS</string>
     <string name="app_name" translatable="false">TeamFestlichPay</string>
     <string name="payout">Payout</string>
     <string name="credit_left">Credit left</string>

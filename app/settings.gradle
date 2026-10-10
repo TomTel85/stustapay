@@ -1,3 +1,5 @@
+import java.util.Properties
+
 pluginManagement {
     repositories {
         gradlePluginPortal()
@@ -11,6 +13,70 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        def localProperties = new Properties()
+        def localPropertiesFile = file("local.properties")
+        if (localPropertiesFile.exists()) {
+            localPropertiesFile.withInputStream { localProperties.load(it) }
+        }
+
+        // Tap To Pay SDK repository - requires credentials from SumUp integration team
+        // Place this FIRST so Gradle checks it before other repositories
+        // Contact integration@sumup.com for access
+        //
+        // Credentials can be provided via:
+        //   1. local.properties (project-local, gitignored)
+        //   2. Environment variables
+        //   3. ~/.gradle/gradle.properties
+        //
+        // local.properties:
+        //   sumupTtpUsername=your_username
+        //   sumupTtpPassword=your_password
+        //
+        // Environment variables:
+        //   export SUMUP_TTP_USERNAME=your_username
+        //   export SUMUP_TTP_PASSWORD=your_password
+        //
+        // User-level gradle.properties:
+        //   sumupTtpUsername=your_username
+        //   sumupTtpPassword=your_password
+
+        def ttpUsername = localProperties.getProperty("sumupTtpUsername")
+            ?: System.getenv("SUMUP_TTP_USERNAME")
+            ?: providers.gradleProperty("sumupTtpUsername").orElse("").get()
+        def ttpPassword = localProperties.getProperty("sumupTtpPassword")
+            ?: System.getenv("SUMUP_TTP_PASSWORD")
+            ?: providers.gradleProperty("sumupTtpPassword").orElse("").get()
+
+        // Only add repository if credentials are provided
+        if (ttpUsername && ttpPassword) {
+            def cleanUsername = ttpUsername.trim()
+            def cleanPassword = ttpPassword.trim()
+            println("Adding authenticated Tap To Pay SDK repository")
+            maven {
+                name = "SumUp Tap To Pay SDK"
+                url = uri("https://tap-to-pay-sdk.fleet.live.sumup.net/")
+                content {
+                    includeGroup("com.sumup.tap-to-pay")
+                    includeGroup("com.sumup.android")
+                    includeGroup("com.sumup.observability")
+                    includeGroup("ca.amadis.agnos")
+                }
+                authentication {
+                    basic(BasicAuthentication)
+                }
+                credentials {
+                    username = cleanUsername
+                    password = cleanPassword
+                }
+            }
+        } else {
+            // Log a warning if credentials are missing (but don't fail the build)
+            println("WARNING: SumUp Tap To Pay SDK credentials not found.")
+            println("Set them in local.properties, SUMUP_TTP_USERNAME/SUMUP_TTP_PASSWORD,")
+            println("or ~/.gradle/gradle.properties to enable Tap To Pay SDK.")
+        }
+
+        // Other repositories
         google()
         mavenCentral()
         maven { url = 'https://maven.sumup.com/releases' }

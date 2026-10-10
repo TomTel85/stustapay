@@ -126,7 +126,10 @@ class SumupService(Service[Config]):
         self, *, conn: Connection, pending_order: PendingOrder
     ) -> SumUpCheckout | None:
         resolved = await create_sumup_api_for_node(
-            conn=conn, node_id=pending_order.node_id, api_factory=self._create_sumup_api
+            conn=conn,
+            node_id=pending_order.node_id,
+            environment=pending_order.sumup_environment,
+            api_factory=self._create_sumup_api,
         )
         if resolved is None:
             self.logger.error(f"Missing SumUp API key or merchant code for order {pending_order.uuid}")
@@ -226,7 +229,10 @@ class SumupService(Service[Config]):
 
     async def pending_order_exists_at_sumup(self, conn: Connection, pending_order: PendingOrder) -> bool:
         resolved = await create_sumup_api_for_node(
-            conn=conn, node_id=pending_order.node_id, api_factory=self._create_sumup_api
+            conn=conn,
+            node_id=pending_order.node_id,
+            environment=pending_order.sumup_environment,
+            api_factory=self._create_sumup_api,
         )
         if resolved is None:
             return False
@@ -474,7 +480,17 @@ class SumupService(Service[Config]):
         if existing_pending_order is not None:
             existing_pending_order = await fetch_order_by_uuid_for_update(conn=conn, uuid=existing_pending_order.uuid)
             assert existing_pending_order is not None
-            existing_checkout = await api.find_checkout(existing_pending_order.uuid)
+            existing_resolved = await create_sumup_api_for_node(
+                conn=conn,
+                node_id=existing_pending_order.node_id,
+                environment=existing_pending_order.sumup_environment,
+                api_factory=self._create_sumup_api,
+            )
+            existing_checkout = (
+                await existing_resolved[0].find_checkout(existing_pending_order.uuid)
+                if existing_resolved is not None
+                else None
+            )
 
             if existing_checkout is not None:
                 if existing_checkout.status == SumUpCheckoutStatus.PENDING:
@@ -695,6 +711,7 @@ class SumupService(Service[Config]):
         resolved = await create_sumup_api_for_node(
             conn=conn,
             node_id=pending_order.node_id,
+            environment=pending_order.sumup_environment,
             api_factory=self._create_sumup_api,
         )
         if resolved is None:

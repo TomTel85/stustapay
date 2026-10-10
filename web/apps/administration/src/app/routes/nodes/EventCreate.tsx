@@ -114,6 +114,7 @@ const sumupFormStep: FormStep = {
     sumup_payment_enabled: false,
     sumup_topup_enabled: false,
     group_topup_enabled: false,
+    sumup_environment: "live",
   },
   schema: EventSumUpSettingsSchema,
   form: EventSumupSettingsForm,

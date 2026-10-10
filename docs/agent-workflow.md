@@ -44,6 +44,7 @@ This repository includes a small, repo-local workflow stack for Codex-style deve
 - `make verify-web-administration`
 - `make verify-web-customerportal`
 - `make verify-android`
+- `make verify-android-tap-to-pay` (requires SumUp repository credentials and validates the non-debuggable benchmark variant)
 - `make sync-contract`
 
 `make sync-contract` runs the full contract propagation chain:

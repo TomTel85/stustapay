@@ -39,6 +39,7 @@ class NewTillProfile(BaseModel):
     enable_ssp_payment: bool
     enable_cash_payment: bool
     enable_card_payment: bool
+    tap_to_pay_enabled: bool = False
 
 
 class TillProfile(NewTillProfile):

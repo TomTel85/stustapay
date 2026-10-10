@@ -2,7 +2,7 @@ import { RestrictedEventSettings, useClearLegacySumupSettingsMutation, useUpdate
 import { config } from "@/api/common";
 import { useCurrentNode } from "@/hooks";
 import { Alert, Button, LinearProgress, List, ListItem, ListItemText, Stack } from "@mui/material";
-import { FormSwitch } from "@stustapay/form-components";
+import { FormSelect, FormSwitch } from "@stustapay/form-components";
 import { toFormikValidationSchema } from "@stustapay/utils";
 import { Form, Formik, FormikHelpers, FormikProps } from "formik";
 import { useOpenModal } from "@stustapay/modal-provider";
@@ -10,15 +10,10 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
 import { toast } from "react-toastify";
-import { z } from "zod";
+import { type EventSumUpSettings, EventSumUpSettingsSchema } from "./sumupEnvironment";
 
-export const EventSumUpSettingsSchema = z.object({
-  sumup_topup_enabled: z.boolean(),
-  group_topup_enabled: z.boolean(),
-  sumup_payment_enabled: z.boolean(),
-});
-
-export type EventSumUpSettings = z.infer<typeof EventSumUpSettingsSchema>;
+export { EventSumUpSettingsSchema } from "./sumupEnvironment";
+export type { EventSumUpSettings } from "./sumupEnvironment";
 
 export const EventSumupSettingsForm: React.FC<FormikProps<EventSumUpSettings>> = (formik) => {
   const { t } = useTranslation();
@@ -29,6 +24,18 @@ export const EventSumupSettingsForm: React.FC<FormikProps<EventSumUpSettings>> =
         label={t("settings.sumup.sumup_topup_enabled")}
         name="sumup_topup_enabled"
         formik={formik}
+      />
+      <FormSelect
+        label={t("settings.sumup.environment")}
+        name="sumup_environment"
+        formik={formik}
+        multiple={false}
+        options={EventSumUpSettingsSchema.shape.sumup_environment.options}
+        formatOption={(environment: unknown) =>
+          environment === "sandbox"
+            ? t("settings.sumup.sandboxEnvironment")
+            : t("settings.sumup.liveEnvironment")
+        }
       />
       <FormSwitch
         disabled={!config.sumupTopupEnabledGlobally}
@@ -75,7 +82,10 @@ export const TabSumUp: React.FC<{ nodeId: number; eventSettings: RestrictedEvent
     eventSettings.resolved_sumup_link?.source === "legacy_event_api_key" ||
     eventSettings.resolved_sumup_link?.source === "legacy_event_oauth";
 
-  const handleSubmit = (values: EventSumUpSettings, { setSubmitting }: FormikHelpers<EventSumUpSettings>) => {
+  const performUpdate = (
+    values: EventSumUpSettings,
+    { setSubmitting }: Pick<FormikHelpers<EventSumUpSettings>, "setSubmitting">,
+  ) => {
     setSubmitting(true);
     updateEvent({ nodeId: nodeId, updateEvent: { ...eventSettings, ...values } })
       .unwrap()
@@ -87,6 +97,25 @@ export const TabSumUp: React.FC<{ nodeId: number; eventSettings: RestrictedEvent
         setSubmitting(false);
         toast.error(t("settings.updateEventFailed", { reason: err.error }));
       });
+  };
+
+  const handleSubmit = (values: EventSumUpSettings, helpers: FormikHelpers<EventSumUpSettings>) => {
+    if (values.sumup_environment === eventSettings.sumup_environment) {
+      performUpdate(values, helpers);
+      return;
+    }
+    helpers.setSubmitting(false);
+    openModal({
+      type: "confirm",
+      title: t("settings.sumup.environmentChangeConfirmTitle"),
+      content: t("settings.sumup.environmentChangeConfirmContent", {
+        environment:
+          values.sumup_environment === "sandbox"
+            ? t("settings.sumup.sandboxEnvironment")
+            : t("settings.sumup.liveEnvironment"),
+      }),
+      onConfirm: () => performUpdate(values, helpers),
+    });
   };
 
   const linkedNodeId = eventSettings.resolved_sumup_link?.source_node_id;
@@ -116,7 +145,7 @@ export const TabSumUp: React.FC<{ nodeId: number; eventSettings: RestrictedEvent
         <Alert severity="warning">SumUp payment is disabled globally in this StuStaPay instance configuration.</Alert>
       )}
       {eventSettings.resolved_sumup_link ? (
-        <Alert severity="success">
+        <Alert severity={eventSettings.sumup_environment === "sandbox" ? "warning" : "success"}>
           {t("settings.sumup.resolvedLinkSummary", {
             merchantCode: eventSettings.resolved_sumup_link.merchant_code,
             nodeName: eventSettings.resolved_sumup_link.source_node_name,
@@ -124,6 +153,9 @@ export const TabSumUp: React.FC<{ nodeId: number; eventSettings: RestrictedEvent
         </Alert>
       ) : (
         <Alert severity="warning">{t("settings.sumup.noResolvedLink")}</Alert>
+      )}
+      {eventSettings.sumup_environment === "sandbox" && (
+        <Alert severity="warning">{t("settings.sumup.eventSandboxNotice")}</Alert>
       )}
       {!eventSettings.sumup_global_oauth_configured && <Alert severity="info">{t("settings.sumup.oauthConfigMissing")}</Alert>}
       {!eventSettings.sumup_global_affiliate_key_configured && <Alert severity="info">{t("settings.sumup.affiliateKeyMissing")}</Alert>}

@@ -63,7 +63,11 @@ verify-web: verify-web-administration verify-web-customerportal
 
 .PHONY: verify-android
 verify-android:
-	cd app && ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+	cd app && ./gradlew :app:assembleStandardDebug :app:testStandardDebugUnitTest :app:lintStandardDebug
+
+.PHONY: verify-android-tap-to-pay
+verify-android-tap-to-pay:
+	cd app && ./gradlew :app:assembleTapToPayBenchmark :app:testTapToPayBenchmarkUnitTest :app:lintTapToPayBenchmark
 
 OFFLINE_EMULATOR_DEVICES ?= 3
 .PHONY: test-offline-emulators

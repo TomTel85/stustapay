@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from stustapay.administration.service import HeadwindError, build_headwind_custom3, get_headwind_client
 from stustapay.bon.accounting_report import AccountingReportQuery
@@ -12,7 +12,7 @@ from stustapay.bon.report_time import ReportDayMode
 from stustapay.bon.revenue_report import RevenueReportQuery
 from stustapay.core.http.auth_user import CurrentAuthToken
 from stustapay.core.http.context import Context, ContextTreeService, get_context
-from stustapay.core.schema.sumup import NodeSumUpConnectionStatus
+from stustapay.core.schema.sumup import NodeSumUpConnectionStatus, SumUpEnvironment
 from stustapay.core.schema.tree import (
     CopyEventRequest,
     NewEvent,
@@ -224,9 +224,18 @@ class SumUpTokenPayload(BaseModel):
     redirect_uri: str
 
 
+class SumUpApiKeyPayload(BaseModel):
+    api_key: str = Field(repr=False, min_length=1)
+
+
 @router.get("/nodes/{node_id}/sumup-link", response_model=NodeSumUpConnectionStatus)
-async def get_node_sumup_link_status(token: CurrentAuthToken, tree_service: ContextTreeService, node_id: int):
-    return await tree_service.get_node_sumup_link_status(token=token, node_id=node_id)
+async def get_node_sumup_link_status(
+    token: CurrentAuthToken,
+    tree_service: ContextTreeService,
+    node_id: int,
+    environment: SumUpEnvironment = SumUpEnvironment.live,
+):
+    return await tree_service.get_node_sumup_link_status(token=token, node_id=node_id, environment=environment)
 
 
 @router.post("/nodes/{node_id}/configure-sumup-token", response_model=NodeSumUpConnectionStatus)
@@ -241,9 +250,28 @@ async def configure_sumup_token(
     )
 
 
+@router.put("/nodes/{node_id}/configure-sumup-sandbox-key", response_model=NodeSumUpConnectionStatus)
+async def configure_sumup_sandbox_key(
+    token: CurrentAuthToken,
+    tree_service: ContextTreeService,
+    node_id: int,
+    payload: SumUpApiKeyPayload,
+):
+    return await tree_service.configure_sumup_sandbox_api_key(
+        token=token,
+        node_id=node_id,
+        api_key=payload.api_key,
+    )
+
+
 @router.delete("/nodes/{node_id}/sumup-link", response_model=NodeSumUpConnectionStatus)
-async def delete_node_sumup_link(token: CurrentAuthToken, tree_service: ContextTreeService, node_id: int):
-    return await tree_service.delete_node_sumup_link(token=token, node_id=node_id)
+async def delete_node_sumup_link(
+    token: CurrentAuthToken,
+    tree_service: ContextTreeService,
+    node_id: int,
+    environment: SumUpEnvironment = SumUpEnvironment.live,
+):
+    return await tree_service.delete_node_sumup_link(token=token, node_id=node_id, environment=environment)
 
 
 @router.post("/events/{node_id}/banner")

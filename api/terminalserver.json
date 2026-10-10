@@ -4352,6 +4352,14 @@
         ],
         "title": "StatInterval"
       },
+      "SumUpEnvironment": {
+        "type": "string",
+        "enum": [
+          "live",
+          "sandbox"
+        ],
+        "title": "SumUpEnvironment"
+      },
       "SwitchTagPayload": {
         "properties": {
           "old_user_tag_uid": {
@@ -4867,6 +4875,9 @@
               }
             ],
             "title": "Sumup Api Key Expires At"
+          },
+          "sumup_environment": {
+            "$ref": "#/components/schemas/SumUpEnvironment"
           }
         },
         "type": "object",
@@ -4874,7 +4885,8 @@
           "sumup_affiliate_key",
           "sumup_api_key",
           "sumup_merchant_code",
-          "sumup_api_key_expires_at"
+          "sumup_api_key_expires_at",
+          "sumup_environment"
         ],
         "title": "TerminalSumupSecrets"
       },
@@ -4956,6 +4968,14 @@
           "enable_card_payment": {
             "type": "boolean",
             "title": "Enable Card Payment"
+          },
+          "tap_to_pay_enabled": {
+            "type": "boolean",
+            "title": "Tap To Pay Enabled"
+          },
+          "tap_to_pay_available": {
+            "type": "boolean",
+            "title": "Tap To Pay Available"
           },
           "buttons": {
             "anyOf": [
@@ -5048,6 +5068,8 @@
           "enable_ssp_payment",
           "enable_cash_payment",
           "enable_card_payment",
+          "tap_to_pay_enabled",
+          "tap_to_pay_available",
           "buttons",
           "sumup_secrets",
           "post_payment_allowed",

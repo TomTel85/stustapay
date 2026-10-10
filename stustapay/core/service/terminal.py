@@ -500,8 +500,12 @@ class TerminalService(Service[Config]):
                 # Update the till to remove the invalid cash register
                 await conn.execute("update till set active_cash_register_id = null where id = $1", till.id)
 
+        effective_sumup_payment_enabled = event_settings.is_sumup_payment_enabled(self.config.core)
+
+        access = None
+        tap_to_pay_available = False
         sumup_secrets = None
-        if event_settings.sumup_payment_enabled:
+        if effective_sumup_payment_enabled:
             access = await resolve_terminal_sumup_access(conn=conn, node_id=node.id, event_settings=event_settings)
             sumup_affiliate_key = access.affiliate_key if access is not None else ""
             oauth_token = await self._get_terminal_sumup_oauth_token(
@@ -510,20 +514,38 @@ class TerminalService(Service[Config]):
                 node=node,
                 event_settings=event_settings,
             )
-            sumup_api_oauth_token = oauth_token.access_token if oauth_token is not None else ""
-            sumup_api_oauth_valid_until = oauth_token.expires_at if oauth_token is not None else None
-            sumup_secrets = TerminalSumupSecrets(
-                sumup_affiliate_key=sumup_affiliate_key,
-                sumup_api_key=sumup_api_oauth_token,
-                sumup_merchant_code=access.merchant_code if access is not None else "",
-                sumup_api_key_expires_at=sumup_api_oauth_valid_until,
+            sumup_api_token = (
+                access.api_key
+                if access is not None and access.api_key is not None
+                else oauth_token.access_token
+                if oauth_token is not None
+                else ""
             )
+            sumup_api_valid_until = oauth_token.expires_at if oauth_token is not None else None
+            if access is not None:
+                sumup_secrets = TerminalSumupSecrets(
+                    sumup_affiliate_key=sumup_affiliate_key,
+                    sumup_api_key=sumup_api_token,
+                    sumup_merchant_code=access.merchant_code,
+                    sumup_api_key_expires_at=sumup_api_valid_until,
+                    sumup_environment=access.environment,
+                )
+
+        terminal_obj = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
+        tap_to_pay_enabled = profile.tap_to_pay_enabled
+        tap_to_pay_available = (
+            effective_sumup_payment_enabled
+            and profile.enable_card_payment
+            and tap_to_pay_enabled
+            and access is not None
+            and sumup_secrets is not None
+            and bool(sumup_secrets.sumup_api_key)
+        )
 
         post_payment_allowed = event_settings.post_payment_allowed
-        sumup_payment_enabled = event_settings.sumup_payment_enabled
+        sumup_payment_enabled = effective_sumup_payment_enabled
 
         # Get terminal information for the required fields
-        terminal_obj = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         active_user_id = terminal_obj.active_user_id if terminal_obj else None
 
         # Get user privileges
@@ -567,6 +589,8 @@ class TerminalService(Service[Config]):
             enable_ssp_payment=profile.enable_ssp_payment,
             enable_cash_payment=profile.enable_cash_payment,
             enable_card_payment=profile.enable_card_payment,
+            tap_to_pay_enabled=tap_to_pay_enabled,
+            tap_to_pay_available=tap_to_pay_available,
             buttons=buttons,
             sumup_secrets=sumup_secrets,
             post_payment_allowed=post_payment_allowed,

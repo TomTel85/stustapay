@@ -3,6 +3,16 @@ import enum
 from pydantic import BaseModel
 
 
+class SumUpEnvironment(enum.Enum):
+    live = "live"
+    sandbox = "sandbox"
+
+
+class SumUpAuthMethod(enum.Enum):
+    oauth = "oauth"
+    api_key = "api_key"
+
+
 class SumUpConnectionSource(enum.Enum):
     node_link = "node_link"
     legacy_event_oauth = "legacy_event_oauth"
@@ -11,6 +21,8 @@ class SumUpConnectionSource(enum.Enum):
 
 class ResolvedSumUpLink(BaseModel):
     source: SumUpConnectionSource
+    environment: SumUpEnvironment
+    auth_method: SumUpAuthMethod
     source_node_id: int
     source_node_name: str
     merchant_code: str
@@ -21,6 +33,8 @@ class ResolvedSumUpLink(BaseModel):
 class NodeSumUpConnectionStatus(BaseModel):
     node_id: int
     node_name: str
+    environment: SumUpEnvironment
+    auth_method: SumUpAuthMethod | None = None
     connected: bool
     merchant_code: str | None = None
     merchant_name: str | None = None

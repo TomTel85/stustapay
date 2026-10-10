@@ -20,7 +20,8 @@ sealed interface SumUpState {
     }
 
     data class Failed(
-        val msg: String
+        val msg: String,
+        val canceled: Boolean = false,
     ) : SumUpState {
         override fun msg(): String {
             return msg
@@ -40,6 +41,7 @@ sealed interface SumUpState {
     data class Error(
         val msg: String,
         val mayHaveCreatedCharge: Boolean = false,
+        val readerFallbackAllowed: Boolean = false,
     ) : SumUpState {
         override fun msg(): String {
             return "sumup transaction error: $msg"

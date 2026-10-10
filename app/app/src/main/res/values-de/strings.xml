@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="sumup_sandbox_banner">SUMUP SANDBOX — TESTZAHLUNGEN</string>
     <string name="payout">Auszahlung</string>
     <string name="credit_left">Übriges Guthaben</string>
     <string name="success">Erfolgreich!</string>

@@ -1457,11 +1457,22 @@ const injectedRtkApi = api
         invalidatesTags: ["tree"],
       }),
       getNodeSumupLinkStatus: build.query<GetNodeSumupLinkStatusApiResponse, GetNodeSumupLinkStatusApiArg>({
-        query: (queryArg) => ({ url: `/tree/nodes/${queryArg.nodeId}/sumup-link` }),
+        query: (queryArg) => ({
+          url: `/tree/nodes/${queryArg.nodeId}/sumup-link`,
+          params: {
+            environment: queryArg.environment,
+          },
+        }),
         providesTags: ["tree"],
       }),
       deleteNodeSumupLink: build.mutation<DeleteNodeSumupLinkApiResponse, DeleteNodeSumupLinkApiArg>({
-        query: (queryArg) => ({ url: `/tree/nodes/${queryArg.nodeId}/sumup-link`, method: "DELETE" }),
+        query: (queryArg) => ({
+          url: `/tree/nodes/${queryArg.nodeId}/sumup-link`,
+          method: "DELETE",
+          params: {
+            environment: queryArg.environment,
+          },
+        }),
         invalidatesTags: ["tree"],
       }),
       configureSumupToken: build.mutation<ConfigureSumupTokenApiResponse, ConfigureSumupTokenApiArg>({
@@ -1469,6 +1480,14 @@ const injectedRtkApi = api
           url: `/tree/nodes/${queryArg.nodeId}/configure-sumup-token`,
           method: "POST",
           body: queryArg.sumUpTokenPayload,
+        }),
+        invalidatesTags: ["tree"],
+      }),
+      configureSumupSandboxKey: build.mutation<ConfigureSumupSandboxKeyApiResponse, ConfigureSumupSandboxKeyApiArg>({
+        query: (queryArg) => ({
+          url: `/tree/nodes/${queryArg.nodeId}/configure-sumup-sandbox-key`,
+          method: "PUT",
+          body: queryArg.sumUpApiKeyPayload,
         }),
         invalidatesTags: ["tree"],
       }),
@@ -2904,15 +2923,22 @@ export type GenerateAccountingReportApiArg = {
 export type GetNodeSumupLinkStatusApiResponse = /** status 200 Successful Response */ NodeSumUpConnectionStatus;
 export type GetNodeSumupLinkStatusApiArg = {
   nodeId: number;
+  environment?: SumUpEnvironment;
 };
 export type DeleteNodeSumupLinkApiResponse = /** status 200 Successful Response */ NodeSumUpConnectionStatus;
 export type DeleteNodeSumupLinkApiArg = {
   nodeId: number;
+  environment?: SumUpEnvironment;
 };
 export type ConfigureSumupTokenApiResponse = /** status 200 Successful Response */ NodeSumUpConnectionStatus;
 export type ConfigureSumupTokenApiArg = {
   nodeId: number;
   sumUpTokenPayload: SumUpTokenPayload;
+};
+export type ConfigureSumupSandboxKeyApiResponse = /** status 200 Successful Response */ NodeSumUpConnectionStatus;
+export type ConfigureSumupSandboxKeyApiArg = {
+  nodeId: number;
+  sumUpApiKeyPayload: SumUpApiKeyPayload;
 };
 export type UploadEventBannerApiResponse = /** status 200 Successful Response */ any;
 export type UploadEventBannerApiArg = {
@@ -3568,6 +3594,7 @@ export type TillProfile = {
   enable_ssp_payment: boolean;
   enable_cash_payment: boolean;
   enable_card_payment: boolean;
+  tap_to_pay_enabled?: boolean;
   node_id: number;
   id: number;
 };
@@ -3588,6 +3615,7 @@ export type NewTillProfile = {
   enable_ssp_payment: boolean;
   enable_cash_payment: boolean;
   enable_card_payment: boolean;
+  tap_to_pay_enabled?: boolean;
 };
 export type TillButton = {
   name: string;
@@ -4468,6 +4496,7 @@ export type PayoutRead = {
 export type CreateSepaXmlPayload = {
   execution_date: string;
 };
+export type SumUpEnvironment = "live" | "sandbox";
 export type Language = "en-US" | "de-DE";
 export type PublicEventSettings = {
   currency_identifier: string;
@@ -4489,6 +4518,8 @@ export type PublicEventSettings = {
   sumup_topup_enabled: boolean;
   group_topup_enabled?: boolean;
   sumup_payment_enabled: boolean;
+  tap_to_pay_enabled?: boolean;
+  sumup_environment?: SumUpEnvironment;
   customer_portal_url: string;
   customer_portal_about_page_url: string;
   customer_portal_data_privacy_url: string;
@@ -4620,6 +4651,8 @@ export type NewEvent = {
   sumup_topup_enabled: boolean;
   group_topup_enabled?: boolean;
   sumup_payment_enabled: boolean;
+  tap_to_pay_enabled?: boolean;
+  sumup_environment?: SumUpEnvironment;
   customer_portal_url: string;
   customer_portal_about_page_url: string;
   customer_portal_data_privacy_url: string;
@@ -4715,6 +4748,8 @@ export type UpdateEvent = {
   sumup_topup_enabled: boolean;
   group_topup_enabled?: boolean;
   sumup_payment_enabled: boolean;
+  tap_to_pay_enabled?: boolean;
+  sumup_environment?: SumUpEnvironment;
   customer_portal_url: string;
   customer_portal_about_page_url: string;
   customer_portal_data_privacy_url: string;
@@ -4753,8 +4788,11 @@ export type UpdateEvent = {
   };
 };
 export type SumUpConnectionSource = "node_link" | "legacy_event_oauth" | "legacy_event_api_key";
+export type SumUpAuthMethod = "oauth" | "api_key";
 export type ResolvedSumUpLink = {
   source: SumUpConnectionSource;
+  environment: SumUpEnvironment;
+  auth_method: SumUpAuthMethod;
   source_node_id: number;
   source_node_name: string;
   merchant_code: string;
@@ -4799,6 +4837,8 @@ export type RestrictedEventSettings = {
   sumup_topup_enabled: boolean;
   group_topup_enabled?: boolean;
   sumup_payment_enabled: boolean;
+  tap_to_pay_enabled?: boolean;
+  sumup_environment?: SumUpEnvironment;
   customer_portal_url: string;
   customer_portal_about_page_url: string;
   customer_portal_data_privacy_url: string;
@@ -4847,6 +4887,8 @@ export type RestrictedEventSettings = {
 export type NodeSumUpConnectionStatus = {
   node_id: number;
   node_name: string;
+  environment: SumUpEnvironment;
+  auth_method?: SumUpAuthMethod | null;
   connected: boolean;
   merchant_code?: string | null;
   merchant_name?: string | null;
@@ -4858,6 +4900,9 @@ export type NodeSumUpConnectionStatus = {
 export type SumUpTokenPayload = {
   authorization_code: string;
   redirect_uri: string;
+};
+export type SumUpApiKeyPayload = {
+  api_key: string;
 };
 export type BodyUploadEventBannerTreeEventsNodeIdBannerPost = {
   file: string;
@@ -5440,6 +5485,7 @@ export const {
   useLazyGetNodeSumupLinkStatusQuery,
   useDeleteNodeSumupLinkMutation,
   useConfigureSumupTokenMutation,
+  useConfigureSumupSandboxKeyMutation,
   useUploadEventBannerMutation,
   useDeleteEventBannerMutation,
   useGetEventBannerQuery,

@@ -41,6 +41,7 @@ def _build_source_event(name: str = "Original Event", description: str = "Event 
         sumup_topup_enabled=True,
         group_topup_enabled=True,
         sumup_payment_enabled=True,
+        tap_to_pay_enabled=True,
         max_account_balance=123.45,
         vip_max_account_balance=456.78,
         start_date="2026-08-01T10:00:00+00:00",
@@ -631,6 +632,7 @@ async def test_copy_event(
             enable_ssp_payment=True,
             enable_cash_payment=True,
             enable_card_payment=True,
+            tap_to_pay_enabled=True,
         ),
     )
     await till_service.create_till(
@@ -694,6 +696,7 @@ async def test_copy_event(
         "sumup_topup_enabled",
         "group_topup_enabled",
         "sumup_payment_enabled",
+        "tap_to_pay_enabled",
         "customer_portal_url",
     }
     assert copied_settings.model_dump(exclude=sumup_enrichment_exclude) == original_settings.model_dump(
@@ -711,6 +714,7 @@ async def test_copy_event(
     assert copied_settings.sumup_topup_enabled is False
     assert copied_settings.group_topup_enabled is False
     assert copied_settings.sumup_payment_enabled is False
+    assert copied_settings.tap_to_pay_enabled is False
     assert copied_settings.customer_portal_url == ""
 
     copied_banner = await db_connection.fetchrow(
@@ -773,31 +777,46 @@ async def test_copy_event(
     )
     assert copied_sale_exit_id is not None
     assert copied_mapped_account_id is not None
-    assert await db_connection.fetchval(
-        "select count(*) from account where node_id = $1 and type = 'sale_exit'",
-        copied_event.id,
-    ) == 1
-    assert await db_connection.fetchval(
-        "select count(*) from account where node_id = $1 and type = 'cash_entry'",
-        copied_event.id,
-    ) == 1
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from account where node_id = $1 and type = 'sale_exit'",
+            copied_event.id,
+        )
+        == 1
+    )
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from account where node_id = $1 and type = 'cash_entry'",
+            copied_event.id,
+        )
+        == 1
+    )
 
     copied_dedicated_product_id = await _fetch_product_id(db_connection, copied_event.id, "Mapped Dedicated Product")
     copied_system_target_product_id = await _fetch_product_id(db_connection, copied_event.id, "Mapped System Product")
     copied_ticket_id = await _fetch_product_id(db_connection, copied_event.id, "Weekend Ticket")
 
-    assert await db_connection.fetchval(
-        "select target_account_id from product where id = $1",
-        copied_dedicated_product_id,
-    ) == copied_mapped_account_id
-    assert await db_connection.fetchval(
-        "select is_donation from product where id = $1",
-        copied_dedicated_product_id,
-    ) is True
-    assert await db_connection.fetchval(
-        "select target_account_id from product where id = $1",
-        copied_system_target_product_id,
-    ) == copied_sale_exit_id
+    assert (
+        await db_connection.fetchval(
+            "select target_account_id from product where id = $1",
+            copied_dedicated_product_id,
+        )
+        == copied_mapped_account_id
+    )
+    assert (
+        await db_connection.fetchval(
+            "select is_donation from product where id = $1",
+            copied_dedicated_product_id,
+        )
+        is True
+    )
+    assert (
+        await db_connection.fetchval(
+            "select target_account_id from product where id = $1",
+            copied_system_target_product_id,
+        )
+        == copied_sale_exit_id
+    )
 
     copied_button_id = await db_connection.fetchval(
         "select id from till_button where node_id = $1 and name = $2",
@@ -814,13 +833,18 @@ async def test_copy_event(
 
     button_product_ids = {
         row["product_id"]
-        for row in await db_connection.fetch("select product_id from till_button_product where button_id = $1", copied_button_id)
+        for row in await db_connection.fetch(
+            "select product_id from till_button_product where button_id = $1", copied_button_id
+        )
     }
     assert button_product_ids == {copied_dedicated_product_id, copied_system_target_product_id}
-    assert await db_connection.fetchval(
-        "select ticket_id from till_layout_to_ticket where layout_id = $1",
-        copied_layout_id,
-    ) == copied_ticket_id
+    assert (
+        await db_connection.fetchval(
+            "select ticket_id from till_layout_to_ticket where layout_id = $1",
+            copied_layout_id,
+        )
+        == copied_ticket_id
+    )
 
     copied_till = await db_connection.fetchrow(
         "select id, terminal_id, active_profile_id from till where node_id = $1 and name = $2",
@@ -835,13 +859,17 @@ async def test_copy_event(
     assert copied_till is not None
     assert copied_terminal_id is not None
     assert copied_till["terminal_id"] == copied_terminal_id
-    assert await db_connection.fetchval(
-        "select count(*) from till where node_id = $1 and is_virtual = true",
-        copied_event.id,
-    ) == 1
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from till where node_id = $1 and is_virtual = true",
+            copied_event.id,
+        )
+        == 1
+    )
 
     copied_profile = await db_connection.fetchrow(
-        "select allow_ticket_vouchers, enable_ssp_payment, enable_cash_payment, enable_card_payment "
+        "select allow_ticket_vouchers, enable_ssp_payment, enable_cash_payment, enable_card_payment, "
+        "tap_to_pay_enabled "
         "from till_profile where id = $1",
         copied_till["active_profile_id"],
     )
@@ -850,6 +878,7 @@ async def test_copy_event(
     assert copied_profile["enable_ssp_payment"] is True
     assert copied_profile["enable_cash_payment"] is True
     assert copied_profile["enable_card_payment"] is True
+    assert copied_profile["tap_to_pay_enabled"] is True
 
     copied_creator_id = await _fetch_user_id_by_description(db_connection, copied_event.id, "source creator")
     copied_user = await db_connection.fetchrow(
@@ -878,17 +907,23 @@ async def test_copy_event(
     assert copied_user["customer_account_id"] == copied_customer_account_id
     assert copied_user["created_by"] == copied_creator_id
     assert copied_user["email"] == "source-user@test.com"
-    assert await db_connection.fetchval(
-        "select count(*) from user_to_role where node_id = $1 and user_id = $2 and role_id = $3",
-        copied_event.id,
-        copied_user["id"],
-        copied_role_id,
-    ) == 1
-    assert await db_connection.fetchval(
-        "select count(*) from account where node_id = $1 and name = $2",
-        copied_event.id,
-        f"Customer account for source-user-{original_event.id}",
-    ) == 0
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from user_to_role where node_id = $1 and user_id = $2 and role_id = $3",
+            copied_event.id,
+            copied_user["id"],
+            copied_role_id,
+        )
+        == 1
+    )
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from account where node_id = $1 and name = $2",
+            copied_event.id,
+            f"Customer account for source-user-{original_event.id}",
+        )
+        == 0
+    )
 
     minimal_copy = await tree_service.copy_event(
         token=global_admin_token,
@@ -923,10 +958,13 @@ async def test_copy_event(
     assert minimal_settings.customer_portal_font_color is None
     assert minimal_settings.expected_visitors_per_day is None
     assert minimal_settings.wifi_ssid is None
-    assert await db_connection.fetchval(
-        "select banner_image from event e join node n on n.event_id = e.id where n.id = $1",
-        minimal_copy.id,
-    ) is None
+    assert (
+        await db_connection.fetchval(
+            "select banner_image from event e join node n on n.event_id = e.id where n.id = $1",
+            minimal_copy.id,
+        )
+        is None
+    )
 
 
 async def test_copy_event_products_without_accounts_drop_unresolved_targets(
@@ -963,12 +1001,24 @@ async def test_copy_event_products_without_accounts_drop_unresolved_targets(
     await product_service.create_product(
         token=global_admin_token,
         node_id=original_event.id,
-        product=NewProduct(name="Needs Account", price=4.5, fixed_price=True, tax_rate_id=tax_rate_id, target_account_id=dedicated_account_id),
+        product=NewProduct(
+            name="Needs Account",
+            price=4.5,
+            fixed_price=True,
+            tax_rate_id=tax_rate_id,
+            target_account_id=dedicated_account_id,
+        ),
     )
     await product_service.create_product(
         token=global_admin_token,
         node_id=original_event.id,
-        product=NewProduct(name="Uses System Account", price=1.5, fixed_price=True, tax_rate_id=tax_rate_id, target_account_id=sale_exit_account_id),
+        product=NewProduct(
+            name="Uses System Account",
+            price=1.5,
+            fixed_price=True,
+            tax_rate_id=tax_rate_id,
+            target_account_id=sale_exit_account_id,
+        ),
     )
 
     copied_event = await tree_service.copy_event(
@@ -995,21 +1045,30 @@ async def test_copy_event_products_without_accounts_drop_unresolved_targets(
         copied_event.id,
     )
     assert copied_sale_exit_id is not None
-    assert await db_connection.fetchval(
-        "select target_account_id from product where node_id = $1 and name = $2",
-        copied_event.id,
-        "Needs Account",
-    ) is None
-    assert await db_connection.fetchval(
-        "select target_account_id from product where node_id = $1 and name = $2",
-        copied_event.id,
-        "Uses System Account",
-    ) == copied_sale_exit_id
-    assert await db_connection.fetchval(
-        "select count(*) from account where node_id = $1 and name = $2",
-        copied_event.id,
-        "Drop Account",
-    ) == 0
+    assert (
+        await db_connection.fetchval(
+            "select target_account_id from product where node_id = $1 and name = $2",
+            copied_event.id,
+            "Needs Account",
+        )
+        is None
+    )
+    assert (
+        await db_connection.fetchval(
+            "select target_account_id from product where node_id = $1 and name = $2",
+            copied_event.id,
+            "Uses System Account",
+        )
+        == copied_sale_exit_id
+    )
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from account where node_id = $1 and name = $2",
+            copied_event.id,
+            "Drop Account",
+        )
+        == 0
+    )
 
 
 async def test_copy_event_tills_without_products_drop_unresolved_links(
@@ -1070,7 +1129,9 @@ async def test_copy_event_tills_without_products_drop_unresolved_links(
     layout = await till_service.layout.create_layout(
         token=global_admin_token,
         node_id=original_event.id,
-        layout=NewTillLayout(name="till-copy-layout", description="layout", button_ids=[button.id], ticket_ids=[ticket.id]),
+        layout=NewTillLayout(
+            name="till-copy-layout", description="layout", button_ids=[button.id], ticket_ids=[ticket.id]
+        ),
     )
     profile = await till_service.profile.create_profile(
         token=global_admin_token,
@@ -1138,14 +1199,20 @@ async def test_copy_event_tills_without_products_drop_unresolved_links(
     assert copied_till is not None
     assert copied_terminal_id is not None
     assert copied_till["terminal_id"] == copied_terminal_id
-    assert await db_connection.fetchval(
-        "select count(*) from till_button_product where button_id = $1",
-        copied_button_id,
-    ) == 0
-    assert await db_connection.fetchval(
-        "select count(*) from till_layout_to_ticket where layout_id = $1",
-        copied_layout_id,
-    ) == 0
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from till_button_product where button_id = $1",
+            copied_button_id,
+        )
+        == 0
+    )
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from till_layout_to_ticket where layout_id = $1",
+            copied_layout_id,
+        )
+        == 0
+    )
 
 
 async def test_copy_event_sub_nodes_preserve_internal_mappings(
@@ -1286,7 +1353,9 @@ async def test_copy_event_sub_nodes_preserve_internal_mappings(
     child_layout = await till_service.layout.create_layout(
         token=global_admin_token,
         node_id=child_node.id,
-        layout=NewTillLayout(name="child-layout", description="layout", button_ids=[child_button.id], ticket_ids=[child_ticket.id]),
+        layout=NewTillLayout(
+            name="child-layout", description="layout", button_ids=[child_button.id], ticket_ids=[child_ticket.id]
+        ),
     )
     child_profile = await till_service.profile.create_profile(
         token=global_admin_token,
@@ -1307,7 +1376,12 @@ async def test_copy_event_sub_nodes_preserve_internal_mappings(
     await till_service.create_till(
         token=global_admin_token,
         node_id=child_node.id,
-        till=NewTill(name="Child Till", description="child till", active_profile_id=child_profile.id, terminal_id=child_terminal.id),
+        till=NewTill(
+            name="Child Till",
+            description="child till",
+            active_profile_id=child_profile.id,
+            terminal_id=child_terminal.id,
+        ),
     )
 
     copied_event = await tree_service.copy_event(
@@ -1391,18 +1465,27 @@ async def test_copy_event_sub_nodes_preserve_internal_mappings(
     assert copied_user["cashier_account_id"] == copied_transport_account_id
     assert copied_user["customer_account_id"] == copied_customer_account_id
     assert copied_user["created_by"] == copied_creator_id
-    assert await db_connection.fetchval(
-        "select target_account_id from product where id = $1",
-        copied_product_id,
-    ) == copied_transport_account_id
-    assert await db_connection.fetchval(
-        "select product_id from till_button_product where button_id = $1",
-        copied_button_id,
-    ) == copied_product_id
-    assert await db_connection.fetchval(
-        "select ticket_id from till_layout_to_ticket where layout_id = $1",
-        copied_layout_id,
-    ) == copied_ticket_id
+    assert (
+        await db_connection.fetchval(
+            "select target_account_id from product where id = $1",
+            copied_product_id,
+        )
+        == copied_transport_account_id
+    )
+    assert (
+        await db_connection.fetchval(
+            "select product_id from till_button_product where button_id = $1",
+            copied_button_id,
+        )
+        == copied_product_id
+    )
+    assert (
+        await db_connection.fetchval(
+            "select ticket_id from till_layout_to_ticket where layout_id = $1",
+            copied_layout_id,
+        )
+        == copied_ticket_id
+    )
     assert copied_till["terminal_id"] == copied_terminal_id
 
 

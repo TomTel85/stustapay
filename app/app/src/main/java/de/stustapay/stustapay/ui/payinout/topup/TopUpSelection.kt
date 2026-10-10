@@ -20,7 +20,6 @@ import androidx.compose.material.Card
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -61,6 +60,7 @@ import de.stustapay.stustapay.ui.chipscan.rememberNfcScanDialogState
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 
 private const val SELF_SERVICE_TOPUP_IDLE_TIMEOUT_MS = 30_000L
@@ -106,7 +106,6 @@ fun TopUpSelection(
             }
         }
     }
-
     if (isSelfServiceTopUp) {
         val activity = LocalActivity.current as? Activity
         val paymentSelectionViewModel: CashECSelectionViewModel = hiltViewModel()
@@ -161,10 +160,10 @@ fun TopUpSelection(
                     }
                 }
             },
-            clarificationContent = { status, compactLayout ->
+            clarificationContent = { scanStatus, compactLayout ->
                 SelfServiceScanPanelContent(
                     isSmallScreen = compactLayout,
-                    scanStatus = status,
+                    scanStatus = scanStatus,
                     title = stringResource(R.string.selfservice_scan_balance_title),
                     subtitle = stringResource(R.string.selfservice_scan_topup_subtitle),
                 )
