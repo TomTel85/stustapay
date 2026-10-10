@@ -137,6 +137,8 @@ export const api = generatedApi.enhanceEndpoints({
     "entry-groups",
   ],
   endpoints: {
+    startProvisioning: { invalidatesTags: ["fiskaly", "tses"] },
+    retryProvisioning: { invalidatesTags: ["fiskaly"] },
     createTerminal: { invalidatesTags: ["terminals", "cashiers", "user-to-roles"] },
     updateTerminal: { invalidatesTags: ["terminals", "cashiers", "tills", "till-registers", "user-to-roles"] },
     deleteTerminal: { invalidatesTags: ["terminals", "cashiers", "tills", "user-to-roles"] },

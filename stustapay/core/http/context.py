@@ -13,6 +13,7 @@ from stustapay.core.service.cashier import CashierService
 from stustapay.core.service.config import ConfigService
 from stustapay.core.service.customer.customer import CustomerService
 from stustapay.core.service.entry import EntryService
+from stustapay.core.service.fiskaly import FiskalyService
 from stustapay.core.service.mail import MailService
 from stustapay.core.service.order import OrderService
 from stustapay.core.service.product import ProductService
@@ -52,6 +53,7 @@ class Context:
     terminal_service: Optional[TerminalService] = None
     mail_service: Optional[MailService] = None
     entry_service: Optional[EntryService] = None
+    fiskaly_service: Optional[FiskalyService] = None
 
 
 def get_context(request: Request):
@@ -143,3 +145,10 @@ ContextSumUpService = Annotated[SumUpService, Depends(get_sumup_service)]
 ContextTerminalService = Annotated[TerminalService, Depends(get_terminal_service)]
 ContextMailService = Annotated[MailService, Depends(get_mail_service)]
 ContextEntryService = Annotated[EntryService, Depends(get_entry_service)]
+
+
+def get_fiskaly_service(request: Request) -> FiskalyService:
+    return request.state.context.fiskaly_service
+
+
+ContextFiskalyService = Annotated[FiskalyService, Depends(get_fiskaly_service)]

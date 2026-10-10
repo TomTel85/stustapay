@@ -1591,7 +1591,7 @@ class TreeService(Service[Config]):
         """Copy TSE devices from source node to target node."""
         tse_devices = await conn.fetch(
             "SELECT name, status, serial, hashalgo, time_format, public_key, certificate, process_data_encoding "
-            "FROM tse WHERE node_id = $1",
+            "FROM tse WHERE node_id = $1 and type = 'diebold_nixdorf'",
             source_node_id,
         )
         for tse in tse_devices:

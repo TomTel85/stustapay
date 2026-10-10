@@ -63,6 +63,7 @@ type OrderWithTse = {
   line_items: LineItem[];
 
   signature_status: string;
+  result_message?: string | null;
   transaction_process_type?: string | null;
   transaction_process_data?: string | null;
   tse_transaction?: string | null;
@@ -74,7 +75,7 @@ type OrderWithTse = {
   tse_signature?: string | null;
   tse_public_key?: string | null;
   node_id: number;
-  tse_qr_code_text: string;
+  tse_qr_code_text: string | null;
 };
 
 export interface IBon {
@@ -269,23 +270,29 @@ const SignatureDetails: React.FC<{ bon: IBon }> = ({ bon: { order } }) => {
             ) : (
               <TableRow>
                 <TableCell>{t("tse")}</TableCell>
-                <TableCell>{t("tseFailed")}</TableCell>
+                <TableCell>
+                  {order.signature_status === "new" || order.signature_status === "pending"
+                    ? t("tsePending")
+                    : t("tseFailed")}
+                </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </TableContainer>
 
-      <Box display="flex" justifyContent="center" alignItems="center" marginTop={3}>
-        <Box maxWidth="400px">
-          <QRCode
-            size={256}
-            style={{ height: "auto", width: "100%" }}
-            value={order.tse_qr_code_text}
-            viewBox={`0 0 256 256`}
-          />
+      {order.signature_status === "done" && order.tse_qr_code_text ? (
+        <Box display="flex" justifyContent="center" alignItems="center" marginTop={3}>
+          <Box maxWidth="400px">
+            <QRCode
+              size={256}
+              style={{ height: "auto", width: "100%" }}
+              value={order.tse_qr_code_text}
+              viewBox={`0 0 256 256`}
+            />
+          </Box>
         </Box>
-      </Box>
+      ) : null}
     </Paper>
   );
 };

@@ -3,7 +3,7 @@ import { TseRoutes } from "@/app/routes";
 import { EditLayout } from "@/components";
 import { useCurrentNode } from "@/hooks";
 import { Loading } from "@stustapay/components";
-import { UpdateTseSchema } from "@stustapay/models";
+import { TseType, UpdateTse, UpdateTseSchema } from "@stustapay/models";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useParams } from "react-router-dom";
@@ -32,14 +32,26 @@ export const TseUpdate: React.FC = () => {
     return <Navigate to={TseRoutes.list()} />;
   }
 
+  const initialValues: UpdateTse = {
+    name: tse.name,
+    type: tse.type as TseType,
+    ws_url: tse.ws_url ?? "",
+    ws_timeout: tse.ws_timeout ?? 5,
+    password: tse.password ?? "",
+    fiskaly_profile: tse.fiskaly_profile,
+  };
+
   return (
     <EditLayout
       title={t("tse.update")}
       successRoute={TseRoutes.detail(tse.id)}
       submitLabel={t("update")}
-      initialValues={tse}
+      initialValues={initialValues}
       validationSchema={UpdateTseSchema}
-      onSubmit={(t) => updateTse({ nodeId: currentNode.id, tseId: tse.id, updateTse: t })}
+      onSubmit={(t) => {
+        const { type: _type, ...update } = t;
+        return updateTse({ nodeId: currentNode.id, tseId: tse.id, updateTse: update });
+      }}
       form={UpdateTseForm}
     />
   );

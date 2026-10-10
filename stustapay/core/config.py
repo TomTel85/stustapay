@@ -2,9 +2,11 @@ import os
 from datetime import timedelta
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sftkit.database import DatabaseConfig
 from sftkit.http import HTTPServerConfig
+
+from stustapay.tse.fiskaly.config import FiskalySettings
 
 
 class AdministrationApiConfig(HTTPServerConfig):
@@ -59,6 +61,7 @@ class Config(BaseModel):
     terminalserver: TerminalApiConfig
     customerportal: CustomerPortalApiConfig
     headwind: HeadwindConfig
+    fiskaly: FiskalySettings = Field(default_factory=FiskalySettings)
 
 
 def read_config(config_path: os.PathLike) -> Config:

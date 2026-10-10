@@ -1,10 +1,12 @@
-import { NewTse, useCreateTseMutation } from "@/api";
+import { useCreateTseMutation } from "@/api";
 import { TseRoutes } from "@/app/routes";
 import { CreateLayout } from "@/components";
 import { useCurrentNode } from "@/hooks";
-import { NewTseSchema } from "@stustapay/models";
+import { NewTse, NewTseSchema } from "@stustapay/models";
+import { Stack } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { FiskalyOnboarding } from "./FiskalyOnboarding";
 import { TseForm } from "./TseForm";
 
 const initialValues: NewTse = {
@@ -14,6 +16,7 @@ const initialValues: NewTse = {
   ws_url: "",
   ws_timeout: 5,
   password: "",
+  fiskaly_profile: null,
 };
 
 export const TseCreate: React.FC = () => {
@@ -22,14 +25,17 @@ export const TseCreate: React.FC = () => {
   const [createTse] = useCreateTseMutation();
 
   return (
-    <CreateLayout
-      title={t("tse.create")}
-      submitLabel={t("add")}
-      successRoute={TseRoutes.list()}
-      initialValues={initialValues}
-      validationSchema={NewTseSchema}
-      onSubmit={(tse) => createTse({ nodeId: currentNode.id, newTse: tse })}
-      form={TseForm}
-    />
+    <Stack spacing={3}>
+      <FiskalyOnboarding />
+      <CreateLayout
+        title={t("tse.create")}
+        submitLabel={t("add")}
+        successRoute={TseRoutes.list()}
+        initialValues={initialValues}
+        validationSchema={NewTseSchema}
+        onSubmit={(tse) => createTse({ nodeId: currentNode.id, newTse: tse })}
+        form={TseForm}
+      />
+    </Stack>
   );
 };

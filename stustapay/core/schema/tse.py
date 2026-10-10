@@ -13,18 +13,20 @@ class TseStatus(enum.Enum):
 
 class TseType(enum.Enum):
     diebold_nixdorf = "diebold_nixdorf"
+    fiskaly = "fiskaly"
 
 
 class UpdateTse(BaseModel):
     name: str
-    ws_url: str
-    ws_timeout: float
-    password: str
+    ws_url: str = ""
+    ws_timeout: float = 5
+    password: str = ""
+    fiskaly_profile: Optional[str] = None
 
 
 class NewTse(UpdateTse):
     type: TseType
-    serial: Optional[str]
+    serial: Optional[str] = None
 
 
 class Tse(NewTse):
@@ -36,3 +38,5 @@ class Tse(NewTse):
     public_key: Optional[str]
     certificate: Optional[str]
     process_data_encoding: Optional[str]
+    last_error: Optional[str] = None
+    fiskaly_job_id: Optional[int] = None

@@ -462,6 +462,13 @@ execute function new_order_added();
 create or replace function tse_signature_update_trigger_procedure() returns trigger as
 $$
 begin
+    if OLD.fiskaly_transaction_id is not null and
+       (NEW.fiskaly_transaction_id is distinct from OLD.fiskaly_transaction_id or
+        NEW.fiskaly_client_id is distinct from OLD.fiskaly_client_id or
+        NEW.fiskaly_request is distinct from OLD.fiskaly_request or
+        NEW.tse_id is distinct from OLD.tse_id) then
+        raise exception 'Persisted Fiskaly signing identity and payload are immutable';
+    end if;
     NEW.last_update = now();
     return NEW;
 end;

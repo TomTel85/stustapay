@@ -32,11 +32,13 @@ export const TseDetail: React.FC = () => {
     return <Loading />;
   }
 
+  const isManagedFiskaly = tse.type === "fiskaly" && tse.fiskaly_job_id != null;
+
   return (
     <DetailLayout
       title={tse.name}
       routes={TseRoutes}
-      actions={[
+      actions={isManagedFiskaly ? [] : [
         {
           label: t("edit"),
           onClick: () => navigate(TseRoutes.edit(tseId)),
@@ -51,20 +53,36 @@ export const TseDetail: React.FC = () => {
             <ListItemText primary={t("tse.name")} secondary={tse.name} />
           </ListItem>
           <ListItem>
-            <ListItemText primary={t("tse.type")} secondary={tse.type} />
+            <ListItemText primary={t("tse.type")} secondary={t(`tse.provider.${tse.type}`)} />
           </ListItem>
           <ListItem>
             <ListItemText primary={t("tse.status")} secondary={tse.status} />
           </ListItem>
-          <ListItem>
-            <ListItemText primary={t("tse.serial")} secondary={tse.serial} />
-          </ListItem>
-          <ListItem>
-            <ListItemText primary={t("tse.wsUrl")} secondary={tse.ws_url} />
-          </ListItem>
-          <ListItem>
-            <ListItemText primary={t("tse.wsTimeout")} secondary={tse.ws_timeout} />
-          </ListItem>
+          {tse.last_error && (
+            <ListItem>
+              <ListItemText primary={t("error")} secondary={tse.last_error} />
+            </ListItem>
+          )}
+          {tse.type === "fiskaly" ? (
+            <ListItem>
+              <ListItemText
+                primary={t("tse.fiskalyProfile")}
+                secondary={isManagedFiskaly ? t("tse.fiskalyManaged") : tse.fiskaly_profile ?? "—"}
+              />
+            </ListItem>
+          ) : (
+            <>
+              <ListItem>
+                <ListItemText primary={t("tse.serial")} secondary={tse.serial ?? "—"} />
+              </ListItem>
+              <ListItem>
+                <ListItemText primary={t("tse.wsUrl")} secondary={tse.ws_url} />
+              </ListItem>
+              <ListItem>
+                <ListItemText primary={t("tse.wsTimeout")} secondary={tse.ws_timeout} />
+              </ListItem>
+            </>
+          )}
           <ListItem>
             <ListItemText primary={t("tse.hashalgo")} secondary={tse.hashalgo} />
           </ListItem>

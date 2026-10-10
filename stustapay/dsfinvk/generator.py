@@ -13,7 +13,7 @@ from stustapay.core.service.tree.common import (
     fetch_node,
     fetch_restricted_event_settings_for_node,
 )
-from stustapay.tse.wrapper import PAYMENT_METHOD_TO_ZAHLUNGSART
+from stustapay.tse.signature_request import PAYMENT_METHOD_TO_ZAHLUNGSART
 
 from ..core.database import get_database
 from .dsfinvk.collection import Collection
@@ -187,8 +187,9 @@ class Generator:
             Z_NR,
         ):
             if row["signature_status"] == "new" or row["signature_status"] == "pending":
-                LOGGER.warning("Nicht Signierte Transaktion, wird nicht exportiert")
-                continue  # signatur noch nicht fertig
+                raise RuntimeError(
+                    "DSFinV-K export requires all signing requests to be settled; open signatures remain"
+                )
 
             a = Bonkopf()
             b = TSE_Transaktionen()
@@ -518,8 +519,9 @@ class Generator:
                 )
 
         elif len(tses) == 0:
-            print(f"Kasse {Z_KASSE_ID} wurde bei keiner TSE registriert")
-            raise ValueError  # sollte nicht passieren
+            # An unsigned operation without any TSE assignment still belongs in
+            # the export; there is no TSE master record to fabricate for this till.
+            return
         else:
             print(f"KASSE {Z_KASSE_ID} wurde bei mehreren TSEs registriert, nämlich bei {tses}")
             # Fall, dass bei dieser Kasse die TSE gewechselt wurde: Kompliziert :(

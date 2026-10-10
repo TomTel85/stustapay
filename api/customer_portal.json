@@ -2017,6 +2017,17 @@
             "type": "string",
             "title": "Signature Status"
           },
+          "result_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Message"
+          },
           "transaction_process_type": {
             "anyOf": [
               {
@@ -2144,7 +2155,14 @@
             "readOnly": true
           },
           "tse_qr_code_text": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Tse Qr Code Text",
             "readOnly": true
           }

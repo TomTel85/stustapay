@@ -473,6 +473,7 @@ export type OrderWithTse = {
   shared_topup_contributor_name?: string | null;
   line_items: LineItem[];
   signature_status: string;
+  result_message?: string | null;
   transaction_process_type?: string | null;
   transaction_process_data?: string | null;
   tse_transaction?: string | null;
@@ -504,6 +505,7 @@ export type OrderWithTseRead = {
   shared_topup_contributor_name?: string | null;
   line_items: LineItemRead[];
   signature_status: string;
+  result_message?: string | null;
   transaction_process_type?: string | null;
   transaction_process_data?: string | null;
   tse_transaction?: string | null;
@@ -516,7 +518,7 @@ export type OrderWithTseRead = {
   tse_public_key?: string | null;
   node_id: number;
   customer_tag_uid_hex: string | null;
-  tse_qr_code_text: string;
+  tse_qr_code_text: string | null;
 };
 export type TaxRateAggregation = {
   tax_name: string;

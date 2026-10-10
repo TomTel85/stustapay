@@ -23,5 +23,6 @@ export const common_en = {
   tseHashAlgo: "Hash Algorithm",
   tseTimeFormat: "Time Format",
   tse: "TSE",
+  tsePending: "pending",
   tseFailed: "failed",
 };

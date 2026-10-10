@@ -30,6 +30,7 @@ class TaxRateAggregation(BaseModel):
 
 class OrderWithTse(Order):
     signature_status: str  # new | pending | done | failure
+    result_message: Optional[str] = None
     transaction_process_type: Optional[str] = None
     transaction_process_data: Optional[str] = None
     tse_transaction: Optional[str] = None
@@ -44,7 +45,23 @@ class OrderWithTse(Order):
 
     @computed_field  # type: ignore[misc]
     @property
-    def tse_qr_code_text(self) -> str:
+    def tse_qr_code_text(self) -> Optional[str]:
+        qr_fields = (
+            self.till_id,
+            self.transaction_process_type,
+            self.transaction_process_data,
+            self.tse_transaction,
+            self.tse_signaturenr,
+            self.tse_start,
+            self.tse_end,
+            self.tse_hashalgo,
+            self.tse_time_format,
+            self.tse_signature,
+            self.tse_public_key,
+        )
+        if self.signature_status != "done" or any(value is None or value == "" for value in qr_fields):
+            return None
+
         return (
             f"V0;{self.till_id};{self.transaction_process_type};{self.transaction_process_data};"
             f"{self.tse_transaction};{self.tse_signaturenr};{self.tse_start};{self.tse_end};{self.tse_hashalgo};"
@@ -74,7 +91,7 @@ async def fetch_order(*, conn: Connection, order_id: int) -> Optional[OrderWithT
         "from order_value o "
         "join tse_signature sig on sig.id = o.id "
         "join till t on o.till_id = t.id "
-        "join tse on tse.id = sig.tse_id "
+        "left join tse on tse.id = sig.tse_id "
         "where o.id = $1",
         order_id,
     )

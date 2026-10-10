@@ -61,7 +61,12 @@ alter table transaction add constraint vouchers_positive
 alter table tse_signature add constraint result_message_set
     check ((result_message is null) = (signature_status = 'new' or signature_status = 'pending'));
 alter table tse_signature add constraint tse_id_set
-    check ((tse_id is null) = (signature_status = 'new'));
+    check ((signature_status = 'new' and tse_id is null)
+        or (signature_status in ('pending', 'done') and tse_id is not null)
+        or signature_status = 'failure');
+alter table tse_signature add constraint fiskaly_request_complete
+    check ((fiskaly_transaction_id is null and fiskaly_client_id is null and fiskaly_request is null)
+        or (fiskaly_transaction_id is not null and fiskaly_client_id is not null and fiskaly_request is not null));
 alter table tse_signature add constraint transaction_process_type_set
     check ((transaction_process_type is not null) = (signature_status = 'done'));
 alter table tse_signature add constraint transaction_process_data_set

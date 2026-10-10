@@ -28,6 +28,7 @@ export const addTagTypes = [
   "mdm",
   "llm",
   "entry",
+  "fiskaly",
 ] as const;
 const injectedRtkApi = api
   .enhanceEndpoints({
@@ -2184,6 +2185,56 @@ const injectedRtkApi = api
         }),
         providesTags: ["entry"],
       }),
+      listSites: build.query<ListSitesApiResponse, ListSitesApiArg>({
+        query: (queryArg) => ({
+          url: `/fiskaly/sites/`,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        providesTags: ["fiskaly"],
+      }),
+      createSite: build.mutation<CreateSiteApiResponse, CreateSiteApiArg>({
+        query: (queryArg) => ({
+          url: `/fiskaly/sites/`,
+          method: "POST",
+          body: queryArg.newFiskalySite,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        invalidatesTags: ["fiskaly"],
+      }),
+      siteStatus: build.query<SiteStatusApiResponse, SiteStatusApiArg>({
+        query: (queryArg) => ({
+          url: `/fiskaly/sites/${queryArg.siteId}/status`,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        providesTags: ["fiskaly"],
+      }),
+      startProvisioning: build.mutation<StartProvisioningApiResponse, StartProvisioningApiArg>({
+        query: (queryArg) => ({
+          url: `/fiskaly/provisioning/`,
+          method: "POST",
+          body: queryArg.newFiskalyProvisioningJob,
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        invalidatesTags: ["fiskaly"],
+      }),
+      retryProvisioning: build.mutation<RetryProvisioningApiResponse, RetryProvisioningApiArg>({
+        query: (queryArg) => ({
+          url: `/fiskaly/provisioning/${queryArg.jobId}/retry`,
+          method: "POST",
+          params: {
+            node_id: queryArg.nodeId,
+          },
+        }),
+        invalidatesTags: ["fiskaly"],
+      }),
     }),
     overrideExisting: false,
   });
@@ -3357,6 +3408,30 @@ export type ExportEntryScanLogsApiArg = {
   limit?: number;
   offset?: number;
 };
+export type ListSitesApiResponse = /** status 200 Successful Response */ FiskalySite[];
+export type ListSitesApiArg = {
+  nodeId: number;
+};
+export type CreateSiteApiResponse = /** status 200 Successful Response */ FiskalySite;
+export type CreateSiteApiArg = {
+  nodeId: number;
+  newFiskalySite: NewFiskalySite;
+};
+export type SiteStatusApiResponse = /** status 200 Successful Response */ FiskalyProvisioningJob[];
+export type SiteStatusApiArg = {
+  siteId: number;
+  nodeId: number;
+};
+export type StartProvisioningApiResponse = /** status 202 Successful Response */ FiskalyProvisioningJob;
+export type StartProvisioningApiArg = {
+  nodeId: number;
+  newFiskalyProvisioningJob: NewFiskalyProvisioningJob;
+};
+export type RetryProvisioningApiResponse = /** status 202 Successful Response */ FiskalyProvisioningJob;
+export type RetryProvisioningApiArg = {
+  jobId: number;
+  nodeId: number;
+};
 export type ProductRestriction = "under_16" | "under_18";
 export type ProductType = "discount" | "topup" | "payout" | "money_transfer" | "imbalance" | "user_defined" | "ticket";
 export type Product = {
@@ -4133,6 +4208,7 @@ export type OrderWithTse = {
   shared_topup_contributor_name?: string | null;
   line_items: LineItem[];
   signature_status: string;
+  result_message?: string | null;
   transaction_process_type?: string | null;
   transaction_process_data?: string | null;
   tse_transaction?: string | null;
@@ -4164,6 +4240,7 @@ export type OrderWithTseRead = {
   shared_topup_contributor_name?: string | null;
   line_items: LineItemRead[];
   signature_status: string;
+  result_message?: string | null;
   transaction_process_type?: string | null;
   transaction_process_data?: string | null;
   tse_transaction?: string | null;
@@ -4176,7 +4253,7 @@ export type OrderWithTseRead = {
   tse_public_key?: string | null;
   node_id: number;
   customer_tag_uid_hex: string | null;
-  tse_qr_code_text: string;
+  tse_qr_code_text: string | null;
 };
 export type TaxRateAggregation = {
   tax_name: string;
@@ -4484,15 +4561,16 @@ export type UpdateGroupTagPayload = {
 export type UpdateAccountCreationBlockedPayload = {
   account_creation_blocked: boolean;
 };
-export type TseType = "diebold_nixdorf";
+export type TseType = "diebold_nixdorf" | "fiskaly";
 export type TseStatus = "new" | "active" | "disabled" | "failed";
 export type Tse = {
   name: string;
-  ws_url: string;
-  ws_timeout: number;
-  password: string;
+  ws_url?: string;
+  ws_timeout?: number;
+  password?: string;
+  fiskaly_profile?: string | null;
   type: TseType;
-  serial: string | null;
+  serial?: string | null;
   node_id: number;
   id: number;
   status: TseStatus;
@@ -4501,6 +4579,8 @@ export type Tse = {
   public_key: string | null;
   certificate: string | null;
   process_data_encoding: string | null;
+  last_error?: string | null;
+  fiskaly_job_id?: number | null;
 };
 export type NormalizedListTseInt = {
   ids: number[];
@@ -4510,17 +4590,19 @@ export type NormalizedListTseInt = {
 };
 export type NewTse = {
   name: string;
-  ws_url: string;
-  ws_timeout: number;
-  password: string;
+  ws_url?: string;
+  ws_timeout?: number;
+  password?: string;
+  fiskaly_profile?: string | null;
   type: TseType;
-  serial: string | null;
+  serial?: string | null;
 };
 export type UpdateTse = {
   name: string;
-  ws_url: string;
-  ws_timeout: number;
-  password: string;
+  ws_url?: string;
+  ws_timeout?: number;
+  password?: string;
+  fiskaly_profile?: string | null;
 };
 export type PayoutRunWithStats = {
   id: number;
@@ -5351,6 +5433,44 @@ export type EntryScanLog = {
   group_id: number | null;
   group_name: string | null;
 };
+export type FiskalySite = {
+  customer_node_id: number;
+  name: string;
+  operator_name: string;
+  address_line1: string;
+  zip: string;
+  town: string;
+  country_code?: "DEU";
+  vat_id?: string | null;
+  id: number;
+  organization_id?: string | null;
+};
+export type NewFiskalySite = {
+  customer_node_id: number;
+  name: string;
+  operator_name: string;
+  address_line1: string;
+  zip: string;
+  town: string;
+  country_code?: "DEU";
+  vat_id?: string | null;
+};
+export type FiskalyProvisioningJob = {
+  site_id: number;
+  event_node_id: number;
+  environment?: "TEST" | "LIVE";
+  id: number;
+  status: "queued" | "running" | "ready" | "retry_wait" | "action_required" | "failed";
+  step: string;
+  last_error?: string | null;
+  tse_id?: number | null;
+  attempts: number;
+};
+export type NewFiskalyProvisioningJob = {
+  site_id: number;
+  event_node_id: number;
+  environment?: "TEST" | "LIVE";
+};
 export const {
   useListProductsQuery,
   useLazyListProductsQuery,
@@ -5678,4 +5798,11 @@ export const {
   useLazyListEntryScanLogsQuery,
   useExportEntryScanLogsQuery,
   useLazyExportEntryScanLogsQuery,
+  useListSitesQuery,
+  useLazyListSitesQuery,
+  useCreateSiteMutation,
+  useSiteStatusQuery,
+  useLazySiteStatusQuery,
+  useStartProvisioningMutation,
+  useRetryProvisioningMutation,
 } = injectedRtkApi;

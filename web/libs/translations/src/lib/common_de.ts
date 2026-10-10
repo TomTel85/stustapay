@@ -22,5 +22,6 @@ export const common_de = {
   tseHashAlgo: "Hash-Algorithmus",
   tseTimeFormat: "Zeitformat",
   tse: "TSE",
+  tsePending: "ausstehend",
   tseFailed: "fehlgeschlagen",
 };

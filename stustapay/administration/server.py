@@ -17,6 +17,7 @@ from stustapay.core.service.config import ConfigService
 from stustapay.core.service.customer.customer import CustomerService
 from stustapay.core.service.customer.payout_reminder import PayoutReminderService
 from stustapay.core.service.entry import EntryService
+from stustapay.core.service.fiskaly import FiskalyService
 from stustapay.core.service.mail import MailService
 from stustapay.core.service.order import OrderService
 from stustapay.core.service.product import ProductService
@@ -36,6 +37,7 @@ from .routers import (
     cashier,
     customer,
     entry,
+    fiskaly,
     llm,
     mdm,
     order,
@@ -62,13 +64,15 @@ from .routers import config as config_router
 
 
 def get_server(config: Config):
-    server = ensure_agpl_license_url(Server(
-        title="TeamFestlichPay Administration API",
-        config=config.administration,
-        license_name="AGPL-3.0",
-        version=__version__,
-        cors=True,
-    ))
+    server = ensure_agpl_license_url(
+        Server(
+            title="TeamFestlichPay Administration API",
+            config=config.administration,
+            license_name="AGPL-3.0",
+            version=__version__,
+            cors=True,
+        )
+    )
 
     server.add_router(product.router)
     server.add_router(user.router)
@@ -97,6 +101,7 @@ def get_server(config: Config):
     server.add_router(mdm.router)
     server.add_router(llm.router)
     server.add_router(entry.router)
+    server.add_router(fiskaly.router)
     return server
 
 
@@ -148,6 +153,7 @@ class Api:
             terminal_service=TerminalService(db_pool=db_pool, config=self.cfg, auth_service=auth_service),
             mail_service=mail_service,
             entry_service=EntryService(db_pool=db_pool, config=self.cfg, auth_service=auth_service),
+            fiskaly_service=FiskalyService(db_pool=db_pool, config=self.cfg, auth_service=auth_service),
         )
         try:
             self.server.add_task(asyncio.create_task(run_healthcheck(db, service_name="administration")))
