@@ -1,5 +1,7 @@
 package de.stustapay.stustapay.ui.common.operator
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -34,12 +37,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.offline.OfflineStatus
+import java.time.Duration
+import java.time.OffsetDateTime
 import java.text.NumberFormat
 import java.util.Currency
 import java.util.Locale
 
 @Composable
-fun OfflineStatusIndicator(status: OfflineStatus) {
+fun OfflineStatusIndicator(
+    status: OfflineStatus,
+    onSynchronize: (() -> Unit)? = null,
+    onJournalPage: ((Int) -> Unit)? = null,
+) {
+    var showJournal by remember { mutableStateOf(false) }
     var showDetails by remember { mutableStateOf(false) }
     val locale = Locale.getDefault()
     val currency = NumberFormat.getCurrencyInstance(locale).apply { this.currency = Currency.getInstance("EUR") }
@@ -48,15 +58,17 @@ fun OfflineStatusIndicator(status: OfflineStatus) {
     val remainingSeconds = status.remainingSeconds ?: 0
     val remainingMinutes = remainingSeconds / 60
     val remainingSecondPart = remainingSeconds % 60
+    val disconnected = status.connected == false || (status.connected == null && status.offlineMode)
     val chipLabel = stringResource(
         when {
-            status.offlineMode && !status.preparationUsable -> R.string.sale_status_offline_unavailable
-            status.offlineMode -> R.string.sale_status_offline
+            disconnected && !status.preparationUsable -> R.string.sale_status_offline_unavailable
+            disconnected -> R.string.sale_status_offline
+            status.connected == null -> R.string.sale_connection_unknown
             else -> R.string.sale_status_online
         },
     )
     val accessibleLabel = stringResource(
-        if (status.offlineMode && !status.preparationUsable) R.string.sale_status_accessibility_unavailable else R.string.sale_status_accessibility,
+        if (disconnected && !status.preparationUsable) R.string.sale_status_accessibility_unavailable else R.string.sale_status_accessibility,
         chipLabel,
     )
     Box(
@@ -75,8 +87,8 @@ fun OfflineStatusIndicator(status: OfflineStatus) {
                 modifier = Modifier
                     .size(7.dp)
                     .background(
-                        if (status.offlineMode && !status.preparationUsable) OperatorPalette.danger
-                        else if (status.offlineMode) Color(0xFFFFB300)
+                        if (disconnected && !status.preparationUsable) OperatorPalette.danger
+                        else if (disconnected) Color(0xFFFFB300)
                         else OperatorPalette.success,
                         CircleShape,
                     ),
@@ -90,8 +102,12 @@ fun OfflineStatusIndicator(status: OfflineStatus) {
             onDismissRequest = { showDetails = false },
             title = { Text(stringResource(R.string.sale_status_details_title)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(if (status.offlineMode) R.string.sale_status_details_offline else R.string.sale_status_details_online))
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(when {
+                        disconnected -> R.string.sale_status_details_offline
+                        status.connected == null -> R.string.sale_connection_unknown
+                        else -> R.string.sale_status_details_online
+                    }))
                     if (status.preparationUsable) {
                         Text(stringResource(R.string.sale_status_offline_payments_available))
                         Text(stringResource(R.string.sale_offline_validity_remaining, remainingMinutes, remainingSecondPart))
@@ -100,11 +116,79 @@ fun OfflineStatusIndicator(status: OfflineStatus) {
                     } else {
                         Text(stringResource(R.string.sale_status_offline_unavailable_detail))
                     }
+                    status.preparedAt?.let {
+                        Text(stringResource(R.string.sale_prepared_at, it))
+                        val age = runCatching { Duration.between(OffsetDateTime.parse(it), OffsetDateTime.now()).toMinutes().coerceAtLeast(0) }.getOrNull()
+                        age?.let { minutes -> Text(stringResource(R.string.sale_preparation_age, minutes)) }
+                    }
+                    status.lastSynchronizedAt?.let { Text(stringResource(R.string.sale_synchronized_at, it)) }
+                    status.blockReason?.let { Text(it) }
                     Text(stringResource(R.string.sale_journal_pending_compact, status.pendingSales))
+                    if (status.synchronizing) Text(stringResource(R.string.sale_synchronizing))
+                    TextButton(onClick = { showDetails = false; showJournal = true }) { Text(stringResource(R.string.sale_journal_title)) }
+                    onSynchronize?.let { synchronize ->
+                        TextButton(onClick = synchronize, enabled = !status.synchronizing) {
+                            Text(stringResource(R.string.sale_synchronize_prepare))
+                        }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showDetails = false }) { Text(stringResource(R.string.sale_status_close)) }
+            },
+        )
+    }
+
+    if (showJournal) {
+        AlertDialog(
+            onDismissRequest = { showJournal = false },
+            title = { Text(stringResource(R.string.sale_journal_title)) },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (status.journalPageCount > 1) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(
+                                onClick = { onJournalPage?.invoke(status.journalPage - 1) },
+                                enabled = status.journalPage > 0 && onJournalPage != null,
+                            ) { Text(stringResource(R.string.sale_journal_previous)) }
+                            Text(stringResource(R.string.sale_journal_page, status.journalPage + 1, status.journalPageCount))
+                            TextButton(
+                                onClick = { onJournalPage?.invoke(status.journalPage + 1) },
+                                enabled = status.journalPage + 1 < status.journalPageCount && onJournalPage != null,
+                            ) { Text(stringResource(R.string.sale_journal_next)) }
+                        }
+                    }
+                    if (status.journalEntries.isEmpty()) Text(stringResource(R.string.sale_journal_empty))
+                    status.journalEntries.forEach { entry ->
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(currency.format(entry.amountCents / 100.0), fontWeight = FontWeight.Bold)
+                            Text(entry.recordedAt)
+                            Text(entry.uuid, fontSize = 12.sp)
+                            Text(stringResource(when {
+                                entry.state == "dismissed" -> R.string.sale_journal_dismissed
+                                entry.state in setOf("rejected", "local_rejected") -> R.string.sale_journal_rejected
+                                entry.state in setOf("needs_review", "conflict", "clarification") || entry.transferState == "needs_owner" -> R.string.sale_journal_review
+                                entry.state in setOf("accepted", "imported", "booked", "confirmed") -> R.string.sale_journal_confirmed
+                                entry.state == "offline" -> R.string.sale_journal_local_accepted
+                                else -> R.string.sale_journal_transfer_pending
+                            }))
+                            if (entry.state == "offline" && entry.transferState in setOf("pending", "sending", "uncertain", "retry", "queued")) {
+                                Text(stringResource(R.string.sale_journal_transfer_pending))
+                            }
+                            entry.message?.let { Text(it) }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showJournal = false }) { Text(stringResource(R.string.sale_status_close)) } },
+            dismissButton = {
+                onSynchronize?.let { synchronize ->
+                    TextButton(onClick = synchronize, enabled = !status.synchronizing) { Text(stringResource(R.string.sale_synchronize_prepare)) }
+                }
             },
         )
     }

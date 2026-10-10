@@ -91,6 +91,27 @@ class TerminalConfigRepositoryTest {
         assertEquals(freshSecret, result.userTagSecret)
         assertTrue(result.ok)
         assertFalse(result.shouldRetry)
+        assertFalse(shouldRefreshTerminalConfigAfterReconnect(state, connected = true))
+    }
+
+    @Test
+    fun `reconnect refresh requires cached config with a transport error`() {
+        val config = terminalConfig("cached", userTagSecret())
+        val transportFailure = TerminalConfigState.Success(
+            config,
+            refreshErrorMessage = "Network is unreachable",
+            refreshTransportError = true,
+        )
+
+        assertTrue(shouldRefreshTerminalConfigAfterReconnect(transportFailure, connected = true))
+        assertFalse(shouldRefreshTerminalConfigAfterReconnect(transportFailure, connected = false))
+        assertFalse(shouldRefreshTerminalConfigAfterReconnect(transportFailure, connected = null))
+        assertFalse(shouldRefreshTerminalConfigAfterReconnect(TerminalConfigState.NoConfig, connected = true))
+        assertFalse(shouldRefreshTerminalConfigAfterReconnect(TerminalConfigState.Error("backend error"), connected = true))
+        assertFalse(shouldRefreshTerminalConfigAfterReconnect(
+            TerminalConfigState.Success(config), connected = true))
+        assertFalse(shouldRefreshTerminalConfigAfterReconnect(
+            TerminalConfigState.Success(config, refreshErrorMessage = "invalid config"), connected = true))
     }
 
     @Test

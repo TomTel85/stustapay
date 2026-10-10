@@ -10,10 +10,11 @@ from uuid import uuid4
 import pytest
 from sftkit.error import InvalidArgument
 
-from stustapay.core.schema.offline import OfflineBooking, OfflineBookingStatus, OfflineImport
+from stustapay.core.schema.offline import OfflineBooking, OfflineBookingStatus, OfflineImport, OfflineSnapshot
 from stustapay.core.schema.order import Button, NewSale, NewTopUp, PaymentMethod
-from stustapay.core.schema.product import NewProduct
+from stustapay.core.schema.product import NewProduct, ProductType
 from stustapay.core.schema.till import NewTillButton, NewTillLayout
+from stustapay.core.service.common.error import NodeIsReadOnly
 from stustapay.core.service.order.offline import check_offline_budget, offline_positions
 from stustapay.tests.terminal.test_sale import sale_products  # noqa: F401
 
@@ -162,6 +163,103 @@ async def test_offline_snapshot_historical_price_idempotence_and_overdraft(
     assert report[0].uuid == sale.uuid
 
 
+async def test_offline_sequence_arrival_order_and_replay_are_idempotent(
+    prepared_offline, order_service, terminal_token, customer, sale_products, db_connection
+):
+    snapshot = prepared_offline
+    starting_balance = await db_connection.fetchval("select balance from account where id=$1", customer.account_id)
+    first_sale = sale_for(customer, sale_products)
+    second_sale = sale_for(customer, sale_products)
+
+    second_result = await order_service.import_offline(
+        token=terminal_token,
+        payload=OfflineImport(
+            bookings=[
+                OfflineBooking(snapshot_id=snapshot.id, sale=second_sale, sequence=2, recorded_at=snapshot.server_time)
+            ]
+        ),
+    )
+    first_result = await order_service.import_offline(
+        token=terminal_token,
+        payload=OfflineImport(
+            bookings=[
+                OfflineBooking(snapshot_id=snapshot.id, sale=first_sale, sequence=1, recorded_at=snapshot.server_time)
+            ]
+        ),
+    )
+
+    assert second_result.results[0].status == OfflineBookingStatus.booked
+    assert first_result.results[0].status == OfflineBookingStatus.booked
+    booked_balance = await db_connection.fetchval("select balance from account where id=$1", customer.account_id)
+    expected_balance = (
+        starting_balance
+        - Decimal(str(first_result.results[0].sale.total_price))
+        - Decimal(str(second_result.results[0].sale.total_price))
+    )
+    assert booked_balance == expected_balance
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from ordr where uuid=any($1::uuid[])", [first_sale.uuid, second_sale.uuid]
+        )
+        == 2
+    )
+
+    replay = await order_service.import_offline(
+        token=terminal_token,
+        payload=OfflineImport(
+            bookings=[
+                OfflineBooking(snapshot_id=snapshot.id, sale=second_sale, sequence=2, recorded_at=snapshot.server_time),
+                OfflineBooking(snapshot_id=snapshot.id, sale=first_sale, sequence=1, recorded_at=snapshot.server_time),
+            ]
+        ),
+    )
+    assert [result.status for result in replay.results] == [
+        OfflineBookingStatus.already_booked,
+        OfflineBookingStatus.already_booked,
+    ]
+    assert (
+        await db_connection.fetchval("select balance from account where id=$1", customer.account_id) == booked_balance
+    )
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from ordr where uuid=any($1::uuid[])", [first_sale.uuid, second_sale.uuid]
+        )
+        == 2
+    )
+
+
+async def test_offline_reused_sequence_for_distinct_sales_requires_clarification(
+    prepared_offline, order_service, terminal_token, customer, sale_products, db_connection
+):
+    snapshot = prepared_offline
+    starting_balance = await db_connection.fetchval("select balance from account where id=$1", customer.account_id)
+    sales = [sale_for(customer, sale_products), sale_for(customer, sale_products)]
+    results = await order_service.import_offline(
+        token=terminal_token,
+        payload=OfflineImport(
+            bookings=[
+                OfflineBooking(snapshot_id=snapshot.id, sale=sale, sequence=1, recorded_at=snapshot.server_time)
+                for sale in sales
+            ]
+        ),
+    )
+
+    assert [result.status for result in results.results] == [
+        OfflineBookingStatus.booked,
+        OfflineBookingStatus.clarification_required,
+    ]
+    assert "sequence" in results.results[1].message
+    assert await db_connection.fetchval(
+        "select balance from account where id=$1", customer.account_id
+    ) == starting_balance - Decimal(str(results.results[0].sale.total_price))
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from ordr where uuid=any($1::uuid[])", [sale.uuid for sale in sales]
+        )
+        == 1
+    )
+
+
 async def test_lost_online_response_import_does_not_double_book(
     prepared_offline, order_service, terminal_token, customer, sale_products
 ):
@@ -258,7 +356,7 @@ async def test_offline_invalid_record_does_not_abort_batch(
     results = await order_service.import_offline(token=terminal_token, payload=OfflineImport(bookings=[expired, valid]))
     assert results.results[0].status == OfflineBookingStatus.clarification_required
     assert results.results[1].status == OfflineBookingStatus.booked
-    with pytest.raises(InvalidArgument, match="clarification"):
+    with pytest.raises(InvalidArgument, match="reconciliation"):
         await order_service.prepare_offline(token=terminal_token)
 
 
@@ -279,6 +377,7 @@ async def test_offline_snapshot_accepts_single_variable_price_product(
     assert button.products[0].id == free_price_product.product.id
     assert button.products[0].fixed_price is False
     assert button.products[0].is_returnable is False
+    assert "free_price" in prepared_offline_with_free_price.capabilities
     assert all(b.id != free_price_product.mixed_button.id for b in prepared_offline_with_free_price.buttons)
 
 
@@ -294,12 +393,56 @@ async def test_offline_free_price_counts_gross_amount_and_allows_tips(
     assert positions[0].product_price == 12.34
 
 
-@pytest.mark.parametrize("price", [-0.01, 1.001, float("inf"), float("nan")])
+@pytest.mark.parametrize("price", [-0.01, 1.001, float("inf"), float("-inf"), float("nan"), 1e20])
 async def test_offline_free_price_rejects_invalid_cents(
     prepared_offline_with_free_price, customer, free_price_product, price
 ):
     with pytest.raises(InvalidArgument):
         offline_positions(prepared_offline_with_free_price, free_price_sale(customer, free_price_product, price))
+
+
+async def test_offline_free_price_accepts_zero(prepared_offline_with_free_price, customer, free_price_product):
+    positions, positive, negative = offline_positions(
+        prepared_offline_with_free_price, free_price_sale(customer, free_price_product, 0)
+    )
+    assert (positive, negative) == (0, 0)
+    assert positions[0].product_price == 0
+    assert positions[0].quantity == 1
+
+
+async def test_offline_legacy_snapshot_keeps_fixed_prices_but_rejects_free_prices(
+    prepared_offline_with_free_price, customer, free_price_product, sale_products
+):
+    payload = prepared_offline_with_free_price.model_dump()
+    del payload["capabilities"]
+    legacy = OfflineSnapshot.model_validate(payload)
+    assert legacy.capabilities == ["fixed_price", "deposit_return"]
+    _, positive, negative = offline_positions(legacy, sale_for(customer, sale_products))
+    assert (positive, negative) == (500, 0)
+    with pytest.raises(InvalidArgument, match="does not support"):
+        offline_positions(legacy, free_price_sale(customer, free_price_product, 1.23))
+
+
+@pytest.mark.parametrize("capabilities", [[], ["fixed_price"], ["unknown_future_capability"]])
+async def test_offline_free_price_requires_explicit_capability(
+    prepared_offline_with_free_price, customer, free_price_product, capabilities
+):
+    prepared_offline_with_free_price.capabilities = capabilities
+    with pytest.raises(InvalidArgument, match="does not support"):
+        offline_positions(prepared_offline_with_free_price, free_price_sale(customer, free_price_product, 1.23))
+
+
+@pytest.mark.parametrize("returnable,product_type", [(True, ProductType.user_defined), (False, ProductType.topup)])
+async def test_offline_free_price_rejects_returnable_or_system_product(
+    prepared_offline_with_free_price, customer, free_price_product, returnable, product_type
+):
+    product = next(
+        p for b in prepared_offline_with_free_price.buttons for p in b.products if p.id == free_price_product.product.id
+    )
+    product.is_returnable = returnable
+    product.type = product_type
+    with pytest.raises(InvalidArgument):
+        offline_positions(prepared_offline_with_free_price, free_price_sale(customer, free_price_product, 1.23))
 
 
 async def test_offline_free_price_rejects_fixed_product_price_override(prepared_offline, customer, sale_products):
@@ -499,21 +642,67 @@ async def test_online_concurrent_distinct_sales_recheck_balance(
     assert await db_connection.fetchval("select balance from account where id=$1", customer.account_id) == 2
 
 
-async def test_revoked_snapshot_registration_becomes_clarification(
+async def test_revoked_snapshot_registration_still_books_historical_sale(
     prepared_offline, order_service, terminal_token, customer, sale_products, db_connection
 ):
+    starting_balance = await db_connection.fetchval("select balance from account where id=$1", customer.account_id)
     await db_connection.execute(
         "update terminal_offline_snapshot set session_uuid=$2 where id=$1", prepared_offline.id, uuid4()
     )
+    sale = sale_for(customer, sale_products)
     booking = OfflineBooking(
         snapshot_id=prepared_offline.id,
-        sale=sale_for(customer, sale_products),
+        sale=sale,
         sequence=1,
         recorded_at=prepared_offline.server_time,
     )
     result = await order_service.import_offline(token=terminal_token, payload=OfflineImport(bookings=[booking]))
-    assert result.results[0].status == OfflineBookingStatus.clarification_required
-    assert "registration" in result.results[0].message
+    assert result.results[0].status == OfflineBookingStatus.booked
+    assert await db_connection.fetchval("select balance from account where id=$1", customer.account_id) == (
+        starting_balance - Decimal(str(result.results[0].sale.total_price))
+    )
+    assert await db_connection.fetchval("select count(*) from ordr where uuid=$1", sale.uuid) == 1
+
+
+async def test_read_only_event_allows_historical_import_but_blocks_preparation(
+    prepared_offline, order_service, terminal_token, customer, sale_products, db_connection, event_node
+):
+    starting_balance = await db_connection.fetchval("select balance from account where id=$1", customer.account_id)
+    await db_connection.execute("update node set read_only=true where id=$1", event_node.id)
+    with pytest.raises(NodeIsReadOnly):
+        await order_service.prepare_offline(token=terminal_token)
+
+    sale = sale_for(customer, sale_products)
+    booking = OfflineBooking(
+        snapshot_id=prepared_offline.id, sale=sale, sequence=1, recorded_at=prepared_offline.server_time
+    )
+    result = await order_service.import_offline(token=terminal_token, payload=OfflineImport(bookings=[booking]))
+    assert result.results[0].status == OfflineBookingStatus.booked
+    assert await db_connection.fetchval("select balance from account where id=$1", customer.account_id) == (
+        starting_balance - Decimal(str(result.results[0].sale.total_price))
+    )
+    assert await db_connection.fetchval("select count(*) from ordr where uuid=$1", sale.uuid) == 1
+    await db_connection.execute("update node set read_only=false where id=$1", event_node.id)
+
+
+async def test_offline_import_recovers_online_sale_after_journal_deletion(
+    prepared_offline, order_service, terminal_token, customer, sale_products, db_connection
+):
+    sale = sale_for(customer, sale_products)
+    online = await order_service.book_sale(token=terminal_token, new_sale=sale)
+    await db_connection.execute("delete from terminal_sale_journal where uuid=$1", sale.uuid)
+
+    booking = OfflineBooking(
+        snapshot_id=prepared_offline.id, sale=sale, sequence=1, recorded_at=prepared_offline.server_time
+    )
+    result = await order_service.import_offline(token=terminal_token, payload=OfflineImport(bookings=[booking]))
+
+    assert result.results[0].status == OfflineBookingStatus.already_booked
+    assert result.results[0].sale.id == online.id
+    assert await db_connection.fetchval("select balance from account where id=$1", customer.account_id) == Decimal(
+        str(online.new_balance)
+    )
+    assert await db_connection.fetchval("select count(*) from ordr where uuid=$1", sale.uuid) == 1
 
 
 async def test_online_journal_survives_terminal_deletion(

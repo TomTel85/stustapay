@@ -14218,6 +14218,41 @@
         ],
         "title": "BookedProduct"
       },
+      "Button": {
+        "properties": {
+          "till_button_id": {
+            "type": "integer",
+            "title": "Till Button Id"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "till_button_id"
+        ],
+        "title": "Button"
+      },
       "CashRegister": {
         "properties": {
           "name": {
@@ -19121,6 +19156,7 @@
         "enum": [
           "booked",
           "already_booked",
+          "retry_required",
           "clarification_required",
           "not_found",
           "dismissed"
@@ -19248,6 +19284,59 @@
               }
             ],
             "title": "Order Id"
+          },
+          "amount_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Cents"
+          },
+          "customer_tag_uid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Tag Uid"
+          },
+          "buttons": {
+            "items": {
+              "$ref": "#/components/schemas/Button"
+            },
+            "type": "array",
+            "title": "Buttons"
+          },
+          "line_items": {
+            "items": {
+              "$ref": "#/components/schemas/PendingLineItem"
+            },
+            "type": "array",
+            "title": "Line Items"
+          },
+          "attempt_count": {
+            "type": "integer",
+            "title": "Attempt Count",
+            "default": 1
+          },
+          "last_attempt_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempt At"
           }
         },
         "type": "object",

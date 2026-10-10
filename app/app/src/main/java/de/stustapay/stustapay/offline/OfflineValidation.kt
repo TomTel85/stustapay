@@ -23,12 +23,13 @@ internal fun validateOffline(snapshot: PreparedOfflineSnapshot, sale: NewSale, h
     val customer = snapshot.customers.singleOrNull { it.tagUid == sale.customerTagUid }
         ?: error("Offline: unknown wristband")
     require(sale.buttons.isNotEmpty()) { "Offline: empty sale" }
-    val lines = sale.buttons.flatMap { selected ->
+    val rawLines = sale.buttons.flatMap { selected ->
         val button = snapshot.buttons.singleOrNull { it.id.toBigInteger() == selected.tillButtonId }
             ?: error("Offline: unknown button")
         require(button.products.isNotEmpty()) { "Offline: empty button" }
         val customPrice = selected.price
         val quantity = if (customPrice != null) {
+            require("free_price" in snapshot.capabilities) { "Offline: server does not support free prices" }
             require(selected.quantity == null) { "Offline: price and quantity cannot be combined" }
             require(button.products.size == 1) { "Offline: free-price bundles are unsupported" }
             val product = button.products.single()
@@ -57,8 +58,14 @@ internal fun validateOffline(snapshot: PreparedOfflineSnapshot, sale: NewSale, h
             PendingLineItem(quantity, product, price, product.taxRateId, product.taxName, product.taxRate, total / 100.0)
         }
     }
-    val positive = lines.filter { it.totalPrice > 0 }.fold(0L) { sum, line -> Math.addExact(sum, cents(line.totalPrice)) }
-    val returned = lines.filter { it.totalPrice < 0 }.fold(0L) { sum, line -> Math.addExact(sum, -cents(line.totalPrice)) }
+    val positive = rawLines.filter { it.totalPrice > 0 }.fold(0L) { sum, line -> Math.addExact(sum, cents(line.totalPrice)) }
+    val returned = rawLines.filter { it.totalPrice < 0 }.fold(0L) { sum, line -> Math.addExact(sum, -cents(line.totalPrice)) }
+    val lines = rawLines.groupBy { it.product.id to cents(it.productPrice) }.values.mapNotNull { group ->
+        val quantity = group.fold(0.toBigInteger()) { sum, line -> sum + line.quantity }
+        if (quantity == 0.toBigInteger()) null else group.first().copy(quantity = quantity,
+            totalPrice = group.fold(0L) { sum, line -> Math.addExact(sum, cents(line.totalPrice)) } / 100.0)
+    }
+    require(lines.isNotEmpty()) { "Offline: empty resulting sale" }
     val net = Math.subtractExact(positive, returned)
     val period = history.filter { it.snapshotId == snapshot.id.toString() && it.state !in setOf("rejected", "local_rejected") }
     val offline = period.filter { it.offline }

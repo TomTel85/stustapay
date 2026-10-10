@@ -38,6 +38,7 @@ data class PreparedOfflineSnapshot(
     val rules: OfflineRules,
     val customers: List<OfflineCustomer>,
     val buttons: List<OfflineButton>,
+    val capabilities: List<String> = listOf("fixed_price", "deposit_return"),
 )
 @Serializable
 data class OfflineBooking(
@@ -52,3 +53,26 @@ data class OfflineImport(val bookings: List<OfflineBooking>)
 data class OfflineResult(@Contextual val uuid: UUID, val status: String, val sale: CompletedSale? = null, val message: String? = null)
 @Serializable
 data class OfflineResults(val results: List<OfflineResult>)
+
+/** Preserve admission order, keeping each import scoped to one snapshot and at most 100 rows. */
+internal fun offlineBatches(rows: List<JournalSale>): List<List<JournalSale>> {
+    val batches = mutableListOf<MutableList<JournalSale>>()
+    for (row in rows.sortedBy { it.sequence }) {
+        val last = batches.lastOrNull()
+        if (last == null || last.size == 100 || last.first().snapshotId != row.snapshotId) batches.add(mutableListOf(row))
+        else last.add(row)
+    }
+    return batches
+}
+
+/** Unsolicited, duplicated or mismatched replies cannot confirm an unrelated booking. */
+internal fun matchedOfflineReplies(rows: List<JournalSale>, replies: List<OfflineResult>): Map<String, OfflineResult> {
+    val expected = rows.map { it.uuid }.toSet()
+    return replies.groupBy { it.uuid.toString() }.mapNotNull { (uuid, group) ->
+        val reply = group.singleOrNull()
+        if (uuid !in expected || reply == null || reply.sale?.uuid?.toString()?.let { it != uuid } == true ||
+            (reply.status in setOf("booked", "already_booked") && reply.sale == null) ||
+            reply.status !in setOf("booked", "already_booked", "retry_required", "clarification_required", "dismissed")) null
+        else uuid to reply
+    }.toMap()
+}

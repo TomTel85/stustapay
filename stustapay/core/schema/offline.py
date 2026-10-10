@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, Field
 
-from stustapay.core.schema.order import CompletedSale, NewSale
+from stustapay.core.schema.order import Button, CompletedSale, NewSale, PendingLineItem
 from stustapay.core.schema.product import Product, ProductRestriction
 
 
@@ -44,6 +44,8 @@ class OfflineSnapshot(BaseModel):
     rules: OfflineLimits
     customers: list[OfflineCustomer]
     buttons: list[OfflineButton]
+    # Older snapshots support fixed prices and deposit returns only.
+    capabilities: list[str] = Field(default_factory=lambda: ["fixed_price", "deposit_return"])
 
 
 class OfflineBooking(BaseModel):
@@ -60,6 +62,7 @@ class OfflineImport(BaseModel):
 class OfflineBookingStatus(str, Enum):
     booked = "booked"
     already_booked = "already_booked"
+    retry_required = "retry_required"
     clarification_required = "clarification_required"
     not_found = "not_found"
     dismissed = "dismissed"
@@ -89,6 +92,12 @@ class OfflineReportEntry(BaseModel):
     customer_account_id: int | None = None
     new_balance: float | None = None
     order_id: int | None = None
+    amount_cents: int | None = None
+    customer_tag_uid: int | None = None
+    buttons: list[Button] = Field(default_factory=list)
+    line_items: list[PendingLineItem] = Field(default_factory=list)
+    attempt_count: int = 1
+    last_attempt_at: datetime | None = None
 
 
 class OfflineDeviceStatus(BaseModel):

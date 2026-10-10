@@ -598,7 +598,8 @@
     <string name="settings_wifi_open_setup">WLAN-Einrichtung öffnen</string>
     <string name="settings_wifi_error">WLAN-Vorschlag fehlgeschlagen: %1$s</string>
     <string name="settings_wifi_success">Der letzte verwaltete WLAN-Vorschlag wurde angewendet.</string>
-    <string name="sale_offline_saved">Offline gespeichert – Abgleich ausstehend</string>
+    <string name="sale_offline_saved">Lokal angenommen – Abgleich ausstehend</string>
+    <string name="sale_journal_storage_low">Nicht genügend freier Speicherplatz, um einen Verkauf sicher zu speichern. Schaffen Sie Speicherplatz auf diesem Gerät und versuchen Sie es erneut.</string>
     <string name="sale_offline_balance">Geschätztes Guthaben: %.2f €</string>
     <string name="sale_offline_pending_return">Pfandgutschrift nach dem Abgleich verfügbar</string>
     <string name="sale_offline_estimated_balance">Geschätztes Guthaben</string>
@@ -622,4 +623,22 @@
     <string name="sale_offline_return_budget">Verbleibendes Rückgabelimit dieser Kasse: %1$s</string>
     <string name="sale_journal_pending_compact">Ausstehende Verkäufe: %1$d</string>
     <string name="sale_status_close">Schließen</string>
+    <string name="sale_prepared_at">Datenstand: %1$s</string>
+    <string name="sale_synchronized_at">Letzter vollständiger Abgleich: %1$s</string>
+    <string name="sale_synchronizing">Abgleich läuft…</string>
+    <string name="sale_synchronize_prepare">Abgleichen und vorbereiten</string>
+    <string name="sale_journal_title">Lokales Journal</string>
+    <string name="sale_journal_previous">Zurück</string>
+    <string name="sale_journal_next">Weiter</string>
+    <string name="sale_journal_page">Seite %1$d von %2$d</string>
+    <string name="sale_journal_empty">Keine Journaleinträge.</string>
+    <string name="sale_journal_review">Klärung erforderlich</string>
+    <string name="sale_journal_confirmed">Serverseitig bestätigt</string>
+    <string name="sale_journal_transfer_pending">Übertragung ausstehend</string>
+    <string name="sale_journal_local_accepted">Lokal angenommen</string>
+    <string name="sale_preparation_age">Vorbereitung: %1$d Minuten alt</string>
+    <string name="sale_connection_unknown">Verbindung unbekannt</string>
+    <string name="sale_journal_dismissed">Manuell geklärt</string>
+    <string name="sale_journal_rejected">Abgelehnt</string>
+    <string name="sale_offline_assignment_changed">Die Kassen- oder Veranstaltungszuordnung hat sich geändert. Vorbereitung aktualisieren und den Verkauf erneut prüfen.</string>
 </resources>

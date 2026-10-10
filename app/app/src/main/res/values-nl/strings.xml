@@ -590,7 +590,8 @@
     <string name="settings_wifi_open_setup">Wifi-instelling openen</string>
     <string name="settings_wifi_error">Wifi-voorstel mislukt: %1$s</string>
     <string name="settings_wifi_success">Het laatste beheerde wifi-voorstel is toegepast.</string>
-    <string name="sale_offline_saved">Offline opgeslagen — synchronisatie volgt</string>
+    <string name="sale_offline_saved">Lokaal geaccepteerd — synchronisatie volgt</string>
+    <string name="sale_journal_storage_low">Niet genoeg vrije opslagruimte om een verkoop veilig op te slaan. Maak ruimte vrij op dit apparaat en probeer het opnieuw.</string>
     <string name="sale_offline_balance">Geschat saldo: %.2f €</string>
     <string name="sale_offline_pending_return">Retourtegoed beschikbaar na synchronisatie</string>
     <string name="sale_offline_estimated_balance">Geschat saldo</string>
@@ -614,4 +615,22 @@
     <string name="sale_offline_return_budget">Resterende retourlimiet voor deze kassa: %1$s</string>
     <string name="sale_journal_pending_compact">Openstaande verkopen: %1$d</string>
     <string name="sale_status_close">Sluiten</string>
+    <string name="sale_prepared_at">Gegevens bijgewerkt: %1$s</string>
+    <string name="sale_synchronized_at">Laatste volledige synchronisatie: %1$s</string>
+    <string name="sale_synchronizing">Synchroniseren…</string>
+    <string name="sale_synchronize_prepare">Synchroniseren en voorbereiden</string>
+    <string name="sale_journal_title">Lokaal journaal</string>
+    <string name="sale_journal_previous">Vorige</string>
+    <string name="sale_journal_next">Volgende</string>
+    <string name="sale_journal_page">Pagina %1$d van %2$d</string>
+    <string name="sale_journal_empty">Geen journaalboekingen.</string>
+    <string name="sale_journal_review">Verduidelijking nodig</string>
+    <string name="sale_journal_confirmed">Bevestigd door server</string>
+    <string name="sale_journal_transfer_pending">Overdracht in afwachting</string>
+    <string name="sale_journal_local_accepted">Lokaal geaccepteerd</string>
+    <string name="sale_preparation_age">Voorbereiding: %1$d minuten oud</string>
+    <string name="sale_connection_unknown">Verbinding onbekend</string>
+    <string name="sale_journal_dismissed">Handmatig verduidelijkt</string>
+    <string name="sale_journal_rejected">Afgewezen</string>
+    <string name="sale_offline_assignment_changed">De kassa- of evenementtoewijzing is gewijzigd. Werk de voorbereiding bij en controleer de verkoop opnieuw.</string>
 </resources>

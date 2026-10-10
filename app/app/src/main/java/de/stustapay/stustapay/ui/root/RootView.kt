@@ -89,6 +89,8 @@ fun RootView(uictrl: SysUiController? = null) {
                 configLoading = configLoading,
                 terminalStatusMessage = terminalStatusMessage,
                 offlineStatus = offlineStatus,
+                onSynchronize = viewModel::synchronizeAndPrepare,
+                onJournalPage = viewModel::setJournalPage,
                 terminalConfigViewModel = terminalConfigViewModel,
             )
         }

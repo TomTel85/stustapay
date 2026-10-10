@@ -599,7 +599,8 @@
     <string name="settings_wifi_open_setup">Open Wi-Fi Setup</string>
     <string name="settings_wifi_error">Wi-Fi suggestion failed: %1$s</string>
     <string name="settings_wifi_success">The latest managed Wi-Fi suggestion was applied.</string>
-    <string name="sale_offline_saved">Offline saved — awaiting synchronization</string>
+    <string name="sale_offline_saved">Locally accepted — awaiting synchronization</string>
+    <string name="sale_journal_storage_low">Not enough free storage to save a sale safely. Free space on this device and try again.</string>
     <string name="sale_offline_balance">Estimated balance: %.2f €</string>
     <string name="sale_offline_pending_return">Return credit available after synchronization</string>
     <string name="sale_offline_estimated_balance">Estimated balance</string>
@@ -623,4 +624,22 @@
     <string name="sale_offline_return_budget">Till return limit remaining: %1$s</string>
     <string name="sale_journal_pending_compact">Pending sales: %1$d</string>
     <string name="sale_status_close">Close</string>
+    <string name="sale_prepared_at">Data as of: %1$s</string>
+    <string name="sale_synchronized_at">Last complete synchronization: %1$s</string>
+    <string name="sale_synchronizing">Synchronizing…</string>
+    <string name="sale_synchronize_prepare">Synchronize and prepare</string>
+    <string name="sale_journal_title">Local journal</string>
+    <string name="sale_journal_previous">Previous</string>
+    <string name="sale_journal_next">Next</string>
+    <string name="sale_journal_page">Page %1$d of %2$d</string>
+    <string name="sale_journal_empty">No journal entries.</string>
+    <string name="sale_journal_review">Clarification required</string>
+    <string name="sale_journal_confirmed">Server confirmed</string>
+    <string name="sale_journal_transfer_pending">Transfer pending</string>
+    <string name="sale_journal_local_accepted">Locally accepted</string>
+    <string name="sale_preparation_age">Preparation age: %1$d min</string>
+    <string name="sale_connection_unknown">Connection unknown</string>
+    <string name="sale_journal_dismissed">Manually clarified</string>
+    <string name="sale_journal_rejected">Rejected</string>
+    <string name="sale_offline_assignment_changed">The till or event assignment changed. Refresh the preparation and validate the sale again.</string>
 </resources>

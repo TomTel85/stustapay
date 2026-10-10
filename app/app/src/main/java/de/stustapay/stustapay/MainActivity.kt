@@ -49,6 +49,9 @@ class MainActivity : ComponentActivity(), SysUiController {
     @Inject
     lateinit var customerDisplayManager: CustomerDisplayManager
 
+    @Inject
+    lateinit var offlineSales: de.stustapay.stustapay.offline.OfflineSalesRepository
+
     val viewModel: MainActivityViewModel by viewModels()
 
     override fun attachBaseContext(newBase: Context) {
@@ -89,6 +92,7 @@ class MainActivity : ComponentActivity(), SysUiController {
         super.onResume()
 
         nfcHandler.onResume(this)
+        offlineSales.requestSynchronization()
         reapplyDesiredSystemUI()
     }
 

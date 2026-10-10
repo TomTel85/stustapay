@@ -126,6 +126,8 @@ fun SaleSelection(
                     compactHandheld = compactHandheld,
                     tillLabel = if (config is SaleConfig.Ready) config.tillName else null,
                     offlineStatus = offlineStatus,
+                    onSynchronize = viewModel::synchronizeAndPrepare,
+                    onJournalPage = viewModel::setJournalPage,
                 )
 
                 if (legacy > 0 && onlineAuthenticated) {
@@ -278,6 +280,8 @@ private fun CompactSaleHeader(
     compactHandheld: Boolean,
     tillLabel: String?,
     offlineStatus: de.stustapay.stustapay.offline.OfflineStatus,
+    onSynchronize: () -> Unit,
+    onJournalPage: (Int) -> Unit,
 ) {
     OperatorCompactFlowHeader(
         flowTitle = stringResource(R.string.sale_compact_title),
@@ -285,7 +289,7 @@ private fun CompactSaleHeader(
         onBack = onBack,
         compactHandheld = compactHandheld,
         modifier = Modifier.fillMaxWidth(),
-        trailingContent = { OfflineStatusIndicator(offlineStatus) },
+        trailingContent = { OfflineStatusIndicator(offlineStatus, onSynchronize, onJournalPage) },
     )
 }
 

@@ -24,18 +24,19 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Contextual
 
 /**
- * 
  *
- * @param id 
- * @param serverTime 
- * @param validUntil 
- * @param terminalId 
- * @param tillId 
- * @param eventNodeId 
- * @param userId 
- * @param rules 
- * @param customers 
- * @param buttons 
+ *
+ * @param id
+ * @param serverTime
+ * @param validUntil
+ * @param terminalId
+ * @param tillId
+ * @param eventNodeId
+ * @param userId
+ * @param rules
+ * @param customers
+ * @param buttons
+ * @param capabilities
  */
 @Serializable
 
@@ -69,7 +70,10 @@ data class OfflineSnapshot (
     val customers: kotlin.collections.List<OfflineCustomer>,
 
     @SerialName(value = "buttons")
-    val buttons: kotlin.collections.List<OfflineButton>
+    val buttons: kotlin.collections.List<OfflineButton>,
+
+    @SerialName(value = "capabilities")
+    val capabilities: kotlin.collections.List<kotlin.String>? = null
 
 ) {
 

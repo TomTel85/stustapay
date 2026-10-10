@@ -98,6 +98,8 @@ fun StartpageView(
     configLoading: Boolean,
     terminalStatusMessage: String?,
     offlineStatus: OfflineStatus,
+    onSynchronize: () -> Unit = {},
+    onJournalPage: (Int) -> Unit = {},
     terminalConfigViewModel: TerminalConfigViewModel = hiltViewModel(),
 ) {
     val activity = LocalActivity.current!!
@@ -168,6 +170,8 @@ fun StartpageView(
                     configLoading = configLoading,
                     terminalStatusMessage = terminalStatusMessage,
                     offlineStatus = offlineStatus,
+                    onSynchronize = onSynchronize,
+                    onJournalPage = onJournalPage,
                     onNavigate = navigateToHook,
                     onRefreshConfig = { terminalConfigViewModel.refreshAccessData() },
                     onRestart = { restartApp(activity) },
@@ -255,6 +259,8 @@ private fun OperatorLanding(
     configLoading: Boolean,
     terminalStatusMessage: String?,
     offlineStatus: OfflineStatus,
+    onSynchronize: () -> Unit,
+    onJournalPage: (Int) -> Unit,
     onNavigate: (NavDest) -> Unit,
     onRefreshConfig: () -> Unit,
     onRestart: () -> Unit,
@@ -482,7 +488,7 @@ private fun OperatorLanding(
                                 emphasized = item.emphasized,
                                 enabled = item.enabled,
                                 trailingContent = if (item.showsOfflineStatus) {
-                                    { OfflineStatusIndicator(offlineStatus) }
+                                    { OfflineStatusIndicator(offlineStatus, onSynchronize, onJournalPage) }
                                 } else {
                                     null
                                 },

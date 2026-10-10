@@ -29,24 +29,25 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Contextual
 
 /**
- * 
  *
- * @param id 
- * @param name 
- * @param description 
- * @param mode 
- * @param entryArea 
- * @param selfService 
- * @param appDisplayMode 
- * @param eventName 
- * @param activeUserId 
- * @param availableRoles 
- * @param userPrivileges 
- * @param secrets 
- * @param till 
- * @param testMode 
- * @param testModeMessage 
- * @param loginMode 
+ *
+ * @param id
+ * @param name
+ * @param description
+ * @param mode
+ * @param entryArea
+ * @param selfService
+ * @param appDisplayMode
+ * @param eventName
+ * @param activeUserId
+ * @param availableRoles
+ * @param userPrivileges
+ * @param secrets
+ * @param till
+ * @param testMode
+ * @param testModeMessage
+ * @param loginMode
+ * @param eventNodeId
  */
 @Serializable
 
@@ -98,7 +99,10 @@ data class TerminalConfig (
     val testModeMessage: kotlin.String,
 
     @Contextual @SerialName(value = "login_mode")
-    val loginMode: TerminalLoginMode? = null
+    val loginMode: TerminalLoginMode? = null,
+
+    @SerialName(value = "event_node_id")
+    val eventNodeId: @Contextual com.ionspin.kotlin.bignum.integer.BigInteger? = null
 
 ) {
 

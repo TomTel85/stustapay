@@ -21,8 +21,11 @@ import javax.inject.Inject
 class StartpageViewModel @Inject constructor(
     userRepository: UserRepository,
     terminalConfigRepository: TerminalConfigRepository,
-    offlineSalesRepository: OfflineSalesRepository,
+    private val offlineSalesRepository: OfflineSalesRepository,
 ) : ViewModel() {
+
+    fun synchronizeAndPrepare() = offlineSalesRepository.requestSynchronization()
+    fun setJournalPage(page: Int) = offlineSalesRepository.setJournalPage(page)
 
     val configLoading = terminalConfigRepository.fetching.stateIn(
         scope = viewModelScope,

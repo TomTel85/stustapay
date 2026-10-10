@@ -31,6 +31,27 @@ async def test_terminal_registration_flow(
     assert logged_out
 
 
+async def test_terminal_config_event_identity_survives_rename(
+    db_connection: Connection,
+    terminal_service: TerminalService,
+    terminal_token: str,
+    event_node: Node,
+):
+    original = await terminal_service.get_terminal_config(token=terminal_token)
+    assert original is not None
+    assert original.event_node_id == event_node.id
+
+    await db_connection.execute("update node set name = $1 where id = $2", "Renamed event", event_node.id)
+    renamed = await terminal_service.get_terminal_config(token=terminal_token)
+    assert renamed is not None
+    assert renamed.event_name == "Renamed event"
+    assert renamed.event_node_id == original.event_node_id
+
+    # Persisted configurations from older backends remain readable.
+    legacy_payload = renamed.model_dump(exclude={"event_node_id"})
+    assert type(renamed).model_validate(legacy_payload).event_node_id is None
+
+
 async def test_terminal_self_service_roundtrip(
     terminal_service: TerminalService,
     event_node: Node,

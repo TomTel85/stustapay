@@ -22,7 +22,7 @@ import kotlinx.serialization.Serializable
 /**
  * 
  *
- * Values: booked,already_booked,clarification_required,not_found,dismissed
+ * Values: booked,already_booked,retry_required,clarification_required,not_found,dismissed
  */
 @Serializable
 enum class OfflineBookingStatus(val value: kotlin.String) {
@@ -32,6 +32,9 @@ enum class OfflineBookingStatus(val value: kotlin.String) {
 
     @SerialName(value = "already_booked")
     already_booked("already_booked"),
+
+    @SerialName(value = "retry_required")
+    retry_required("retry_required"),
 
     @SerialName(value = "clarification_required")
     clarification_required("clarification_required"),

@@ -13,6 +13,8 @@ import de.stustapay.api.models.PaymentMethod
 import de.stustapay.libssp.model.NfcTag
 import de.stustapay.libssp.net.Response
 import de.stustapay.libssp.util.mapState
+import de.stustapay.stustapay.offline.SaleBookingOutcome
+import de.stustapay.stustapay.offline.pendingSale
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ec.ECPayment
 import de.stustapay.stustapay.repository.ECPaymentRepository
@@ -188,6 +190,11 @@ class SaleViewModel @Inject constructor(
     // when we finished a sale
     private val _saleCompleted = MutableStateFlow<CompletedSale?>(null)
     val saleCompleted = _saleCompleted.asStateFlow()
+    private val _bookingOutcome = MutableStateFlow<SaleBookingOutcome?>(null)
+    val bookingOutcome = _bookingOutcome.asStateFlow()
+    fun isLocallyChecked(uuid: java.util.UUID) = saleRepository.offlineSales.isLocallyChecked(uuid)
+    fun synchronizeAndPrepare() = saleRepository.offlineSales.requestSynchronization()
+    fun setJournalPage(page: Int) = saleRepository.offlineSales.setJournalPage(page)
 
     // status message
     private val _status = MutableStateFlow("")
@@ -218,7 +225,9 @@ class SaleViewModel @Inject constructor(
 
     // configuration infos from backend
     val saleConfig: StateFlow<SaleConfig> = mapSaleConfig(
-        terminalConfigRepository.terminalConfigState
+        combine(terminalConfigRepository.terminalConfigState, saleRepository.offlineSales.preparedConfig) { live, prepared ->
+            prepared?.let { TerminalConfigState.Success(it) } ?: live
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TerminalConfigState.NoConfig)
     )
 
     fun incrementVouchers() {
@@ -289,6 +298,7 @@ class SaleViewModel @Inject constructor(
         scanTarget.update { ScanTarget.None }
         _navState.update { SalePage.ProductSelect }
         _saleCompleted.update { null }
+        _bookingOutcome.value = null
         
         // Reset customer display to welcome state
         customerDisplayManager.updateState(CustomerDisplayState.Welcome)
@@ -352,12 +362,6 @@ class SaleViewModel @Inject constructor(
 
     suspend fun checkSale() {
         clearAutoBookCountdown()
-        if (offlineStatus.value.offlineMode && (
-                !offlineStatus.value.preparationUsable ||
-                _saleStatus.value.voucherAmount.let { it != null && it != 0 })) {
-            _status.value = context.getString(R.string.offline_requires_connection)
-            return
-        }
         // important to check for the list entries
         // and not fold them and check if sum == 0
         // because one can have negative returnable items!
@@ -427,7 +431,7 @@ class SaleViewModel @Inject constructor(
                         totalPrice = pendingSale.totalPrice,
                         currentBalance = pendingSale.oldBalance,
                         newBalance = pendingSale.newBalance,
-                        products = productsList
+                        products = productsList,
                     )
                 )
                 startAutoBookCountdown()
@@ -571,7 +575,7 @@ class SaleViewModel @Inject constructor(
     // Function to show a completed sale on the customer display
     private fun updateCustomerDisplay(completedSale: CompletedSale?) {
         completedSale?.let {
-            customerDisplayManager.updateState(CustomerDisplayState.SaleCompleted(it))
+            customerDisplayManager.updateState(CustomerDisplayState.SaleCompleted(it.pendingSale()))
         } ?: customerDisplayManager.updateState(CustomerDisplayState.Welcome)
     }
 
@@ -648,6 +652,7 @@ class SaleViewModel @Inject constructor(
         }
 
         _saleCompleted.update { null }
+        _bookingOutcome.value = null
 
         val response = infallibleRepository.bookSale(newSale)
 
@@ -655,15 +660,20 @@ class SaleViewModel @Inject constructor(
             is Response.OK -> {
                 // delete the sale draft
                 clearSale()
-                val offlineAccepted = saleRepository.offlineSales.lastOfflineSale.value == response.data.uuid
-                _status.update { if (offlineAccepted) context.getString(R.string.sale_offline_saved) else context.getString(R.string.ticket_order_booked) }
-                // now we have a completed sale
-                _saleCompleted.update { response.data }
-                _navState.update { SalePage.Success }
-                
-                // Update the customer display with the completed sale information
-                if (offlineAccepted) customerDisplayManager.updateState(CustomerDisplayState.OfflineAccepted(response.data.newBalance, response.data.totalPrice < 0))
-                else updateCustomerDisplay(response.data)
+                _bookingOutcome.value = response.data
+                when (val outcome = response.data) {
+                    is SaleBookingOutcome.LocalAccepted -> {
+                        _status.value = context.getString(R.string.ticket_order_booked)
+                        _saleCompleted.value = null
+                        customerDisplayManager.updateState(CustomerDisplayState.SaleCompleted(outcome.sale))
+                    }
+                    is SaleBookingOutcome.Confirmed -> {
+                        _status.value = context.getString(R.string.ticket_order_booked)
+                        _saleCompleted.value = outcome.sale
+                        updateCustomerDisplay(outcome.sale)
+                    }
+                }
+                _navState.value = SalePage.Success
             }
 
             is Response.Error.Service -> {

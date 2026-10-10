@@ -2520,7 +2520,7 @@ export type UpdateAccountCommentApiArg = {
   nodeId: number;
   updateAccountCommentPayload: UpdateAccountCommentPayload;
 };
-export type OfflineReportApiResponse = /** status 200 Successful Response */ OfflineReportEntry[];
+export type OfflineReportApiResponse = /** status 200 Successful Response */ OfflineReportEntryRead[];
 export type OfflineReportApiArg = {
   nodeId: number;
 };
@@ -3920,7 +3920,35 @@ export type TransferBalancePayload = {
 export type UpdateAccountCommentPayload = {
   comment: string;
 };
-export type OfflineBookingStatus = "booked" | "already_booked" | "clarification_required" | "not_found" | "dismissed";
+export type OfflineBookingStatus =
+  | "booked"
+  | "already_booked"
+  | "retry_required"
+  | "clarification_required"
+  | "not_found"
+  | "dismissed";
+export type Button = {
+  till_button_id: number;
+  quantity?: number | null;
+  price?: number | null;
+};
+export type PendingLineItem = {
+  quantity: number;
+  product: Product;
+  product_price: number;
+  tax_rate_id: number;
+  tax_name: string;
+  tax_rate: number;
+};
+export type PendingLineItemRead = {
+  quantity: number;
+  product: Product;
+  product_price: number;
+  tax_rate_id: number;
+  tax_name: string;
+  tax_rate: number;
+  total_price: number;
+};
 export type OfflineReportEntry = {
   uuid: string;
   snapshot_id: string;
@@ -3934,6 +3962,32 @@ export type OfflineReportEntry = {
   customer_account_id?: number | null;
   new_balance?: number | null;
   order_id?: number | null;
+  amount_cents?: number | null;
+  customer_tag_uid?: number | null;
+  buttons?: Button[];
+  line_items?: PendingLineItem[];
+  attempt_count?: number;
+  last_attempt_at?: string | null;
+};
+export type OfflineReportEntryRead = {
+  uuid: string;
+  snapshot_id: string;
+  terminal_id: number;
+  till_id: number;
+  user_id: number;
+  recorded_at: string;
+  received_at: string;
+  status: OfflineBookingStatus;
+  message?: string | null;
+  customer_account_id?: number | null;
+  new_balance?: number | null;
+  order_id?: number | null;
+  amount_cents?: number | null;
+  customer_tag_uid?: number | null;
+  buttons?: Button[];
+  line_items?: PendingLineItemRead[];
+  attempt_count?: number;
+  last_attempt_at?: string | null;
 };
 export type OfflineDeviceStatus = {
   terminal_id: number;
@@ -4037,23 +4091,6 @@ export type BonJsonRead = {
   tax_rate_aggregations: TaxRateAggregation[];
   config: BonConfig;
   currency_identifier: string;
-};
-export type PendingLineItem = {
-  quantity: number;
-  product: Product;
-  product_price: number;
-  tax_rate_id: number;
-  tax_name: string;
-  tax_rate: number;
-};
-export type PendingLineItemRead = {
-  quantity: number;
-  product: Product;
-  product_price: number;
-  tax_rate_id: number;
-  tax_name: string;
-  tax_rate: number;
-  total_price: number;
 };
 export type BookedProduct = {
   product_id: number;

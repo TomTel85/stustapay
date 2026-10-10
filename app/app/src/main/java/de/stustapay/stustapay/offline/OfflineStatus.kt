@@ -1,5 +1,15 @@
 package de.stustapay.stustapay.offline
 
+/** Journal information for the authenticated operator; excludes customer identifiers. */
+data class JournalEntrySummary(
+    val uuid: String,
+    val amountCents: Long,
+    val recordedAt: String,
+    val state: String,
+    val transferState: String,
+    val message: String? = null,
+)
+
 /** Safe-to-display status; intentionally contains no operator or customer data. */
 data class OfflineStatus(
     val offlineMode: Boolean = false,
@@ -9,6 +19,15 @@ data class OfflineStatus(
     val remainingReturnCents: Long? = null,
     val pendingSales: Int = 0,
     val supportedButtonIds: Set<Int> = emptySet(),
+    val journalEntries: List<JournalEntrySummary> = emptyList(),
+    val journalPage: Int = 0,
+    val journalPageCount: Int = 1,
+    val journalTotal: Int = 0,
+    val preparedAt: String? = null,
+    val lastSynchronizedAt: String? = null,
+    val blockReason: String? = null,
+    val synchronizing: Boolean = false,
+    val connected: Boolean? = null,
 )
 
 internal fun remainingTillBudgets(

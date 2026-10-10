@@ -16,7 +16,7 @@ class OfflineValidationTest {
         1, 1, 1, 1, OfflineRules(7200, 2000, 3000, 50000, 2000, 3000, 50000),
         listOf(OfflineCustomer(1, 42.toBigInteger(), 2000)),
         listOf(OfflineButton(1, "Drink", listOf(product)), OfflineButton(2, "Return", listOf(deposit)),
-            OfflineButton(3, "Tip", listOf(freeProduct))))
+            OfflineButton(3, "Tip", listOf(freeProduct))), capabilities = listOf("fixed_price", "deposit_return", "free_price"))
     private fun sale(vararg buttons: Button) = NewSale(UUID.randomUUID(), PaymentMethod.tag, buttons.toList(), 42.toBigInteger())
     private fun button(id: Int, count: Int) = Button(id.toBigInteger(), count.toBigInteger())
     private fun prior(debit: Long = 1000, returns: Long = 0, state: String = "offline") = JournalSale("prior", "", state = state,
@@ -109,6 +109,33 @@ class OfflineValidationTest {
         rejected { validateOffline(snapshot, sale(Button(3.toBigInteger(), quantity = 1.toBigInteger(), price = 1.0)), emptyList()) }
         rejected { validateOffline(snapshot.copy(buttons = snapshot.buttons + OfflineButton(4, "Bundle", listOf(freeProduct, product))),
             sale(Button(4.toBigInteger(), price = 1.0)), emptyList()) }
+    }
+    @Test fun cancellingPositionsAreRejectedBeforeAcceptance() {
+        rejected { validateOffline(snapshot, sale(button(2, 1), button(2, -1)), emptyList()) }
+    }
+    @Test fun overlappingButtonsAreAggregatedLikeServer() {
+        val shared = snapshot.copy(buttons = snapshot.buttons + OfflineButton(4, "Also drink", listOf(product)))
+        val checked = validateOffline(shared, sale(button(1, 1), button(4, 2)), emptyList())
+        assertEquals(1, checked.pending.lineItems.size)
+        assertEquals(3.toBigInteger(), checked.pending.lineItems.single().quantity)
+        assertEquals(1500L, checked.debit)
+    }
+    @Test fun repeatedFreePricesMergeByProductAndCentPrice() {
+        val checked = validateOffline(snapshot, sale(Button(3.toBigInteger(), price = 2.50),
+            Button(3.toBigInteger(), price = 2.50), Button(3.toBigInteger(), price = 1.00)), emptyList())
+        assertEquals(2, checked.pending.lineItems.size)
+        assertEquals(2.toBigInteger(), checked.pending.lineItems.first().quantity)
+        assertEquals(600L, checked.debit)
+    }
+    @Test fun legacySnapshotsCannotAcceptFreePrice() {
+        val legacy = snapshot.copy(capabilities = listOf("fixed_price", "deposit_return"))
+        rejected { validateOffline(legacy, sale(Button(3.toBigInteger(), price = 1.0)), emptyList()) }
+        assertEquals(500L, validateOffline(legacy, sale(button(1, 1)), emptyList()).debit)
+    }
+    @Test fun confirmedDebitsRemainReservedUntilSnapshotReplacement() {
+        rejected { validateOffline(snapshot, sale(button(1, 3)), listOf(prior(state = "booked"))) }
+        val refreshed = snapshot.copy(id = UUID.randomUUID())
+        assertEquals(1500L, validateOffline(refreshed, sale(button(1, 3)), listOf(prior(state = "booked"))).debit)
     }
     @Test fun onlyTransportFailuresAllowOfflineAdmission() {
         assertTrue(isOfflineTransportFailure(de.stustapay.libssp.net.Response.Error.Request(throwable = java.io.IOException())))

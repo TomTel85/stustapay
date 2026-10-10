@@ -5,9 +5,20 @@ import de.stustapay.api.models.UserTagSecret
 import de.stustapay.libssp.net.Response
 import de.stustapay.stustapay.netsource.TerminalConfigRemoteDataSource
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.OffsetDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -104,6 +115,9 @@ internal fun terminalConfigRetryDelayMillis(attempt: Int, jitter: Double = Rando
     return (ceiling * (0.5 + jitter.coerceIn(0.0, 1.0) * 0.5)).toLong()
 }
 
+internal fun shouldRefreshTerminalConfigAfterReconnect(state: TerminalConfigState, connected: Boolean?): Boolean =
+    connected == true && (state as? TerminalConfigState.Success)?.refreshTransportError == true
+
 @Singleton
 class TerminalConfigRepository @Inject constructor(
     private val registrationRepository: RegistrationRepository,
@@ -117,11 +131,26 @@ class TerminalConfigRepository @Inject constructor(
 
     private val _fetching = MutableStateFlow(false)
     val fetching = _fetching.asStateFlow()
+    private val fetchMutex = Mutex()
 
-    suspend fun fetchConfig(keepTrying: Boolean): Boolean {
+    init {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            combine(offlineSales.status, terminalConfigState) { status, state ->
+                shouldRefreshTerminalConfigAfterReconnect(state, status.connected)
+            }.distinctUntilChanged().filter { it }.collect {
+                // A failed startup refresh may still be completing its finally block.
+                fetching.first { busy -> !busy }
+                if (shouldRefreshTerminalConfigAfterReconnect(terminalConfigState.value, offlineSales.status.value.connected)) {
+                    fetchConfig(keepTrying = false)
+                }
+            }
+        }
+    }
+
+    suspend fun fetchConfig(keepTrying: Boolean): Boolean = fetchMutex.withLock {
         try {
             _fetching.update { true }
-            return fetchConfig_(keepTrying)
+            fetchConfig_(keepTrying)
         }
         finally {
             _fetching.update { false }
@@ -135,7 +164,7 @@ class TerminalConfigRepository @Inject constructor(
         }
 
         val preparedConfig = offlineSales.restoredConfig()
-        preparedConfig?.let {
+        preparedConfig?.takeIf { _terminalConfigState.value !is TerminalConfigState.Success }?.let {
             _terminalConfigState.value = TerminalConfigState.Success(it)
             it.secrets?.userTagSecret?.let { key -> nfcRepository.setTagKeys(key) }
             offlineSales.rememberConfig(it)
@@ -143,14 +172,17 @@ class TerminalConfigRepository @Inject constructor(
         var ok: Boolean
         var retryAttempt = 0
         while (true) {
+            val response = terminalConfigRemoteDataSource.getTerminalConfig(offlinePrepared = preparedConfig != null)
+            // Invalidate the previous assignment before any observer can use the new configuration.
+            // Even a response missing NFC keys is evidence that the old assignment has changed.
+            if (response is Response.OK) offlineSales.rememberConfig(response.data)
             val result = terminalConfigFetchResult(
                 currentState = _terminalConfigState.value,
-                response = terminalConfigRemoteDataSource.getTerminalConfig(offlinePrepared = preparedConfig != null),
+                response = response,
             )
             _terminalConfigState.update { result.state }
             result.userTagSecret?.let { nfcRepository.setTagKeys(it) }
             ok = result.ok
-            if (result.ok) (result.state as? TerminalConfigState.Success)?.let { offlineSales.rememberConfig(it.config) }
             if (!ok && _terminalConfigState.value is TerminalConfigState.Success) break
 
             if (!ok && keepTrying && result.shouldRetry) {

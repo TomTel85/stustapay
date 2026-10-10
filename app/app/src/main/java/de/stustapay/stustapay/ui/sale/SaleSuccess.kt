@@ -27,6 +27,8 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import de.stustapay.api.models.PaymentMethod
+import de.stustapay.stustapay.offline.SaleBookingOutcome
+import de.stustapay.stustapay.offline.pendingSale
 import de.stustapay.libssp.util.formatCurrencyValue
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ui.common.operator.OperatorActionButton
@@ -44,15 +46,17 @@ fun SaleSuccess(
     viewModel: SaleViewModel,
     onConfirm: () -> Unit,
 ) {
-    val saleCompleted by viewModel.saleCompleted.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
-    val offlineReceipt by viewModel.offlineReceipt.collectAsStateWithLifecycle()
+    val bookingOutcome by viewModel.bookingOutcome.collectAsStateWithLifecycle()
     val saleConfig by viewModel.saleConfig.collectAsStateWithLifecycle()
     val config = saleConfig
     val vibrator = LocalContext.current.getSystemService(Vibrator::class.java)
 
-    val completedSale = saleCompleted ?: return
-    val offline = offlineReceipt == completedSale.uuid
+    val outcome = bookingOutcome ?: return
+    val completedSale = when (outcome) {
+        is SaleBookingOutcome.LocalAccepted -> outcome.sale
+        is SaleBookingOutcome.Confirmed -> outcome.sale.pendingSale()
+    }
     val returnableCount = completedSale.lineItems.sumOf { lineItem ->
         if (lineItem.product.isReturnable) lineItem.quantity.intValue() else 0
     }
@@ -82,8 +86,8 @@ fun SaleSuccess(
         OperatorAdaptivePaymentLayout(
             mainContent = { profile ->
                 OperatorStatePanel(
-                    title = stringResource(if (offline) R.string.sale_offline_saved else R.string.ticket_order_booked),
-                    message = stringResource(if (offline && completedSale.totalPrice < 0) R.string.sale_offline_pending_return else if (offline) R.string.sale_offline_explanation else R.string.sale_success_message),
+                    title = stringResource(R.string.ticket_order_booked),
+                    message = stringResource(R.string.sale_success_message),
                     success = true,
                 )
                 Row(
@@ -98,7 +102,7 @@ fun SaleSuccess(
                     )
                     if (completedSale.paymentMethod == PaymentMethod.tag) {
                         OperatorMetricCard(
-                            label = stringResource(if (offline) R.string.sale_offline_estimated_balance else R.string.new_balance),
+                            label = stringResource(R.string.new_balance),
                             value = formatCurrencyValue(completedSale.newBalance),
                             modifier = Modifier.weight(1f),
                         )
@@ -140,7 +144,7 @@ fun SaleSuccess(
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         if (completedSale.paymentMethod == PaymentMethod.tag) {
                             OperatorMetricCard(
-                                label = stringResource(if (offline) R.string.sale_offline_estimated_balance else R.string.new_balance),
+                                label = stringResource(R.string.new_balance),
                                 value = formatCurrencyValue(completedSale.newBalance),
                                 accent = true,
                                 modifier = Modifier.fillMaxWidth(),
@@ -150,8 +154,8 @@ fun SaleSuccess(
                             text = stringResource(R.string.sale_next_basket),
                             onClick = onConfirm,
                         )
-                        if (completedSale.paymentMethod != PaymentMethod.tag && completedSale.bonUrl.isNotBlank()) {
-                            ReceiptQrCard(receiptUrl = completedSale.bonUrl)
+                        if (outcome is SaleBookingOutcome.Confirmed && outcome.sale.paymentMethod != PaymentMethod.tag && outcome.sale.bonUrl.isNotBlank()) {
+                            ReceiptQrCard(receiptUrl = outcome.sale.bonUrl)
                         }
                     }
                 }

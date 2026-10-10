@@ -3427,6 +3427,7 @@
         "enum": [
           "booked",
           "already_booked",
+          "retry_required",
           "clarification_required",
           "not_found",
           "dismissed"
@@ -3623,6 +3624,13 @@
             },
             "type": "array",
             "title": "Buttons"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
           }
         },
         "type": "object",
@@ -4656,6 +4664,17 @@
           "event_name": {
             "type": "string",
             "title": "Event Name"
+          },
+          "event_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Node Id"
           },
           "active_user_id": {
             "anyOf": [

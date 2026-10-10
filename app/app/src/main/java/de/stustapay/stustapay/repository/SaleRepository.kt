@@ -15,17 +15,9 @@ class SaleRepository @Inject constructor(
     private val saleRemoteDataSource: SaleRemoteDataSource,
     val offlineSales: de.stustapay.stustapay.offline.OfflineSalesRepository,
 ) {
-    suspend fun checkSale(newSale: NewSale): Response<PendingSale> {
-        if (offlineSales.offline.value && newSale.paymentMethod == de.stustapay.api.models.PaymentMethod.tag) return offlineSales.check(newSale)
-        val prepared = newSale.paymentMethod == de.stustapay.api.models.PaymentMethod.tag &&
-            offlineSales.restoredConfig() != null
-        val response = de.stustapay.stustapay.net.withOfflineRecoveryDeadline(prepared) {
-            saleRemoteDataSource.checkSale(newSale)
-        }
-        return if (response is Response.Error.Request && de.stustapay.stustapay.offline.isOfflineTransportFailure(response)) offlineSales.check(newSale) else response
-    }
+    suspend fun checkSale(newSale: NewSale): Response<PendingSale> = offlineSales.check(newSale)
 
-    suspend fun bookSale(newSale: NewSale): Response<CompletedSale> {
+    suspend fun bookSale(newSale: NewSale): Response<de.stustapay.stustapay.offline.SaleBookingOutcome> {
         return offlineSales.book(newSale)
     }
 

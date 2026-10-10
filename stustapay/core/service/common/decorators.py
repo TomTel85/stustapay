@@ -46,7 +46,7 @@ def _add_arg_to_signature(original_func, new_func, name: str):
 
 
 def requires_node(
-    object_types: list[ObjectType] | None = None, event_only: bool = False
+    object_types: list[ObjectType] | None = None, event_only: bool = False, allow_read_only: bool = False
 ) -> Callable[[Callable[..., Awaitable[R]]], Callable[..., Awaitable[R]]]:
     """
     This makes a node_id: int parameter optional by reading it from the current users topmost node if not passed.
@@ -74,7 +74,7 @@ def requires_node(
                     raise RuntimeError(f"Node with id {node_id} does not exist")
 
             func_is_read_only = _is_func_read_only(kwargs, func)
-            if not func_is_read_only and node.read_only:
+            if not func_is_read_only and node.read_only and not allow_read_only:
                 raise NodeIsReadOnly(f"{node.name} is read only")
 
             if object_types is not None:
@@ -324,6 +324,7 @@ def requires_terminal(
     user_privileges: Optional[list[Privilege]] = None,
     requires_event_privileges=False,
     requires_till=True,
+    allow_read_only: bool = False,
 ) -> Callable[[Callable[..., Awaitable[R]]], Callable[..., Awaitable[R]]]:
     """
     Check if a terminal is logged in via a provided terminal jwt token
@@ -424,7 +425,7 @@ def requires_terminal(
                 if not any([p in user_privileges for p in logged_in_user.privileges]):
                     raise AccessDenied(f"user does not have any of the required privileges: {stringified_privileges}")
 
-            if not func_is_read_only and node.read_only:
+            if not func_is_read_only and node.read_only and not allow_read_only:
                 raise NodeIsReadOnly(f"{node.name} is read only")
 
             if "node" in signature_params:

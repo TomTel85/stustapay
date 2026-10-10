@@ -244,7 +244,7 @@ class InfallibleRepository @Inject constructor(
         return ret
     }
 
-    suspend fun bookSale(newSale: NewSale): Response<CompletedSale> = offlineSales.book(newSale)
+    suspend fun bookSale(newSale: NewSale): Response<de.stustapay.stustapay.offline.SaleBookingOutcome> = offlineSales.book(newSale)
 
     /** when the request was delivered, and its result dismissed */
     suspend fun dismissSuccess() {

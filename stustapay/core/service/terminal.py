@@ -676,6 +676,7 @@ class TerminalService(Service[Config]):
             id=current_terminal.id,
             name=current_terminal.name,
             event_name=event_node.name,
+            event_node_id=event_node.id,
             description=current_terminal.description,
             mode=current_terminal.mode,
             login_mode=current_terminal.login_mode,

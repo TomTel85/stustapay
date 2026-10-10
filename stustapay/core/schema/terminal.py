@@ -129,6 +129,7 @@ class TerminalConfig(BaseModel):
     app_display_mode: AppDisplayMode | None
 
     event_name: str
+    event_node_id: int | None = None
     active_user_id: Optional[int]
     available_roles: list[UserRole]
     user_privileges: Optional[list[Privilege]]

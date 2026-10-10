@@ -91,6 +91,7 @@ class Api:
         )
         try:
             self.server.add_task(asyncio.create_task(run_healthcheck(db, service_name="terminalserver")))
+            self.server.add_task(asyncio.create_task(order_service.run_offline_reconciliation()))
             await self.server.run(context)
         finally:
             await db_pool.close()

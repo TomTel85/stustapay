@@ -65,6 +65,11 @@ verify-web: verify-web-administration verify-web-customerportal
 verify-android:
 	cd app && ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 
+OFFLINE_EMULATOR_DEVICES ?= 3
+.PHONY: test-offline-emulators
+test-offline-emulators:
+	python3 tools/test_offline_emulators.py --devices $(OFFLINE_EMULATOR_DEVICES)
+
 .PHONY: generate-openapi
 generate-openapi:
 	python3 -m stustapay -c ./etc/config.yaml customerportal-api --show-openapi > api/customer_portal.json
