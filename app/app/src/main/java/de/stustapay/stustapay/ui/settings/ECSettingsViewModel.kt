@@ -22,6 +22,8 @@ class ECSettingsViewModel @Inject constructor(
     val status = _status.asStateFlow()
     val sumUpState = sumUp.paymentStatus
     val sumUpLogin = sumUp.loginStatus
+    val readerInfo = sumUp.readerInfo
+
 
     suspend fun openLogin(context: Activity) {
         _status.update { this.context.getString(R.string.ec_debug_status_opening_login) }

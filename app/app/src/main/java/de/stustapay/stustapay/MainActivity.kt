@@ -21,7 +21,6 @@ import de.stustapay.stustapay.ec.SumUp
 import de.stustapay.libssp.nfc.NfcHandler
 import de.stustapay.stustapay.repository.InfallibleRepository
 import de.stustapay.stustapay.ui.Main
-import de.stustapay.libssp.util.ActivityCallback
 import de.stustapay.libssp.util.SysUiController
 import de.stustapay.stustapay.display.CustomerDisplayManager
 import de.stustapay.stustapay.locale.AppLocaleManager
@@ -33,9 +32,6 @@ class MainActivity : ComponentActivity(), SysUiController {
         const val EXTRA_BENCHMARK_START_ROUTE =
             "de.stustapay.stustapay.extra.BENCHMARK_START_ROUTE"
     }
-
-    @Inject
-    lateinit var activityCallback: ActivityCallback
 
     @Inject
     lateinit var nfcHandler: NfcHandler
@@ -70,7 +66,7 @@ class MainActivity : ComponentActivity(), SysUiController {
 
         // things that need the activity
         nfcHandler.onCreate(this, mapOf())
-        sumUp.attachActivityCallback(activityCallback)
+        sumUp.attachActivity(this)
 
         setContent {
             Main(this)
@@ -92,6 +88,7 @@ class MainActivity : ComponentActivity(), SysUiController {
         super.onResume()
 
         nfcHandler.onResume(this)
+        sumUp.refreshReaderInfo()
         offlineSales.requestSynchronization()
         reapplyDesiredSystemUI()
     }
@@ -105,14 +102,6 @@ class MainActivity : ComponentActivity(), SysUiController {
         
         // Dismiss the presentation when the activity is destroyed
         customerDisplayManager.dismissPresentation()
-    }
-
-    @Deprecated("Deprecated in Android")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        @Suppress("DEPRECATION")
-        super.onActivityResult(requestCode, resultCode, data)
-
-        activityCallback.activityResult(requestCode, resultCode, data)
     }
 
     private fun setDefaultOrientation() {

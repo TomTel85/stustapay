@@ -1,6 +1,6 @@
 package de.stustapay.stustapay.ec
 
-import com.sumup.merchant.reader.models.TransactionInfo
+import com.sumup.checkout.core.models.TransactionInfo
 
 sealed interface SumUpState {
     fun msg(): String

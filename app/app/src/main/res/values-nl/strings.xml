@@ -476,6 +476,10 @@
     <string name="ec_reader_footer_status">Settings</string>
     <string name="ec_reader_state_title">Current reader state</string>
     <string name="ec_reader_no_login_info">No login info</string>
+    <string name="ec_reader_connected">Kaartlezer verbonden</string>
+    <string name="ec_reader_disconnected">Kaartlezer niet verbonden</string>
+    <string name="ec_reader_details">Kaartlezer: %1$s · %2$s</string>
+    <string name="ec_reader_last_known_battery">Laatst bekende batterijniveau: %1$d%%</string>
     <string name="ec_reader_login_user_password">User/password login</string>
     <string name="ec_reader_login_token">Token login</string>
     <string name="ec_reader_settings_button">Card reader settings</string>

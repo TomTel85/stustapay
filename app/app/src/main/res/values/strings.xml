@@ -485,6 +485,10 @@
     <string name="ec_reader_footer_status">Settings</string>
     <string name="ec_reader_state_title">Current reader state</string>
     <string name="ec_reader_no_login_info">No login info</string>
+    <string name="ec_reader_connected">Reader connected</string>
+    <string name="ec_reader_disconnected">Reader disconnected</string>
+    <string name="ec_reader_details">Reader: %1$s · %2$s</string>
+    <string name="ec_reader_last_known_battery">Last known battery: %1$d%%</string>
     <string name="ec_reader_login_user_password">User/password login</string>
     <string name="ec_reader_login_token">Token login</string>
     <string name="ec_reader_settings_button">Card reader settings</string>

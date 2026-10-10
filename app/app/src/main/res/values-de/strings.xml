@@ -484,6 +484,10 @@
     <string name="ec_reader_footer_status">Einstellungen</string>
     <string name="ec_reader_state_title">Aktueller Leserstatus</string>
     <string name="ec_reader_no_login_info">Keine Login-Informationen</string>
+    <string name="ec_reader_connected">Kartenleser verbunden</string>
+    <string name="ec_reader_disconnected">Kartenleser nicht verbunden</string>
+    <string name="ec_reader_details">Kartenleser: %1$s · %2$s</string>
+    <string name="ec_reader_last_known_battery">Zuletzt bekannter Akkustand: %1$d%%</string>
     <string name="ec_reader_login_user_password">Login mit Benutzername/Passwort</string>
     <string name="ec_reader_login_token">Token-Login</string>
     <string name="ec_reader_settings_button">Kartenleser-Einstellungen</string>

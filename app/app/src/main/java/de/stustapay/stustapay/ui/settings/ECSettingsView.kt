@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CreditCard
@@ -36,6 +38,7 @@ fun ECSettingsView(
     val status by viewModel.status.collectAsStateWithLifecycle()
     val sumUpState by viewModel.sumUpState.collectAsStateWithLifecycle()
     val sumUpLoginState by viewModel.sumUpLogin.collectAsStateWithLifecycle()
+    val readerInfo by viewModel.readerInfo.collectAsStateWithLifecycle()
 
     val scope = rememberCoroutineScope()
 
@@ -52,7 +55,7 @@ fun ECSettingsView(
         onBack = navigateBack,
     ) {
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             OperatorInfoCard(
@@ -65,6 +68,28 @@ fun ECSettingsView(
                 )
                 Text(text = status, color = OperatorPalette.title)
                 Text(text = sumUpState.msg(), color = OperatorPalette.subtitle)
+                Text(
+                    text = stringResource(
+                        if (readerInfo.connected) R.string.ec_reader_connected else R.string.ec_reader_disconnected
+                    ),
+                    color = OperatorPalette.title,
+                )
+                if (readerInfo.serialNumber != null) {
+                    Text(
+                        text = stringResource(
+                            R.string.ec_reader_details,
+                            readerInfo.model.orEmpty(),
+                            readerInfo.serialNumber.orEmpty(),
+                        ),
+                        color = OperatorPalette.subtitle,
+                    )
+                }
+                readerInfo.lastKnownBatteryPercentage?.let { battery ->
+                    Text(
+                        text = stringResource(R.string.ec_reader_last_known_battery, battery),
+                        color = OperatorPalette.subtitle,
+                    )
+                }
             }
 
             OperatorPrimaryButton(
