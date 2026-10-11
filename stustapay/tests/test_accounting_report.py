@@ -170,7 +170,9 @@ def test_monthly_totals_sum_movements_by_product_and_keep_latest_credit():
             remaining_credit=Decimal("40"),
         ),
     ]
-    totals = AccountingReportContext.model_construct(monthly_rows=rows).monthly_totals
+    totals = AccountingReportContext.model_construct(
+        monthly_rows=rows, includes_event_monthly_accounting=False
+    ).monthly_totals
     assert (totals.deposit_received, totals.deposit_refunded) == (Decimal("30"), Decimal("15"))
     assert [(product.product_id, product.net) for product in totals.deposit_products] == [
         (1, Decimal("10")),

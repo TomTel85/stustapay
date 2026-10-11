@@ -132,6 +132,7 @@ class AccountingReportContext(BaseModel):
     total_donations: Decimal
     includes_remaining_credit_donations: bool
     monthly_rows: list[MonthlyAccountingRow]
+    includes_event_monthly_accounting: bool
 
     @property
     def monthly_totals(self) -> MonthlyAccountingRow:
@@ -379,8 +380,15 @@ async def build_accounting_report_context(
     till_name = await _fetch_till_name(conn=conn, scope_node=scope_node, till_id=query.till_id)
     from_time, to_time = _resolve_bounds(query=query, event=event)
     generated_at = datetime.now(tz=REPORT_TIMEZONE)
-    monthly_rows = await _build_monthly_rows(
-        conn=conn, event_node_id=node.event_node_id, selected_dates=query.selected_dates, generated_at=generated_at
+    # The service authorizes the requested node. Only an event-root report may
+    # include the event-wide ledger; child-node reports remain within their scope.
+    includes_event_monthly_accounting = node.id == node.event_node_id
+    monthly_rows = (
+        await _build_monthly_rows(
+            conn=conn, event_node_id=node.event_node_id, selected_dates=query.selected_dates, generated_at=generated_at
+        )
+        if includes_event_monthly_accounting
+        else []
     )
     selected_ranges = selected_date_ranges(
         query.selected_dates,
@@ -556,6 +564,7 @@ async def build_accounting_report_context(
         total_donations=total_product_donations + total_remaining_credit_donations,
         includes_remaining_credit_donations=includes_remaining_credit_donations,
         monthly_rows=monthly_rows,
+        includes_event_monthly_accounting=includes_event_monthly_accounting,
     )
 
 

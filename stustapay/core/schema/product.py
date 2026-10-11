@@ -1,4 +1,6 @@
 import enum
+from decimal import ROUND_HALF_UP, Decimal, localcontext
+from math import isfinite
 from typing import Optional
 
 from pydantic import BaseModel, field_validator
@@ -38,7 +40,12 @@ class NewProduct(BaseModel):
         """Round price to 2 decimal places to avoid precision issues."""
         if v is None:
             return None
-        return round(v * 100) / 100
+        if not isfinite(v):
+            raise ValueError("Product price must be finite")
+        amount = Decimal(str(v))
+        with localcontext() as context:
+            context.prec = max(context.prec, amount.adjusted() + 3)
+            return float(amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 class Product(NewProduct):

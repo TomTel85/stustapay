@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 from sftkit.database import Connection
 from sftkit.database._migrations import MIGRATION_TABLE, SchemaMigration
@@ -25,6 +27,8 @@ async def test_payment_schema_upgrade_from_released_revision(db_connection: Conn
         await db_connection.execute(f"create table {MIGRATION_TABLE} (version text not null primary key)")
         for migration in migrations[: released_index + 1]:
             await migration.apply(db_connection)
+        priced_product_id = await db_connection.fetchval("select id from product where price is not null limit 1")
+        await db_connection.execute("update product set price=1.005 where id=$1", priced_product_id)
         await db_connection.execute(
             "insert into node_sumup_link (node_id, merchant_code, refresh_token) values (0, 'merchant', 'test-refresh')"
         )
@@ -51,6 +55,9 @@ async def test_payment_schema_upgrade_from_released_revision(db_connection: Conn
                     )
 
         assert await db_connection.fetchval(f"select version from {MIGRATION_TABLE}") == CURRENT_REVISION
+        assert await db_connection.fetchval("select price from product where id=$1", priced_product_id) == Decimal(
+            "1.01"
+        )
         existing_terminal = await db_connection.fetchrow(
             "select login_mode::text, device_user_id, active_user_id from terminal where id = $1", terminal_id
         )

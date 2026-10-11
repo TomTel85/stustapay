@@ -709,7 +709,7 @@ class OfflineOrderMixin:
     @requires_user([Privilege.node_administration])
     async def offline_report(self, *, conn: Connection, node: Node) -> list[OfflineReportEntry]:
         records = await conn.fetch(
-            "select i.*,s.terminal_id,s.till_id,s.user_id,s.snapshot from terminal_offline_import i "
+            "select i.*,s.terminal_id,s.till_id,s.user_id,s.id as prepared_snapshot_id from terminal_offline_import i "
             "join terminal_offline_snapshot s on s.id=i.snapshot_id join node n on n.id=s.event_node_id "
             "where n.id=$1 or $1=any(n.parent_ids) "
             "order by (i.resolved_at is null and i.result->>'status' in ('retry_required','clarification_required')) desc, "
@@ -718,7 +718,8 @@ class OfflineOrderMixin:
         )
         rejections = await conn.fetch(
             "select (r.request->'sale'->>'uuid')::uuid as uuid,(r.request->>'snapshot_id')::uuid as snapshot_id,"
-            "r.request,r.result,r.received_at,r.terminal_id,r.till_id,r.user_id,r.resolved_at,r.resolved_by,s.snapshot,"
+            "r.request,r.result,r.received_at,r.terminal_id,r.till_id,r.user_id,r.resolved_at,r.resolved_by,"
+            "s.id as prepared_snapshot_id,"
             "r.attempt_count,r.last_attempt_at "
             "from terminal_offline_rejection r join node n on n.id=r.node_id "
             "left join terminal_offline_snapshot s on s.id=(r.request->>'snapshot_id')::uuid and s.terminal_id=r.terminal_id "
@@ -734,6 +735,30 @@ class OfflineOrderMixin:
             ),
             reverse=True,
         )[:1000]
+        # Completed replies already contain the historical sale. Unbooked rows
+        # need only their own customer's prepared data, never the whole event.
+        prepared_customers = [
+            {"snapshot_id": str(row["prepared_snapshot_id"]), "customer_tag_uid": str(request.sale.customer_tag_uid)}
+            for row in records
+            if row["prepared_snapshot_id"] is not None
+            and OfflineBookingResult.model_validate(json_object(row["result"])).sale is None
+            for request in [OfflineBooking.model_validate(json_object(row["request"]))]
+        ]
+        snapshots: dict[UUID, OfflineSnapshot] = {}
+        if prepared_customers:
+            snapshot_rows = await conn.fetch(
+                "with requested as (select distinct * from jsonb_to_recordset($1::jsonb) "
+                "as r(snapshot_id uuid, customer_tag_uid text)) "
+                "select s.id, (s.snapshot - 'customers') || jsonb_build_object('customers', coalesce("
+                "(select jsonb_agg(c) from jsonb_array_elements(s.snapshot->'customers') c "
+                "where c->>'customer_tag_uid' in "
+                "(select r.customer_tag_uid from requested r where r.snapshot_id=s.id)), '[]'::jsonb)) as snapshot "
+                "from terminal_offline_snapshot s where s.id in (select snapshot_id from requested)",
+                prepared_customers,
+            )
+            snapshots = {
+                row["id"]: OfflineSnapshot.model_validate(json_object(row["snapshot"])) for row in snapshot_rows
+            }
         report = []
         for row in records:
             result = OfflineBookingResult.model_validate(json_object(row["result"]))
@@ -741,8 +766,8 @@ class OfflineOrderMixin:
             amount_cents = cents(result.sale.total_price) if result.sale else None
             line_items = result.sale.line_items if result.sale else []
             customer_account_id = result.sale.customer_account_id if result.sale else None
-            if row["snapshot"] is not None:
-                snapshot = OfflineSnapshot.model_validate(json_object(row["snapshot"]))
+            snapshot = snapshots.get(row["prepared_snapshot_id"]) if result.sale is None else None
+            if snapshot is not None:
                 customer = next(
                     (c for c in snapshot.customers if c.customer_tag_uid == request.sale.customer_tag_uid), None
                 )

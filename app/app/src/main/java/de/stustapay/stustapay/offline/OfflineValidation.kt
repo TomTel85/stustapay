@@ -3,8 +3,11 @@ package de.stustapay.stustapay.offline
 import com.ionspin.kotlin.bignum.integer.toBigInteger
 import de.stustapay.api.models.*
 import java.math.BigDecimal
+import java.math.RoundingMode
 
 internal fun cents(value: Double): Long = BigDecimal.valueOf(value).movePointRight(2).longValueExact()
+internal fun confirmedCents(value: Double): Long =
+    BigDecimal.valueOf(value).movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValueExact()
 private fun exactCents(value: Double, message: String): Long {
     require(value.isFinite()) { message }
     return try {

@@ -7,6 +7,7 @@ import de.stustapay.stustapay.display.CustomerDisplayState
 import de.stustapay.stustapay.repository.TerminalConfigRepository
 import de.stustapay.stustapay.repository.TerminalConfigState
 import java.math.BigDecimal
+import java.math.RoundingMode
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -23,6 +24,9 @@ internal fun isTapToPayEnabledForTill(
     tapToPayEnabled: Boolean?,
     tapToPayAvailable: Boolean?,
 ): Boolean = tapToPayEnabled == true && tapToPayAvailable == true
+
+internal fun tapToPayAmountCents(amount: BigDecimal): Long =
+    amount.movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValueExact()
 
 @Singleton
 class TapToPay @Inject constructor(
@@ -140,7 +144,7 @@ class TapToPay @Inject constructor(
             return
         }
 
-        val amountInCents = payment.amount.multiply(BigDecimal(100)).toLong()
+        val amountInCents = tapToPayAmountCents(payment.amount)
 
         displaySession.begin(customerDisplayManager.currentState())
         _paymentStatus.update { SumUpState.Started(payment.id) }

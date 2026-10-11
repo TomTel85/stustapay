@@ -8,6 +8,18 @@ import java.time.OffsetDateTime
 import java.util.UUID
 
 class OfflineValidationTest {
+    @Test fun confirmedServerTotalsRoundFloatingPointNoiseToCents() {
+        assertEquals(690L, confirmedCents(6.8999999999999995))
+        assertEquals(-690L, confirmedCents(-6.8999999999999995))
+        assertEquals(230L, confirmedCents(2.3))
+        assertEquals(-230L, confirmedCents(-2.3))
+        assertEquals(230L, cents(2.3))
+        try {
+            cents(6.8999999999999995)
+            fail("Strict entered-price conversion must reject fractional cents")
+        } catch (_: ArithmeticException) { }
+    }
+
     private val product = Product("Drink", 5.0, true, 1.toBigInteger(), emptyList(), true, false,
         1.toBigInteger(), 1.toBigInteger(), "tax", 0.19, ProductType.user_defined)
     private val deposit = product.copy(name = "Deposit", price = 2.0, isReturnable = true, id = 2.toBigInteger())

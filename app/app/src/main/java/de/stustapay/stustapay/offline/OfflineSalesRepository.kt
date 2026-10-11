@@ -446,8 +446,8 @@ class OfflineSalesRepository private constructor(
                     when (response) {
                         is Response.OK -> {
                             journal.dao.update(row.copy(state = "booked", transferState = "confirmed",
-                                result = journalJson.encodeToString(response.data), debitCents = cents(response.data.totalPrice).coerceAtLeast(0),
-                                saleCents = cents(response.data.totalPrice).coerceAtLeast(0), returnCents = (-cents(response.data.totalPrice)).coerceAtLeast(0)))
+                                result = journalJson.encodeToString(response.data), debitCents = confirmedCents(response.data.totalPrice).coerceAtLeast(0),
+                                saleCents = confirmedCents(response.data.totalPrice).coerceAtLeast(0), returnCents = (-confirmedCents(response.data.totalPrice)).coerceAtLeast(0)))
                             Response.OK(SaleBookingOutcome.Confirmed(response.data))
                         }
                         is Response.Error.Request, is Response.Error.Server, is Response.Error.BadResponse -> response
@@ -652,7 +652,7 @@ class OfflineSalesRepository private constructor(
     private suspend fun applyReply(uuid: String, reply: OfflineResult, requestedOffline: Boolean) = mutex.withLock {
         val current = journal.dao.sale(uuid) ?: return@withLock
         journal.dao.update(reconcileJournalReply(current, reply.status, reply.sale?.let { journalJson.encodeToString(it) },
-            reply.message, requestedOffline, reply.sale?.let { cents(it.totalPrice).coerceAtLeast(0) }))
+            reply.message, requestedOffline, reply.sale?.let { confirmedCents(it.totalPrice).coerceAtLeast(0) }))
     }
     /** Explicit operator action; old single-request storage had no cashier attribution. */
     suspend fun retryLegacyAsCurrentOperator() {

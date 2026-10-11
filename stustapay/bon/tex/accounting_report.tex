@@ -179,6 +179,7 @@ Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_cred
 \EmptyHint{Keine Produkte im ausgewählten Zeitraum verkauft. Gesamt: \VAR[total_revenue|money]}
 \BLOCK[endif]
 
+\BLOCK[if includes_event_monthly_accounting]
 \clearpage
 \SectionTitle{6. Monatliche Pfand-, Spenden- und Guthabenübersicht}
 \textcolor{textmuted}{Diese Übersicht umfasst die gesamte Veranstaltung. Ausgewählte Berichtstage bestimmen nur die angezeigten Kalendermonate; die Werte umfassen jeweils den vollständigen Monat. Für den laufenden Monat gilt der Stand zum Erstellungszeitpunkt.}\par
@@ -259,4 +260,5 @@ Finalisierte Restguthaben-Spenden des Events & \BLOCK[if includes_remaining_cred
 \EmptyHint{Keine Buchungen in den ausgewählten Kalendermonaten.}
 \BLOCK[endif]
 
+\BLOCK[endif]
 \end{document}

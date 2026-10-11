@@ -1,6 +1,9 @@
 # pylint: disable=attribute-defined-outside-init,unexpected-keyword-arg,missing-kwoa
+from decimal import Decimal
+
 import pytest
-from asyncpg import RaiseError
+from asyncpg import CheckViolationError, RaiseError
+from pydantic import ValidationError
 from sftkit.database import Connection
 from sftkit.error import AccessDenied
 
@@ -13,6 +16,38 @@ from stustapay.core.service.till.till import TillService
 
 from ..core.service.tree.service import create_node
 from .conftest import Cashier
+
+
+@pytest.mark.parametrize("price,expected", [(1.005, 1.01), (2.345, 2.35), (-1.005, -1.01), (2.3, 2.3), (None, None)])
+def test_product_price_rounds_decimal_half_cents(price, expected):
+    assert NewProduct(name="Rounded", price=price, tax_rate_id=1).price == expected
+
+
+@pytest.mark.parametrize("price", [float("nan"), float("inf"), float("-inf")])
+def test_product_price_rejects_nonfinite_values(price):
+    with pytest.raises(ValidationError, match="finite"):
+        NewProduct(name="Invalid", price=price, tax_rate_id=1)
+
+
+async def test_product_prices_are_normalized_for_every_database_writer(db_connection, event_node, tax_rate_none):
+    product_id = await db_connection.fetchval(
+        "insert into product(node_id,name,type,price,tax_rate_id) values($1,'Precision test','user_defined',$2,$3) "
+        "returning id",
+        event_node.id,
+        Decimal("1.005"),
+        tax_rate_none.id,
+    )
+    assert await db_connection.fetchval("select price from product where id=$1", product_id) == Decimal("1.01")
+    await db_connection.execute("update product set price=$2 where id=$1", product_id, Decimal("2.34567"))
+    assert await db_connection.fetchval("select price from product where id=$1", product_id) == Decimal("2.35")
+    for value in ("NaN", "Infinity", "-Infinity"):
+        async with db_connection.transaction():
+            with pytest.raises(CheckViolationError):
+                # Roll the failed statement back without losing the surrounding test data.
+                async with db_connection.transaction():
+                    await db_connection.execute("update product set price=$2 where id=$1", product_id, Decimal(value))
+    await db_connection.execute("update product set fixed_price=false, price=null where id=$1", product_id)
+    assert await db_connection.fetchval("select price from product where id=$1", product_id) is None
 
 
 async def test_basic_product_workflow(
