@@ -10,6 +10,7 @@ from sftkit.error import InvalidArgument
 from stustapay.core.schema.order import CompletedTopUp, PaymentMethod
 from stustapay.core.schema.sumup import SumUpAuthMethod, SumUpConnectionSource, SumUpEnvironment
 from stustapay.core.schema.tree import ROOT_NODE_ID, NewEvent, NewNode, Node
+from stustapay.core.service.order import OrderService
 from stustapay.core.service.order.pending_order import fetch_order_by_uuid, save_pending_topup
 from stustapay.core.service.sumup_link import (
     create_sumup_api_for_node,
@@ -419,6 +420,7 @@ async def test_configure_sumup_sandbox_api_key_rejects_live_merchant(
 async def test_pending_sumup_order_keeps_environment_after_event_switch(
     db_connection: Connection,
     tree_service: TreeService,
+    order_service: OrderService,
     global_admin_token: str,
     event_node: Node,
 ):
@@ -474,6 +476,11 @@ async def test_pending_sumup_order_keeps_environment_after_event_switch(
 
     pending_order = await fetch_order_by_uuid(conn=db_connection, uuid=order_uuid)
     assert pending_order.sumup_environment == SumUpEnvironment.sandbox
+    # pylint: disable=protected-access
+    worker_access = await order_service.sumup._resolve_worker_sumup_access(pending_order=pending_order)
+    assert worker_access is not None
+    assert worker_access.environment == SumUpEnvironment.sandbox
+    assert worker_access.merchant_code == "SANDBOX-MERCHANT"
 
     with pytest.raises(InvalidArgument, match="while payments are pending"):
         await delete_node_sumup_link(
@@ -495,6 +502,81 @@ async def test_pending_sumup_order_keeps_environment_after_event_switch(
         conn=db_connection,
         node=parent,
         environment=SumUpEnvironment.sandbox,
+    )
+
+
+async def test_pending_sumup_order_prevents_adding_nearer_ancestor_link(
+    db_connection: Connection,
+    tree_service: TreeService,
+    global_admin_token: str,
+    event_node: Node,
+):
+    ancestor = await tree_service.create_node(
+        token=global_admin_token,
+        node_id=ROOT_NODE_ID,
+        new_node=NewNode(name="Existing SumUp Organizer", description=""),
+    )
+    intermediate = await tree_service.create_node(
+        token=global_admin_token,
+        node_id=ancestor.id,
+        new_node=NewNode(name="Intermediate Organizer", description=""),
+    )
+    scoped_event = await _copy_event_under_parent(
+        db_connection,
+        tree_service,
+        global_admin_token,
+        event_node,
+        intermediate.id,
+    )
+    await db_connection.execute(
+        "insert into node_sumup_link "
+        "(node_id, environment, auth_method, merchant_code, merchant_name, api_key, refresh_token) "
+        "values ($1, 'sandbox', 'api_key', 'SANDBOX-MERCHANT-A', 'Sandbox Merchant A', 'sandbox-key-a', null)",
+        ancestor.id,
+    )
+    await db_connection.execute(
+        "update event set sumup_environment = 'sandbox' where id = (select event_id from node where id = $1)",
+        scoped_event.id,
+    )
+    till_id = await db_connection.fetchval("select id from till where node_id = $1 order by id limit 1", event_node.id)
+    order_uuid = uuid4()
+    await save_pending_topup(
+        conn=db_connection,
+        till_id=till_id,
+        node_id=scoped_event.id,
+        cashier_id=None,
+        topup=CompletedTopUp(
+            payment_method=PaymentMethod.sumup,
+            customer_tag_uid=1,
+            customer_account_id=1,
+            amount=10,
+            old_balance=0,
+            new_balance=10,
+            uuid=order_uuid,
+            booked_at=datetime.now(timezone.utc),
+            cashier_id=None,
+            till_id=till_id,
+        ),
+    )
+
+    with pytest.raises(InvalidArgument, match="while payments are pending"):
+        await upsert_node_sumup_api_key_link(
+            conn=db_connection,
+            node=intermediate,
+            environment=SumUpEnvironment.sandbox,
+            merchant_code="SANDBOX-MERCHANT-B",
+            merchant_name="Sandbox Merchant B",
+            api_key="sandbox-key-b",
+        )
+
+    await db_connection.execute("delete from pending_sumup_order where uuid = $1", order_uuid)
+    await upsert_node_sumup_api_key_link(
+        conn=db_connection,
+        node=intermediate,
+        environment=SumUpEnvironment.sandbox,
+        merchant_code="SANDBOX-MERCHANT-B",
+        merchant_name="Sandbox Merchant B",
+        api_key="sandbox-key-b",
     )
 
 

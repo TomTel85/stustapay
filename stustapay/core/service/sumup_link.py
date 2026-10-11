@@ -123,8 +123,9 @@ async def ensure_sumup_link_can_be_replaced(
     merchant_code: str,
 ) -> None:
     current_link = await fetch_direct_node_sumup_link(conn=conn, node_id=node_id, environment=environment)
-    if current_link is None or current_link.merchant_code == merchant_code:
+    if current_link is not None and current_link.merchant_code == merchant_code:
         return
+    # A first direct link can also replace an inherited or legacy merchant.
     if await count_pending_orders_for_node(conn=conn, node_id=node_id, environment=environment):
         raise InvalidArgument(f"Cannot replace the {environment.value} SumUp merchant while payments are pending")
 

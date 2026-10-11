@@ -328,7 +328,9 @@ class SumupService(Service[Config]):
 
     @with_db_transaction(read_only=True)
     async def _resolve_worker_sumup_access(self, *, conn: Connection, pending_order: PendingOrder):
-        return await resolve_sumup_access(conn=conn, node_id=pending_order.node_id)
+        return await resolve_sumup_access(
+            conn=conn, node_id=pending_order.node_id, environment=pending_order.sumup_environment
+        )
 
     @with_db_transaction
     async def _reconcile_booked_pending_order(self, *, conn: Connection, pending_order: PendingOrder) -> bool:
