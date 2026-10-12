@@ -2,6 +2,7 @@ import { type CustomerPortalApiConfig } from "@/api";
 import { RootState, selectAuthToken } from "@/store";
 import type { BaseQueryApi, BaseQueryFn, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query/react";
 import { fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { z } from "zod";
 
 const siteHost = window.location.host;
 const siteProtocol = window.location.protocol;
@@ -34,12 +35,22 @@ const generateConfig = (publicApiConfig: CustomerPortalApiConfig): Config => {
   };
 };
 
+const publicConfigSchema = z
+  .object({
+    node_id: z.number().int(),
+    currency_identifier: z.string().min(1),
+    translation_texts: z.record(z.string(), z.record(z.string(), z.string())),
+  })
+  .passthrough();
+
 const fetchPublicCustomerApiConfig = async (): Promise<CustomerPortalApiConfig> => {
   const baseUrl = encodeURIComponent(window.location.origin);
   const resp = await fetch(`${customerApiBaseUrl}/config?base_url=${baseUrl}`);
-  const respJson = await resp.json();
-  // TODO: validation
-  return respJson as CustomerPortalApiConfig;
+  if (!resp.ok) {
+    throw new Error(`Customer portal configuration request failed (${resp.status})`);
+  }
+  const respJson: unknown = await resp.json();
+  return publicConfigSchema.parse(respJson) as CustomerPortalApiConfig;
 };
 
 export const fetchConfig = async (): Promise<Config> => {

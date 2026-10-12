@@ -5,7 +5,14 @@ from fastapi import APIRouter, Depends
 from stustapay.core.http.auth_user import CurrentAuthToken
 from stustapay.core.http.context import Context, ContextConfigService, ContextMailService, get_context
 from stustapay.core.http.normalize_data import NormalizedList, normalize_list
-from stustapay.core.schema.config import ConfigEntry, GlobalEmailConfig, GlobalSumUpConfig, PublicConfig
+from stustapay.core.schema.config import (
+    ConfigEntry,
+    GlobalEmailConfig,
+    GlobalFaqConfig,
+    GlobalPrivacyPolicyConfig,
+    GlobalSumUpConfig,
+    PublicConfig,
+)
 
 router = APIRouter(
     prefix="",
@@ -78,3 +85,31 @@ async def send_global_email_test(
     mail_service: ContextMailService,
 ):
     return await config_service.send_global_email_test(token=token, mail_service=mail_service)
+
+
+@router.get("/config/faq", response_model=GlobalFaqConfig)
+async def get_global_faq_config(token: CurrentAuthToken, config_service: ContextConfigService):
+    return await config_service.get_global_faq_config(token=token)
+
+
+@router.post("/config/faq", response_model=GlobalFaqConfig)
+async def update_global_faq_config(
+    faq_config: GlobalFaqConfig,
+    token: CurrentAuthToken,
+    config_service: ContextConfigService,
+):
+    return await config_service.update_global_faq_config(token=token, config=faq_config)
+
+
+@router.get("/config/privacy-policy", response_model=GlobalPrivacyPolicyConfig)
+async def get_global_privacy_policy_config(token: CurrentAuthToken, config_service: ContextConfigService):
+    return await config_service.get_global_privacy_policy_config(token=token)
+
+
+@router.post("/config/privacy-policy", response_model=GlobalPrivacyPolicyConfig)
+async def update_global_privacy_policy_config(
+    privacy_policy_config: GlobalPrivacyPolicyConfig,
+    token: CurrentAuthToken,
+    config_service: ContextConfigService,
+):
+    return await config_service.update_global_privacy_policy_config(token=token, config=privacy_policy_config)

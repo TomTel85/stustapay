@@ -121,7 +121,7 @@ async def _configure_event_sumup(conn: Connection, node_id: int, customer_portal
         event_id,
         customer_portal_url,
         f"{customer_portal_url}/about",
-        f"{customer_portal_url}/privacy",
+        "",
         "sup_afk_test_affiliate",
         f"test_api_key_{merchant_code}",
         merchant_code,
@@ -483,7 +483,9 @@ async def test_multi_event_sumup_processing_stays_event_scoped(
     with pytest.raises(InvalidArgument):
         await till_service.get_customer(token=event_b.terminal_token, customer_tag_uid=event_b.ticket_tag.uid)
 
-    customer_c = await till_service.get_customer(token=event_c.terminal_token, customer_tag_uid=event_c.customer_tag.uid)
+    customer_c = await till_service.get_customer(
+        token=event_c.terminal_token, customer_tag_uid=event_c.customer_tag.uid
+    )
     assert customer_c.balance == START_BALANCE
 
     pending_order_a = await fetch_order_by_uuid(conn=db_connection, uuid=pending_topup_a.uuid)
@@ -496,20 +498,29 @@ async def test_multi_event_sumup_processing_stays_event_scoped(
     assert pending_order_b.status.value == "cancelled"
     assert pending_order_c.status.value == "pending"
 
-    assert await db_connection.fetchval(
-        "select count(*) from ordr where uuid = $1 and till_id = $2",
-        pending_topup_a.uuid,
-        pending_order_a.till_id,
-    ) == 1
-    assert await db_connection.fetchval(
-        "select count(*) from ordr where uuid = $1 and till_id = $2",
-        pending_ticket_b.uuid,
-        pending_order_b.till_id,
-    ) == 0
-    assert await db_connection.fetchval(
-        "select count(*) from ordr where uuid = $1 and till_id = $2",
-        pending_topup_c.uuid,
-        pending_order_c.till_id,
-    ) == 0
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from ordr where uuid = $1 and till_id = $2",
+            pending_topup_a.uuid,
+            pending_order_a.till_id,
+        )
+        == 1
+    )
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from ordr where uuid = $1 and till_id = $2",
+            pending_ticket_b.uuid,
+            pending_order_b.till_id,
+        )
+        == 0
+    )
+    assert (
+        await db_connection.fetchval(
+            "select count(*) from ordr where uuid = $1 and till_id = $2",
+            pending_topup_c.uuid,
+            pending_order_c.till_id,
+        )
+        == 0
+    )
 
     assert set(seen_merchants) == {"MERCHANT_A", "MERCHANT_B", "MERCHANT_C"}

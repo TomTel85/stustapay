@@ -3977,6 +3977,158 @@
         ]
       }
     },
+    "/config/faq": {
+      "get": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Get Global Faq Config",
+        "operationId": "get_global_faq_config",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalFaqConfig"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Update Global Faq Config",
+        "operationId": "update_global_faq_config",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GlobalFaqConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalFaqConfig"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/config/privacy-policy": {
+      "get": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Get Global Privacy Policy Config",
+        "operationId": "get_global_privacy_policy_config",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalPrivacyPolicyConfig"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Update Global Privacy Policy Config",
+        "operationId": "update_global_privacy_policy_config",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GlobalPrivacyPolicyConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalPrivacyPolicyConfig"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/system-accounts": {
       "get": {
         "tags": [
@@ -16407,6 +16559,40 @@
           "email_enabled"
         ],
         "title": "GlobalEmailConfig"
+      },
+      "GlobalFaqConfig": {
+        "properties": {
+          "faq_texts": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/Language"
+            },
+            "type": "object",
+            "title": "Faq Texts",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "title": "GlobalFaqConfig"
+      },
+      "GlobalPrivacyPolicyConfig": {
+        "properties": {
+          "privacy_policy_texts": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/Language"
+            },
+            "type": "object",
+            "title": "Privacy Policy Texts",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "title": "GlobalPrivacyPolicyConfig"
       },
       "GlobalSumUpConfig": {
         "properties": {

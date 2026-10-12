@@ -15,13 +15,16 @@ from sftkit.error import (
     Unauthorized,
 )
 
+from stustapay.core.schema.config import GlobalFaqConfig, GlobalPrivacyPolicyConfig
 from stustapay.core.schema.customer import Customer, OrderWithBon
+from stustapay.core.schema.language import Language
 from stustapay.core.schema.order import Order, OrderType, PaymentMethod, PendingOrderStatus
 from stustapay.core.schema.payout import NewPayoutRun
 from stustapay.core.schema.product import NewProduct, Product
 from stustapay.core.schema.tax_rate import TaxRate
 from stustapay.core.schema.till import Till
 from stustapay.core.schema.tree import ROOT_NODE_ID, NewEvent, Node
+from stustapay.core.service.config import ConfigService
 from stustapay.core.service.customer.common import fetch_customer
 from stustapay.core.service.customer.customer import (
     MAX_ACTIVE_SHARED_TOPUP_LINKS_PER_CUSTOMER,
@@ -1606,3 +1609,82 @@ async def test_update_customer_info_blocked_only_for_active_payout_runs(
     assert result.iban == updated_bank_data.iban
     assert result.account_name == updated_bank_data.account_name
     assert result.email == updated_bank_data.email
+
+
+async def test_portal_uses_global_faq_and_preserves_event_texts(
+    customer_service: CustomerService,
+    config_service: ConfigService,
+    global_admin_token: str,
+    db_connection: Connection,
+    event_node: Node,
+):
+    assert event_node.event is not None
+    base_url = f"http://localhost:4300/{secrets.token_hex(8)}"
+    await db_connection.execute(
+        "update event set customer_portal_url = $1 where id = $2", base_url, event_node.event.id
+    )
+    await db_connection.execute(
+        "insert into translation_text (event_id, lang_code, type, content) "
+        "values ($1, 'en-US', 'faq', 'Local FAQ'), ($1, 'en-US', 'agb', 'Event terms') "
+        "on conflict (event_id, lang_code, type) do update set content = excluded.content",
+        event_node.event.id,
+    )
+    before = await customer_service.get_api_config(base_url=base_url)
+    await config_service.update_global_faq_config(
+        token=global_admin_token,
+        config=GlobalFaqConfig(faq_texts={Language.en_US: "Global FAQ", Language.de_DE: "Globale Fragen"}),
+    )
+    config = await customer_service.get_api_config(base_url=base_url)
+    assert config.translation_texts[Language.en_US]["agb"] == "Event terms"
+    assert config.translation_texts[Language.en_US]["faq"] == "Global FAQ"
+    assert config.translation_texts[Language.de_DE]["faq"] == "Globale Fragen"
+    for language, texts in before.translation_texts.items():
+        for key, value in texts.items():
+            if key != "faq":
+                assert config.translation_texts[language][key] == value
+
+    await config_service.update_global_faq_config(token=global_admin_token, config=GlobalFaqConfig())
+    cleared = await customer_service.get_api_config(base_url=base_url)
+    assert cleared.translation_texts[Language.en_US]["faq"] == ""
+
+
+async def test_portal_uses_global_privacy_policy_and_preserves_event_texts(
+    customer_service: CustomerService,
+    config_service: ConfigService,
+    global_admin_token: str,
+    db_connection: Connection,
+    event_node: Node,
+):
+    assert event_node.event is not None
+    base_url = f"http://localhost:4300/{secrets.token_hex(8)}"
+    await db_connection.execute(
+        "update event set customer_portal_url = $1 where id = $2", base_url, event_node.event.id
+    )
+    await db_connection.execute(
+        "insert into translation_text (event_id, lang_code, type, content) "
+        "values ($1, 'en-US', 'agb', 'Event terms') "
+        "on conflict (event_id, lang_code, type) do update set content = excluded.content",
+        event_node.event.id,
+    )
+    before = await customer_service.get_api_config(base_url=base_url)
+    await config_service.update_global_privacy_policy_config(
+        token=global_admin_token,
+        config=GlobalPrivacyPolicyConfig(
+            privacy_policy_texts={Language.en_US: "Global policy", Language.de_DE: "Globale Erklärung"}
+        ),
+    )
+    config = await customer_service.get_api_config(base_url=base_url)
+    assert config.translation_texts[Language.en_US]["agb"] == "Event terms"
+    assert config.data_privacy_url == f"{base_url}/datenschutz"
+    assert config.translation_texts[Language.en_US]["privacy_policy"] == "Global policy"
+    assert config.translation_texts[Language.de_DE]["privacy_policy"] == "Globale Erklärung"
+    for language, texts in before.translation_texts.items():
+        for key, value in texts.items():
+            if key != "privacy_policy":
+                assert config.translation_texts[language][key] == value
+
+    await config_service.update_global_privacy_policy_config(
+        token=global_admin_token, config=GlobalPrivacyPolicyConfig()
+    )
+    cleared = await customer_service.get_api_config(base_url=base_url)
+    assert cleared.translation_texts[Language.en_US]["privacy_policy"] == ""

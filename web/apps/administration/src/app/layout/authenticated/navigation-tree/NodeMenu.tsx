@@ -125,9 +125,8 @@ export const nodeMenuEntryDefinitions: NodeMenuItem[] = [
     route: (node) => MdmRoutes.list(node.id),
     label: i18n.t("mdm.headwindDevices"),
     icon: AndroidIcon,
-    requiresOneOfObjectType: ["terminal"],
     requiredPrivileges: ["node_administration"],
-    additionalRequirements: (node) => node.event != null || node.event_node_id != null,
+    additionalRequirements: (node) => node.id === 0,
   },
   {
     route: (node) => TillRoutes.list(node.id),

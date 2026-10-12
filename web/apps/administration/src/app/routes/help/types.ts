@@ -4,7 +4,7 @@ export interface HelpLink {
   to?: string;
   buildTo?: (nodeId: number) => string;
   requiresNodeContext?: boolean;
-  context?: "current" | "event";
+  context?: "current" | "event" | "root";
 }
 
 export interface HelpSection {

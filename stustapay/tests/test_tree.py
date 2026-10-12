@@ -1522,3 +1522,21 @@ def test_update_event_wifi_requires_both_fields():
             pretix_api_key=None,
             wifi_ssid="festival-wifi",
         )
+
+
+async def test_event_updates_do_not_store_privacy_policy(
+    tree_service: TreeService, global_admin_token: str, event_node: Node, db_connection: Connection
+):
+    event_settings = await fetch_restricted_event_settings_for_node(conn=db_connection, node_id=event_node.id)
+    event = NewEvent(
+        name=event_node.name,
+        description=event_node.description,
+        **event_settings.model_dump(exclude={"id", "languages", "sumup_oauth_refresh_token"}),
+    )
+    event.customer_portal_data_privacy_url = "https://event.example/privacy"
+    event.translation_texts = {Language.en_US: {"privacy_policy": "Local policy", "agb": "Event terms"}}
+    updated = await tree_service.update_event(token=global_admin_token, node_id=event_node.id, event=event)
+    assert updated.event is not None
+    assert updated.event.customer_portal_data_privacy_url == ""
+    assert updated.event.translation_texts[Language.en_US] == {"agb": "Event terms"}
+    assert await db_connection.fetchval("select count(*) from translation_text where type = 'privacy_policy'") == 0

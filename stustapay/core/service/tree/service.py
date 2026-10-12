@@ -128,7 +128,7 @@ def _build_event_db_values(event: NewEvent, available_columns: set[str]) -> list
         ("sepa_allowed_country_codes", event.sepa_allowed_country_codes),
         ("customer_portal_url", event.customer_portal_url),
         ("customer_portal_about_page_url", event.customer_portal_about_page_url),
-        ("customer_portal_data_privacy_url", event.customer_portal_data_privacy_url),
+        ("customer_portal_data_privacy_url", ""),
         ("sumup_payment_enabled", event.sumup_payment_enabled),
         ("tap_to_pay_enabled", event.tap_to_pay_enabled),
         ("sumup_environment", event.sumup_environment.value),
@@ -345,6 +345,8 @@ async def _create_system_products(conn: Connection, node_id: int):
 async def _sync_optional_event_metadata(conn: Connection, event_id: int, event: NewEvent):
     for lang_code, translation in event.translation_texts.items():
         for text_type, content in translation.items():
+            if text_type == "privacy_policy":
+                continue  # Privacy policies are managed exclusively in global configuration.
             await conn.execute(
                 "insert into translation_text (event_id, lang_code, type, content) values ($1, $2, $3, $4)",
                 event_id,

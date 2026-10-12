@@ -43,6 +43,7 @@ from stustapay.core.service.common.decorators import (
     requires_terminal,
     requires_user,
 )
+from stustapay.core.service.common.error import NodeIsReadOnly
 from stustapay.core.service.sumup_link import resolve_terminal_sumup_access
 from stustapay.core.service.till.common import assign_cash_register_to_active_user_till
 from stustapay.core.service.till.register import assign_cash_register_admin
@@ -91,6 +92,14 @@ async def _fetch_terminal(conn: Connection, node: Node, terminal_id: int) -> Ter
         scope_node_ids,
         node.id,
     )
+
+
+async def _require_headwind_node_writable(conn: Connection, node_id: int) -> None:
+    owner = await fetch_node(conn=conn, node_id=node_id)
+    if owner is None:
+        raise NotFound(element_type="node", element_id=node_id)
+    if owner.read_only:
+        raise NodeIsReadOnly(f"{owner.name} is read only")
 
 
 async def _ensure_entry_area(conn: Connection, node: Node, entry_area_id: int) -> EntryArea:
@@ -1109,6 +1118,9 @@ class TerminalService(Service[Config]):
 
     # region Headwind device mapping helpers
 
+    # Headwind manages existing terminals throughout the selected subtree. Its
+    # scope may be the root, where creating terminal objects is forbidden.
+
     @with_db_transaction(read_only=True)
     @requires_node()
     @requires_user([Privilege.node_administration])
@@ -1164,7 +1176,7 @@ class TerminalService(Service[Config]):
         )
 
     @with_db_transaction
-    @requires_node(object_types=[ObjectType.terminal])
+    @requires_node()
     @requires_user([Privilege.node_administration])
     async def upsert_headwind_mapping(
         self,
@@ -1181,6 +1193,7 @@ class TerminalService(Service[Config]):
         terminal = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         if terminal is None:
             raise NotFound(element_type="terminal", element_id=terminal_id)
+        await _require_headwind_node_writable(conn, terminal.node_id)
 
         normalized_device_id = str(headwind_device_id)
 
@@ -1247,7 +1260,7 @@ class TerminalService(Service[Config]):
         )
 
     @with_db_transaction
-    @requires_node(object_types=[ObjectType.terminal])
+    @requires_node()
     @requires_user([Privilege.node_administration])
     async def delete_headwind_mapping(self, *, conn: Connection, node: Node, terminal_id: int) -> bool:
         scope_node_ids = _terminal_scope_node_ids(node)
@@ -1263,6 +1276,7 @@ class TerminalService(Service[Config]):
         )
         if mapping is None:
             return False
+        await _require_headwind_node_writable(conn, mapping.node_id)
         deleted = await conn.fetchrow(
             "delete from terminal_device_mapping where id = $1 returning id",
             mapping.id,
@@ -1270,7 +1284,7 @@ class TerminalService(Service[Config]):
         return deleted is not None
 
     @with_db_transaction
-    @requires_node(object_types=[ObjectType.terminal])
+    @requires_node()
     @requires_user([Privilege.node_administration])
     async def issue_headwind_terminal_token(
         self, *, conn: Connection, node: Node, terminal_id: int
@@ -1278,6 +1292,7 @@ class TerminalService(Service[Config]):
         terminal = await _fetch_terminal(conn=conn, node=node, terminal_id=terminal_id)
         if terminal is None:
             raise NotFound(element_type="terminal", element_id=terminal_id)
+        await _require_headwind_node_writable(conn, terminal.node_id)
 
         session_uuid = await conn.fetchval(
             "update terminal set session_uuid = gen_random_uuid(), registration_uuid = null "
@@ -1293,7 +1308,7 @@ class TerminalService(Service[Config]):
         return token, terminal
 
     @with_db_transaction
-    @requires_node(object_types=[ObjectType.terminal])
+    @requires_node()
     @requires_user([Privilege.node_administration])
     async def record_headwind_push_result(
         self,
@@ -1317,6 +1332,7 @@ class TerminalService(Service[Config]):
         )
         if mapping is None:
             raise NotFound(element_type="headwind_mapping", element_id=mapping_id)
+        await _require_headwind_node_writable(conn, mapping.node_id)
         return await conn.fetch_one(
             HeadwindDeviceMapping,
             "update terminal_device_mapping "
@@ -1332,7 +1348,7 @@ class TerminalService(Service[Config]):
         )
 
     @with_db_transaction
-    @requires_node(object_types=[ObjectType.terminal])
+    @requires_node()
     @requires_user([Privilege.node_administration])
     async def record_headwind_wifi_push_result(
         self,
@@ -1356,6 +1372,7 @@ class TerminalService(Service[Config]):
         )
         if mapping is None:
             raise NotFound(element_type="headwind_mapping", element_id=mapping_id)
+        await _require_headwind_node_writable(conn, mapping.node_id)
         return await conn.fetch_one(
             HeadwindDeviceMapping,
             "update terminal_device_mapping "

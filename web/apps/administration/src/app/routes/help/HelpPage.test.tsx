@@ -1,5 +1,5 @@
 import * as React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { TextDecoder, TextEncoder } from "util";
 
 (globalThis as typeof globalThis & { TextEncoder: typeof TextEncoder; TextDecoder: typeof TextDecoder }).TextEncoder =
@@ -87,8 +87,10 @@ jest.mock("react-i18next", () => ({
   }),
 }));
 
-const { MemoryRouter } = require("react-router-dom");
+const { MemoryRouter, useLocation } = require("react-router-dom");
 const { HelpPage } = require("./HelpPage");
+
+const CurrentPath = () => <span data-testid="current-path">{useLocation().pathname}</span>;
 
 describe("HelpPage", () => {
   beforeEach(() => {
@@ -122,5 +124,20 @@ describe("HelpPage", () => {
     expect(screen.getAllByText("Getting started and navigation")).toHaveLength(2);
     expect(screen.getAllByText("Available after selecting an event or node.").length).toBeGreaterThan(0);
     expect((screen.getByRole("button", { name: "Open current event" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  test.each(["/help?nodeId=42", "/help"])("links Headwind management to root from %s", (initialPath) => {
+    mockedLanguage = "en-US";
+    render(
+      <MemoryRouter initialEntries={[initialPath]}>
+        <HelpPage />
+        <CurrentPath />
+      </MemoryRouter>
+    );
+
+    const headwindLink = screen.getByRole("button", { name: "Headwind / MDM" });
+    expect((headwindLink as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(headwindLink);
+    expect(screen.getByTestId("current-path").textContent).toBe("/node/0/mdm/devices");
   });
 });

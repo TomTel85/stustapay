@@ -16,7 +16,6 @@ export const CustomerPortalSettingsSchema = z.object({
   customer_portal_url: z.string().url(),
   customer_portal_contact_email: z.string().email(),
   customer_portal_about_page_url: z.string().url(),
-  customer_portal_data_privacy_url: z.string().url(),
   donation_enabled: z.boolean(),
   customer_portal_primary_color: z.string().optional().nullable(),
   customer_portal_secondary_color: z.string().optional().nullable(),
@@ -237,11 +236,6 @@ export const CustomerPortalSettingsForm: React.FC<FormikProps<CustomerPortalSett
         name="customer_portal_about_page_url"
         formik={formik}
       />
-      <FormTextField
-        label={t("settings.customerPortal.data_privacy_url")}
-        name="customer_portal_data_privacy_url"
-        formik={formik}
-      />
 
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Typography variant="subtitle1" gutterBottom fontWeight="medium">
@@ -332,7 +326,6 @@ export const TabCustomerPortal: React.FC<{ nodeId: number; eventSettings: Restri
     customer_portal_url: eventSettings.customer_portal_url,
     customer_portal_contact_email: eventSettings.customer_portal_contact_email,
     customer_portal_about_page_url: eventSettings.customer_portal_about_page_url,
-    customer_portal_data_privacy_url: eventSettings.customer_portal_data_privacy_url,
     donation_enabled: eventSettings.donation_enabled ?? true,
     customer_portal_primary_color: eventSettings.customer_portal_primary_color || "#3A0CA3",
     customer_portal_secondary_color: eventSettings.customer_portal_secondary_color || "#4CC9F0",

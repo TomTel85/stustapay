@@ -14,6 +14,7 @@ from stustapay.administration.service import (
 from stustapay.core.http.auth_user import CurrentAuthToken
 from stustapay.core.http.context import Context, ContextTerminalService, get_context
 from stustapay.core.schema.terminal import HeadwindDeviceMappingWithTerminal
+from stustapay.core.schema.tree import ROOT_NODE_ID
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,18 @@ def _require_headwind_enabled(client: HeadwindClient):
             detail="Headwind integration is disabled in the configuration",
         )
     return client
+
+
+async def _require_root_management(
+    *, token: str, terminal_service: ContextTerminalService, node_id: int
+) -> list[HeadwindDeviceMappingWithTerminal]:
+    if node_id != ROOT_NODE_ID:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Headwind management is only available at the root node",
+        )
+    # Authorize at the root before accessing the external device inventory or mutating mappings.
+    return await terminal_service.list_headwind_mappings(token=token, node_id=node_id)
 
 
 def _normalize_device_id(value: int | str) -> str:
@@ -132,6 +145,7 @@ async def list_headwind_devices(
     page_size: int = Query(100, ge=1, le=500),
     search: str | None = None,
 ):
+    mappings = await _require_root_management(token=token, terminal_service=terminal_service, node_id=node_id)
     client = _require_headwind_enabled(headwind_client)
 
     try:
@@ -142,8 +156,7 @@ async def list_headwind_devices(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Headwind MDM error: {e.msg}",
         ) from e
-    
-    mappings = await terminal_service.list_headwind_mappings(token=token, node_id=node_id)
+
     mapping_by_device_id = {_normalize_device_id(m.headwind_device_id): m for m in mappings}
 
     device_with_mapping: list[HeadwindDeviceWithMapping] = []
@@ -162,6 +175,7 @@ async def create_or_update_mapping(
     headwind_client: HeadwindClient = Depends(get_headwind_client_dep),
     context: Context = Depends(get_context),
 ):
+    await _require_root_management(token=token, terminal_service=terminal_service, node_id=node_id)
     client = _require_headwind_enabled(headwind_client)
 
     mapping = await terminal_service.upsert_headwind_mapping(
@@ -181,7 +195,7 @@ async def create_or_update_mapping(
     custom3_payload = await _build_custom3_for_terminal(
         context=context,
         token=token,
-        node_id=node_id,
+        node_id=terminal.node_id,
         terminal_name=terminal.name,
     )
 
@@ -220,6 +234,7 @@ async def delete_mapping(
     terminal_service: ContextTerminalService,
     node_id: int,
 ):
+    await _require_root_management(token=token, terminal_service=terminal_service, node_id=node_id)
     deleted = await terminal_service.delete_headwind_mapping(token=token, node_id=node_id, terminal_id=terminal_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mapping not found")
@@ -237,6 +252,7 @@ async def refresh_mapping_token(
     headwind_client: HeadwindClient = Depends(get_headwind_client_dep),
     context: Context = Depends(get_context),
 ):
+    await _require_root_management(token=token, terminal_service=terminal_service, node_id=node_id)
     client = _require_headwind_enabled(headwind_client)
 
     mapping = await terminal_service.get_headwind_mapping_with_terminal(
@@ -251,7 +267,7 @@ async def refresh_mapping_token(
     custom3_payload = await _build_custom3_for_terminal(
         context=context,
         token=token,
-        node_id=node_id,
+        node_id=terminal.node_id,
         terminal_name=terminal.name,
     )
 

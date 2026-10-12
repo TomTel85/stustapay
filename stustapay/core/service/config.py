@@ -7,7 +7,14 @@ from sftkit.error import InvalidArgument, NotFound
 from sftkit.service import Service, with_db_transaction
 
 from stustapay.core.config import Config
-from stustapay.core.schema.config import ConfigEntry, GlobalEmailConfig, GlobalSumUpConfig, PublicConfig
+from stustapay.core.schema.config import (
+    ConfigEntry,
+    GlobalEmailConfig,
+    GlobalFaqConfig,
+    GlobalPrivacyPolicyConfig,
+    GlobalSumUpConfig,
+    PublicConfig,
+)
 from stustapay.core.schema.language import Language
 from stustapay.core.schema.tree import ROOT_NODE_ID
 from stustapay.core.schema.user import CurrentUser, Privilege
@@ -37,6 +44,7 @@ GLOBAL_SUMUP_OAUTH_CLIENT_SECRET_KEY = "sumup.oauth_client_secret"
 
 def _localized_invitation_key(language: Language, field: str) -> str:
     return f"mail.invitation.{language.value}.{field}"
+
 
 GLOBAL_EMAIL_CONFIG_KEYS = [
     GLOBAL_EMAIL_ENABLED_KEY,
@@ -157,8 +165,32 @@ def render_bilingual_invitation_html(config: GlobalEmailConfig, context: dict[st
             f"{body}"
             "</div>"
         )
-    content = '<div>' + '<div style="border-top:1px solid #E6E6E6;margin:0 0 32px 0;"></div>'.join(sections) + "</div>"
+    content = "<div>" + '<div style="border-top:1px solid #E6E6E6;margin:0 0 32px 0;"></div>'.join(sections) + "</div>"
     return render_email_html(content, subject)
+
+
+async def fetch_global_faq_config(*, conn: Connection) -> GlobalFaqConfig:
+    rows = await conn.fetch(
+        "select key, value from config where key = any($1)",
+        [f"customer_portal.faq.{language.value}" for language in Language],
+    )
+    values = {row["key"]: row["value"] for row in rows}
+    return GlobalFaqConfig(
+        faq_texts={language: values.get(f"customer_portal.faq.{language.value}") or "" for language in Language}
+    )
+
+
+async def fetch_global_privacy_policy_config(*, conn: Connection) -> GlobalPrivacyPolicyConfig:
+    rows = await conn.fetch(
+        "select key, value from config where key = any($1)",
+        [f"customer_portal.privacy_policy.{language.value}" for language in Language],
+    )
+    values = {row["key"]: row["value"] for row in rows}
+    return GlobalPrivacyPolicyConfig(
+        privacy_policy_texts={
+            language: values.get(f"customer_portal.privacy_policy.{language.value}") or "" for language in Language
+        }
+    )
 
 
 class ConfigService(Service[Config]):
@@ -187,6 +219,44 @@ class ConfigService(Service[Config]):
         if fetched_entry is None:
             raise NotFound("config", entry.key)
         return fetched_entry
+
+    @with_db_transaction(read_only=True)
+    @requires_root_user(privileges=[Privilege.node_administration])
+    async def get_global_faq_config(self, *, conn: Connection) -> GlobalFaqConfig:
+        return await fetch_global_faq_config(conn=conn)
+
+    @with_db_transaction
+    @requires_root_user(privileges=[Privilege.node_administration])
+    async def update_global_faq_config(self, *, conn: Connection, config: GlobalFaqConfig) -> GlobalFaqConfig:
+        for language in Language:
+            await conn.execute(
+                "insert into config (key, value, node_id) values ($1, $2, $3) "
+                "on conflict (key) do update set value = excluded.value, node_id = excluded.node_id",
+                f"customer_portal.faq.{language.value}",
+                config.faq_texts.get(language, ""),
+                ROOT_NODE_ID,
+            )
+        return await fetch_global_faq_config(conn=conn)
+
+    @with_db_transaction(read_only=True)
+    @requires_root_user(privileges=[Privilege.node_administration])
+    async def get_global_privacy_policy_config(self, *, conn: Connection) -> GlobalPrivacyPolicyConfig:
+        return await fetch_global_privacy_policy_config(conn=conn)
+
+    @with_db_transaction
+    @requires_root_user(privileges=[Privilege.node_administration])
+    async def update_global_privacy_policy_config(
+        self, *, conn: Connection, config: GlobalPrivacyPolicyConfig
+    ) -> GlobalPrivacyPolicyConfig:
+        for language in Language:
+            await conn.execute(
+                "insert into config (key, value, node_id) values ($1, $2, $3) "
+                "on conflict (key) do update set value = excluded.value, node_id = excluded.node_id",
+                f"customer_portal.privacy_policy.{language.value}",
+                config.privacy_policy_texts.get(language, ""),
+                ROOT_NODE_ID,
+            )
+        return await fetch_global_privacy_policy_config(conn=conn)
 
     @staticmethod
     def _validate_global_email_config(config: GlobalEmailConfig) -> None:

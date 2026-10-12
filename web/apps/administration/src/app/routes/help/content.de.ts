@@ -37,7 +37,7 @@ Nutze die linke Baum-Navigation als Ausgangspunkt für alle eventbezogenen Aufga
 Die Übersichts- und Einstellungsseiten sind der richtige Einstieg für neue Events oder Strukturänderungen.
 
 1. Öffne zuerst die **Übersicht**, um den aktuellen Status des Knotens zu prüfen.
-2. Wechsle danach in **Einstellungen**, um allgemeine Eventdaten, E-Mail-Texte, FAQ, Bon- oder Customer-Portal-Inhalte zu pflegen.
+2. Wechsle danach in **Einstellungen**, um allgemeine Eventdaten, E-Mail-Texte, Bon- oder Customer-Portal-Inhalte zu pflegen. Die gemeinsamen FAQs und die Datenschutzerklärung bearbeitest du in den **globalen Einstellungen** des Wurzelknotens.
 3. Nutze **Statistiken**, wenn du prüfen willst, ob sich Änderungen bereits in Buchungen oder Besucherzahlen auswirken.
 
 Typische Aufgaben in diesem Bereich:
@@ -314,7 +314,7 @@ Diese Bereiche sind besonders wichtig, wenn Hardware, externe Dienste oder Einla
 - **Entry** verwaltet Bereiche, Gruppen und Logs für den Zutritt.
 - **TSE** verwaltet Fiskalisierung und technische Sicherheitseinrichtungen.
 - **SumUp** zeigt Transaktionen und Checkouts, sofern am Event aktiviert.
-- **Headwind / MDM** hilft bei Android-Geräten und deren Status.
+- **Headwind / MDM** verwaltet Android-Geräte über alle Events hinweg auf dem Root-Knoten.
 
 Bei Problemen prüfst du am besten erst, ob du im richtigen Event bist und ob die jeweilige Integration dort überhaupt aktiviert ist.
 
@@ -357,10 +357,10 @@ Empfohlener **Einlass-Workflow**:
         },
         {
           label: "Headwind / MDM",
-          description: "Geräteverwaltung für Android-Terminals",
+          description: "Android-Terminals für alle Events zentral auf dem Root-Knoten verwalten",
           buildTo: helpLinkTargets.mdm,
           requiresNodeContext: true,
-          context: "event",
+          context: "root",
         },
       ],
     },

@@ -28,6 +28,15 @@ const createNode = (privileges_at_node: string[]): NodeSeenByUser =>
     computed_forbidden_objects_at_node: [],
   }) as NodeSeenByUser;
 
+const createRootNode = (privileges_at_node: string[]): NodeSeenByUser =>
+  ({
+    ...createNode(privileges_at_node),
+    id: 0,
+    event: null,
+    event_node_id: null,
+    computed_forbidden_objects_at_node: ["terminal"],
+  }) as NodeSeenByUser;
+
 const findEntryByRoute = (path: string) => {
   const node = createNode(["node_administration", "user_management", "entry_management"]);
   const entry = nodeMenuEntryDefinitions.find((menuEntry) => menuEntry.route(node) === path);
@@ -79,6 +88,17 @@ describe("isMenuEntryValidAtNode", () => {
     const node = createNode(["entry_management"]);
 
     expect(isMenuEntryValidAtNode(findEntryByRoute("/node/7/entry/areas"), node)).toBe(true);
+  });
+
+  test("shows Headwind management only at the root node", () => {
+    const headwindEntry = nodeMenuEntryDefinitions.find((entry) => entry.label === "mdm.headwindDevices");
+    if (headwindEntry == null) {
+      throw new Error("Could not find Headwind menu entry");
+    }
+
+    expect(isMenuEntryValidAtNode(headwindEntry, createRootNode(["node_administration"]))).toBe(true);
+    expect(isMenuEntryValidAtNode(headwindEntry, createRootNode([]))).toBe(false);
+    expect(isMenuEntryValidAtNode(headwindEntry, createNode(["node_administration"]))).toBe(false);
   });
 
   test("shows customers entry when customer management is granted", () => {

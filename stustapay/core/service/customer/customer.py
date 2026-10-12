@@ -27,7 +27,7 @@ from stustapay.core.schema.customer import (
 from stustapay.core.schema.language import Language
 from stustapay.core.service.auth import AuthService, CustomerTokenMetadata
 from stustapay.core.service.common.decorators import requires_customer
-from stustapay.core.service.config import ConfigService
+from stustapay.core.service.config import ConfigService, fetch_global_faq_config, fetch_global_privacy_policy_config
 from stustapay.core.service.customer.common import (
     fetch_customer_portal_event_node_id,
     fetch_shared_topup_link,
@@ -73,7 +73,6 @@ class CustomerPortalApiConfig(BaseModel):
     secondary_color: Optional[str] = None
     background_color: Optional[str] = None
     font_color: Optional[str] = None
-
 
 
 class CustomerLoginSuccess(BaseModel):
@@ -514,9 +513,7 @@ class CustomerService(Service[Config]):
                     "message": message,
                     "html_message": render_plain_text_payout_html(message, subject),
                     "from_addr": (
-                        formataddr((f"{event_node.name} Auszahlung", payout_sender))
-                        if payout_sender
-                        else None
+                        formataddr((f"{event_node.name} Auszahlung", payout_sender)) if payout_sender else None
                     ),
                     "to_addr": updated_customer.email,
                     "node_id": updated_customer.node_id,
@@ -569,11 +566,11 @@ class CustomerService(Service[Config]):
         assert event_node is not None
         if event_node.event is None:
             raise InvalidArgument("Invalid event node")
-        
+
         # Check if donations are enabled
         if not event_node.event.donation_enabled:
             raise InvalidArgument("Donations are currently disabled")
-        
+
         await self.check_payout_run(conn, current_customer)
         await conn.execute(
             "update customer_info set donation=null, donate_all=true, has_entered_info=true "
@@ -589,11 +586,11 @@ class CustomerService(Service[Config]):
         node = await fetch_event_node_for_node(conn=conn, node_id=node_id)
         assert node is not None
         assert node.event is not None
-        
+
         # Check if banner image exists
         has_banner = await conn.fetchval(
             "select exists(select 1 from event e join node n on n.event_id = e.id where n.id = $1 and e.banner_image is not null)",
-            node_id
+            node_id,
         )
         banner_image_url = f"/api/banner/{node_id}" if has_banner else None
         sumup_topup_enabled = self.config.core.sumup_enabled and node.event.sumup_topup_enabled
@@ -607,14 +604,25 @@ class CustomerService(Service[Config]):
             except Exception:  # pylint: disable=broad-except
                 self.logger.exception("Unexpected error while loading SumUp payment methods for node %s", node_id)
                 sumup_topup_payment_methods = []
-        
+
+        global_faq = await fetch_global_faq_config(conn=conn)
+        global_privacy_policy = await fetch_global_privacy_policy_config(conn=conn)
+        translation_texts = {
+            language: {key: value for key, value in texts.items() if key not in {"faq", "privacy_policy"}}
+            for language, texts in node.event.translation_texts.items()
+        }
+        for language, content in global_faq.faq_texts.items():
+            translation_texts.setdefault(language, {})["faq"] = content
+        for language, content in global_privacy_policy.privacy_policy_texts.items():
+            translation_texts.setdefault(language, {})["privacy_policy"] = content
+
         return CustomerPortalApiConfig(
             test_mode=self.config.core.test_mode,
             test_mode_message=self.config.core.test_mode_message,
             about_page_url=node.event.customer_portal_about_page_url,
             allowed_country_codes=node.event.sepa_allowed_country_codes,
             contact_email=node.event.customer_portal_contact_email,
-            data_privacy_url=node.event.customer_portal_data_privacy_url,
+            data_privacy_url=f"{base_url.rstrip('/')}/datenschutz",
             payout_enabled=node.event.sepa_enabled,
             donation_enabled=node.event.donation_enabled,
             sumup_topup_enabled=sumup_topup_enabled,
@@ -622,7 +630,7 @@ class CustomerService(Service[Config]):
             sumup_topup_payment_methods=sumup_topup_payment_methods,
             google_pay_merchant_id=self.config.customerportal.google_pay_merchant_id or None,
             google_pay_merchant_name=self.config.customerportal.google_pay_merchant_name or node.name,
-            translation_texts=node.event.translation_texts,
+            translation_texts=translation_texts,
             currency_identifier=node.event.currency_identifier,
             event_name=node.name,
             node_id=node_id,
@@ -640,7 +648,7 @@ class CustomerService(Service[Config]):
             "select e.banner_image, e.banner_image_mime_type "
             "from event e join node n on n.event_id = e.id "
             "where n.id = $1 and e.banner_image is not null",
-            node_id
+            node_id,
         )
         if result is None:
             return None

@@ -196,6 +196,7 @@ export const EventCreate: React.FC = withPrivilegeGuard("node_administration", (
           pretix_organizer: null,
           pretix_event: null,
           pretix_ticket_ids: null,
+          customer_portal_data_privacy_url: "",
           ...values,
         },
       }).unwrap();

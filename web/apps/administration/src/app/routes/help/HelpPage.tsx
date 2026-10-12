@@ -25,7 +25,7 @@ const getResolvedLink = (link: HelpLink, currentNodeId: number | null, eventNode
     return link.to;
   }
 
-  const targetNodeId = link.context === "event" ? eventNodeId : currentNodeId;
+  const targetNodeId = link.context === "root" ? 0 : link.context === "event" ? eventNodeId : currentNodeId;
 
   if (targetNodeId != null && link.buildTo) {
     return link.buildTo(targetNodeId);

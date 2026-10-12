@@ -1,9 +1,18 @@
 # pylint: disable=attribute-defined-outside-init,unexpected-keyword-arg,missing-kwoa
 import pytest
+from sftkit.database import Connection
 from sftkit.error import AccessDenied, InvalidArgument
 
-from stustapay.core.schema.config import ConfigEntry, GlobalEmailConfig, GlobalSumUpConfig
+from stustapay.core.schema import MIGRATION_PATH
+from stustapay.core.schema.config import (
+    ConfigEntry,
+    GlobalEmailConfig,
+    GlobalFaqConfig,
+    GlobalPrivacyPolicyConfig,
+    GlobalSumUpConfig,
+)
 from stustapay.core.schema.language import Language
+from stustapay.core.schema.tree import Node
 from stustapay.core.service.config import ConfigService
 
 
@@ -267,3 +276,120 @@ async def test_global_email_config_rejects_invalid_template_syntax(
                 },
             ),
         )
+
+
+async def test_global_faq_config_requires_root_and_replaces_languages(
+    config_service: ConfigService,
+    global_admin_token: str,
+    event_admin_token: str,
+):
+    updated = await config_service.update_global_faq_config(
+        token=global_admin_token,
+        config=GlobalFaqConfig(faq_texts={Language.de_DE: "Fragen", Language.en_US: "Questions"}),
+    )
+    assert updated.faq_texts == {Language.de_DE: "Fragen", Language.en_US: "Questions"}
+    assert await config_service.get_global_faq_config(token=global_admin_token) == updated
+
+    with pytest.raises(AccessDenied):
+        await config_service.get_global_faq_config(token=event_admin_token)
+    with pytest.raises(AccessDenied):
+        await config_service.update_global_faq_config(token=event_admin_token, config=updated)
+
+    cleared = await config_service.update_global_faq_config(
+        token=global_admin_token, config=GlobalFaqConfig(faq_texts={Language.de_DE: "Neue Fragen"})
+    )
+    assert cleared.faq_texts == {Language.de_DE: "Neue Fragen", Language.en_US: ""}
+
+
+async def test_faq_migration_seeds_nonempty_text_and_preserves_existing_global_value(
+    db_connection: Connection,
+    event_node: Node,
+):
+    assert event_node.event is not None
+    async with db_connection.transaction():
+        await db_connection.execute("delete from translation_text where type = 'faq'")
+        await db_connection.execute("delete from config where key like 'customer_portal.faq.%'")
+        await db_connection.execute(
+            "insert into translation_text (event_id, lang_code, type, content) "
+            "values ($1, 'en-US', 'faq', 'Existing FAQ'), ($1, 'de-DE', 'faq', '   ')",
+            event_node.event.id,
+        )
+        migration_sql = (MIGRATION_PATH / "0064-centralize-faq.sql").read_text()
+        await db_connection.execute(migration_sql)
+        rows = await db_connection.fetch(
+            "select key, value, node_id from config where key like 'customer_portal.faq.%'"
+        )
+        assert {row["key"]: row["value"] for row in rows} == {
+            "customer_portal.faq.en-US": "Existing FAQ",
+            "customer_portal.faq.de-DE": "",
+        }
+        assert all(row["node_id"] == 0 for row in rows)
+        await db_connection.execute("update config set value = 'Global FAQ' where key = 'customer_portal.faq.en-US'")
+        await db_connection.execute(migration_sql)
+        assert (
+            await db_connection.fetchval("select value from config where key = 'customer_portal.faq.en-US'")
+            == "Global FAQ"
+        )
+        assert (
+            await db_connection.fetchval(
+                "select content from translation_text where event_id = $1 and lang_code = 'en-US' and type = 'faq'",
+                event_node.event.id,
+            )
+            == "Existing FAQ"
+        )
+
+
+async def test_global_privacy_policy_config_requires_root_and_replaces_languages(
+    config_service: ConfigService,
+    global_admin_token: str,
+    event_admin_token: str,
+):
+    updated = await config_service.update_global_privacy_policy_config(
+        token=global_admin_token,
+        config=GlobalPrivacyPolicyConfig(privacy_policy_texts={Language.de_DE: "Fragen", Language.en_US: "Questions"}),
+    )
+    assert updated.privacy_policy_texts == {Language.de_DE: "Fragen", Language.en_US: "Questions"}
+    assert await config_service.get_global_privacy_policy_config(token=global_admin_token) == updated
+
+    with pytest.raises(AccessDenied):
+        await config_service.get_global_privacy_policy_config(token=event_admin_token)
+    with pytest.raises(AccessDenied):
+        await config_service.update_global_privacy_policy_config(token=event_admin_token, config=updated)
+
+    cleared = await config_service.update_global_privacy_policy_config(
+        token=global_admin_token, config=GlobalPrivacyPolicyConfig(privacy_policy_texts={Language.de_DE: "Neue Fragen"})
+    )
+    assert cleared.privacy_policy_texts == {Language.de_DE: "Neue Fragen", Language.en_US: ""}
+
+
+async def test_privacy_policy_migration_moves_texts_out_of_events(
+    db_connection: Connection,
+    event_node: Node,
+):
+    assert event_node.event is not None
+    async with db_connection.transaction():
+        await db_connection.execute(
+            "alter table translation_text drop constraint translation_text_no_event_privacy_policy"
+        )
+        await db_connection.execute("alter table event drop constraint if exists event_no_custom_privacy_url")
+        await db_connection.execute("delete from translation_text where type = 'privacy_policy'")
+        await db_connection.execute("delete from config where key like 'customer_portal.privacy_policy.%'")
+        await db_connection.execute(
+            "insert into translation_text (event_id, lang_code, type, content) "
+            "values ($1, 'en-US', 'privacy_policy', 'Existing policy'), "
+            "($1, 'de-DE', 'privacy_policy', 'Local policy')",
+            event_node.event.id,
+        )
+        await db_connection.execute(
+            "insert into config (key, value, node_id) values ('customer_portal.privacy_policy.de-DE', 'Global policy', 0)"
+        )
+        await db_connection.execute((MIGRATION_PATH / "0065-centralize-privacy-policy.sql").read_text())
+        rows = await db_connection.fetch(
+            "select key, value, node_id from config where key like 'customer_portal.privacy_policy.%'"
+        )
+        assert {row["key"]: row["value"] for row in rows} == {
+            "customer_portal.privacy_policy.en-US": "Existing policy",
+            "customer_portal.privacy_policy.de-DE": "Global policy",
+        }
+        assert all(row["node_id"] == 0 for row in rows)
+        assert await db_connection.fetchval("select count(*) from translation_text where type = 'privacy_policy'") == 0

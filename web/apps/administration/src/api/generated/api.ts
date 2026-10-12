@@ -694,6 +694,32 @@ const injectedRtkApi = api
         query: () => ({ url: `/config/email/test`, method: "POST" }),
         invalidatesTags: ["config"],
       }),
+      getGlobalFaqConfig: build.query<GetGlobalFaqConfigApiResponse, GetGlobalFaqConfigApiArg>({
+        query: () => ({ url: `/config/faq` }),
+        providesTags: ["config"],
+      }),
+      updateGlobalFaqConfig: build.mutation<UpdateGlobalFaqConfigApiResponse, UpdateGlobalFaqConfigApiArg>({
+        query: (queryArg) => ({ url: `/config/faq`, method: "POST", body: queryArg.globalFaqConfig }),
+        invalidatesTags: ["config"],
+      }),
+      getGlobalPrivacyPolicyConfig: build.query<
+        GetGlobalPrivacyPolicyConfigApiResponse,
+        GetGlobalPrivacyPolicyConfigApiArg
+      >({
+        query: () => ({ url: `/config/privacy-policy` }),
+        providesTags: ["config"],
+      }),
+      updateGlobalPrivacyPolicyConfig: build.mutation<
+        UpdateGlobalPrivacyPolicyConfigApiResponse,
+        UpdateGlobalPrivacyPolicyConfigApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/config/privacy-policy`,
+          method: "POST",
+          body: queryArg.globalPrivacyPolicyConfig,
+        }),
+        invalidatesTags: ["config"],
+      }),
       listSystemAccounts: build.query<ListSystemAccountsApiResponse, ListSystemAccountsApiArg>({
         query: (queryArg) => ({
           url: `/system-accounts`,
@@ -2497,6 +2523,19 @@ export type SendGlobalEmailTestApiResponse = /** status 200 Successful Response 
   [key: string]: string;
 };
 export type SendGlobalEmailTestApiArg = void;
+export type GetGlobalFaqConfigApiResponse = /** status 200 Successful Response */ GlobalFaqConfig;
+export type GetGlobalFaqConfigApiArg = void;
+export type UpdateGlobalFaqConfigApiResponse = /** status 200 Successful Response */ GlobalFaqConfig;
+export type UpdateGlobalFaqConfigApiArg = {
+  globalFaqConfig: GlobalFaqConfig;
+};
+export type GetGlobalPrivacyPolicyConfigApiResponse = /** status 200 Successful Response */ GlobalPrivacyPolicyConfig;
+export type GetGlobalPrivacyPolicyConfigApiArg = void;
+export type UpdateGlobalPrivacyPolicyConfigApiResponse =
+  /** status 200 Successful Response */ GlobalPrivacyPolicyConfig;
+export type UpdateGlobalPrivacyPolicyConfigApiArg = {
+  globalPrivacyPolicyConfig: GlobalPrivacyPolicyConfig;
+};
 export type ListSystemAccountsApiResponse = /** status 200 Successful Response */ NormalizedListAccountInt;
 export type ListSystemAccountsApiArg = {
   nodeId: number;
@@ -3859,6 +3898,16 @@ export type GlobalSumUpConfig = {
   sumup_affiliate_key?: string;
   sumup_oauth_client_id?: string;
   sumup_oauth_client_secret?: string;
+};
+export type GlobalFaqConfig = {
+  faq_texts?: {
+    [key: string]: string;
+  };
+};
+export type GlobalPrivacyPolicyConfig = {
+  privacy_policy_texts?: {
+    [key: string]: string;
+  };
 };
 export type AccountType =
   | "private"
@@ -5368,6 +5417,12 @@ export const {
   useLazyGetGlobalSumupConfigQuery,
   useUpdateGlobalSumupConfigMutation,
   useSendGlobalEmailTestMutation,
+  useGetGlobalFaqConfigQuery,
+  useLazyGetGlobalFaqConfigQuery,
+  useUpdateGlobalFaqConfigMutation,
+  useGetGlobalPrivacyPolicyConfigQuery,
+  useLazyGetGlobalPrivacyPolicyConfigQuery,
+  useUpdateGlobalPrivacyPolicyConfigMutation,
   useListSystemAccountsQuery,
   useLazyListSystemAccountsQuery,
   useFindAccountsMutation,

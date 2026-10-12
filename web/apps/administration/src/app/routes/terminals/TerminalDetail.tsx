@@ -220,7 +220,7 @@ export const TerminalDetail: React.FC = () => {
         )}
         <DetailField
           label={t("mdm.device")}
-          linkTo={headwindMapping != null ? MdmRoutes.list(currentNode.id) : undefined}
+          linkTo={headwindMapping != null ? MdmRoutes.list(0) : undefined}
           value={
             headwindMapping != null
               ? getHeadwindDeviceLabel(

@@ -37,7 +37,7 @@ Use the tree navigation on the left as the starting point for all node- and even
 The overview and settings pages are the main entry point for new events and structural changes.
 
 1. Start with the **Overview** to understand the current state of the node.
-2. Move to **Settings** to maintain general event data, email texts, FAQ, receipt, or customer-portal content.
+2. Move to **Settings** to maintain general event data, email texts, receipt, or customer-portal content. Edit shared FAQs and the privacy policy in **Global Settings** on the root node.
 3. Use **Statistics** when you need to confirm whether changes already affect bookings or visitor numbers.
 
 Typical tasks in this area:
@@ -314,7 +314,7 @@ These sections matter whenever hardware, external services, or admission workflo
 - **Entry** manages areas, groups, and logs for access control.
 - **TSE** manages fiscal devices and technical security equipment.
 - **SumUp** shows transactions and checkouts if enabled for the event.
-- **Headwind / MDM** helps manage Android devices and their status.
+- **Headwind / MDM** manages Android devices across all events from the root node.
 
 When something behaves unexpectedly, first verify that you are in the correct event and that the integration is actually enabled there.
 
@@ -357,10 +357,10 @@ Recommended **entry workflow**:
         },
         {
           label: "Headwind / MDM",
-          description: "Manage Android terminals and device health",
+          description: "Manage Android terminals for all events from the root node",
           buildTo: helpLinkTargets.mdm,
           requiresNodeContext: true,
-          context: "event",
+          context: "root",
         },
       ],
     },

@@ -47,6 +47,6 @@ export const helpLinkTargets = {
   entryLogs: (nodeId: number) => EntryLogRoutes.list(nodeId),
   tses: (nodeId: number) => TseRoutes.list(nodeId),
   sumup: (nodeId: number) => SumUpTransactionRoutes.list(nodeId),
-  mdm: (nodeId: number) => MdmRoutes.list(nodeId),
+  mdm: (_nodeId: number) => MdmRoutes.list(0),
   dsfinvk: (nodeId: number) => `/node/${nodeId}/dsfinvk`,
 } as const;

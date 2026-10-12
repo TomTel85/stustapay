@@ -20,6 +20,14 @@ class GlobalEmailConfig(BaseModel):
     invitation_texts: dict[Language, dict[str, str]] = {}
 
 
+class GlobalFaqConfig(BaseModel):
+    faq_texts: dict[Language, str] = {}
+
+
+class GlobalPrivacyPolicyConfig(BaseModel):
+    privacy_policy_texts: dict[Language, str] = {}
+
+
 class GlobalSumUpConfig(BaseModel):
     sumup_affiliate_key: str = ""
     sumup_oauth_client_id: str = ""

@@ -17,6 +17,8 @@ import { useQueryVar } from "@stustapay/utils";
 import { TabGlobalEmail } from "./TabGlobalEmail";
 import { TabGlobalSumUp } from "./TabGlobalSumUp";
 import { TabNodeSumUp } from "./TabNodeSumUp";
+import { TabGlobalFaq } from "./TabGlobalFaq";
+import { TabGlobalPrivacyPolicy } from "./TabGlobalPrivacyPolicy";
 
 export const NodeConfiguration: React.FC = () => {
   const { t } = useTranslation();
@@ -97,6 +99,7 @@ export const NodeSettings: React.FC = () => {
   const { t } = useTranslation();
   const { currentNode } = useCurrentNode();
   const canManageGlobalEmail = useCurrentUserHasPrivilege("global_email_management");
+  const canManageNodeAdministration = useCurrentUserHasPrivilege("node_administration");
   const openModal = useOpenModal();
   const [deleteNode] = useDeleteNodeMutation();
   const navigate = useNavigate();
@@ -150,6 +153,10 @@ export const NodeSettings: React.FC = () => {
                 {canConfigureSumupLink && <Tab label={t("settings.sumup.connectionTabLabel")} value="sumupConnection" />}
                 {currentNode.id === 0 && <Tab label={t("settings.sumup.globalTabLabel")} value="sumupGlobal" />}
                 {currentNode.id === 0 && canManageGlobalEmail && <Tab label={t("settings.email.tabLabel")} value="email" />}
+                {currentNode.id === 0 && canManageNodeAdministration && <Tab label={t("settings.faq.tabLabel")} value="faq" />}
+                {currentNode.id === 0 && canManageNodeAdministration && (
+                  <Tab label={t("settings.privacyPolicy.tabLabel")} value="privacyPolicy" />
+                )}
               </TabList>
             </Box>
             <TabPanel value="node">
@@ -168,6 +175,16 @@ export const NodeSettings: React.FC = () => {
             {currentNode.id === 0 && canManageGlobalEmail && (
               <TabPanel value="email">
                 <TabGlobalEmail />
+              </TabPanel>
+            )}
+            {currentNode.id === 0 && canManageNodeAdministration && (
+              <TabPanel value="faq">
+                <TabGlobalFaq />
+              </TabPanel>
+            )}
+            {currentNode.id === 0 && canManageNodeAdministration && (
+              <TabPanel value="privacyPolicy">
+                <TabGlobalPrivacyPolicy />
               </TabPanel>
             )}
           </Box>
