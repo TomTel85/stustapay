@@ -101,6 +101,8 @@ android {
             debuggable false
             renderscriptOptimLevel 3
             ndk {
+                // Production terminals use ARM; package both 32-bit and 64-bit libraries.
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
                 debugSymbolLevel 'NONE'
             }
         }
@@ -128,6 +130,13 @@ android {
 }
 
 androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        // Compress release APK payloads for distribution to terminals.
+        variant.packaging.dex.useLegacyPackaging.set(true)
+        variant.packaging.jniLibs.useLegacyPackaging.set(true)
+        variant.packaging.jniLibs.useLegacyPackagingFromBundle.set(true)
+    }
+
     beforeVariants(selector().withBuildType("debug")) { variantBuilder ->
         if (variantBuilder.productFlavors.any { it.second == "tapToPay" }) {
             // SumUp rejects debuggable Tap-to-Pay applications. Use tapToPayBenchmark
