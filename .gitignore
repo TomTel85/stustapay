@@ -69,3 +69,5 @@ TODO.md
 DigiCertGlobalRootCA.crt.pem
 DigiCertGlobalRootG2.crt.pem
 .DS_Store
+app/app/tapToPay/release/*.apk
+app/app/tapToPay/release/baselineProfiles/*

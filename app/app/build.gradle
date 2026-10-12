@@ -227,7 +227,10 @@ dependencies {
     implementation 'com.sumup:merchant-sdk:7.1.0'
     // Only Tap-to-Pay variants resolve the proprietary SDK. Standard builds remain
     // credential-free and retain support for pre-Android-11 terminals.
-    tapToPayImplementation("com.sumup.tap-to-pay:utopia-sdk:1.1.1")
+    tapToPayImplementation("com.sumup.tap-to-pay:utopia-sdk:1.1.6")
+    // SumUp's network provider references Chucker without declaring it. Supply its
+    // no-op API so release builds resolve those classes without recording traffic.
+    tapToPayImplementation("com.github.chuckerteam.chucker:library-no-op:4.2.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation 'net.openid:appauth:0.11.1'
     implementation "com.google.protobuf:protobuf-javalite:$protobuf_version"

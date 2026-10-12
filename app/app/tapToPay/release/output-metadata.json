@@ -1,0 +1,37 @@
+{
+  "version": 3,
+  "artifactType": {
+    "type": "APK",
+    "kind": "Directory"
+  },
+  "applicationId": "de.teamfestlichpay.teamfestlichpay",
+  "variantName": "tapToPayRelease",
+  "elements": [
+    {
+      "type": "SINGLE",
+      "filters": [],
+      "attributes": [],
+      "versionCode": 1991,
+      "versionName": "8332b8ee7-dirty",
+      "outputFile": "app-tapToPay-release.apk"
+    }
+  ],
+  "elementType": "File",
+  "baselineProfiles": [
+    {
+      "minApi": 28,
+      "maxApi": 30,
+      "baselineProfiles": [
+        "baselineProfiles/1/app-tapToPay-release.dm"
+      ]
+    },
+    {
+      "minApi": 31,
+      "maxApi": 2147483647,
+      "baselineProfiles": [
+        "baselineProfiles/0/app-tapToPay-release.dm"
+      ]
+    }
+  ],
+  "minSdkVersionForDexing": 30
+}
