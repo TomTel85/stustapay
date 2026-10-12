@@ -129,7 +129,7 @@ describe("AuthenticatedRoot", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText("TeamFestlichPay")).toBeTruthy();
+    expect(screen.queryByText("TeamFestlichPay")).toBeNull();
     expect(screen.getByText("Festival > Bar 1")).toBeTruthy();
     expect(screen.getByRole("link", { name: "auth.profile" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "logout" })).toBeTruthy();

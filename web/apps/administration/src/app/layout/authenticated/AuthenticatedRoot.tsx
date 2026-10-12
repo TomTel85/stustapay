@@ -165,43 +165,21 @@ export const AuthenticatedRoot: React.FC = () => {
             <MenuIcon />
           </IconButton>
           <Box sx={{ flexGrow: 1, minWidth: 0, overflow: "hidden" }}>
-            <RouterLink
-              to="/"
-              aria-label={t("TeamFestlichPay")}
-              style={{
-                textDecoration: "none",
-                color: "inherit",
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
+            <Typography
+              variant="h6"
+              component="div"
+              title={currentNodePath?.map((segment) => t(segment)).join(" > ")}
+              sx={{
+                overflowWrap: "anywhere",
+                fontSize: { xs: "0.875rem", sm: "1.25rem" },
+                lineHeight: 1.3,
+                py: 1,
               }}
             >
-              <BrandLogo />
-              <Box sx={{ minWidth: 0, display: { xs: "none", sm: "block" } }}>
-                <Typography
-                  variant="h6"
-                  component="div"
-                  sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                >
-                  {t("TeamFestlichPay")}
-                </Typography>
-                {currentNodePath && currentNodePath.length > 0 ? (
-                  <Typography
-                    variant="body2"
-                    component="div"
-                    sx={{
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      color: "text.secondary",
-                      fontSize: "0.75rem",
-                    }}
-                  >
-                    {currentNodePath.map((segment) => t(segment)).join(" > ")}
-                  </Typography>
-                ) : null}
-              </Box>
-            </RouterLink>
+              {currentNodePath && currentNodePath.length > 0
+                ? currentNodePath.map((segment) => t(segment)).join(" > ")
+                : t("portal.administration")}
+            </Typography>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1 }, flexShrink: 0 }}>
             {isMobile ? (
@@ -363,11 +341,6 @@ export const AuthenticatedRoot: React.FC = () => {
       )}
       <Main open={open || isMobile}>
         <DrawerHeader />
-        {isMobile && currentNodePath && currentNodePath.length > 0 && (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2, overflowWrap: "anywhere" }}>
-            {currentNodePath.map((segment) => t(segment)).join(" / ")}
-          </Typography>
-        )}
         <TestModeDisclaimer testMode={config.testMode} testModeMessage={config.testModeMessage} />
         <React.Suspense fallback={<CircularProgress />}>
           {isTreeLoading ? (

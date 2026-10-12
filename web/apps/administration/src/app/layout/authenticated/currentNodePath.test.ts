@@ -23,6 +23,21 @@ const tree: NodeSeenByUser = {
 } as NodeSeenByUser;
 
 describe("getCurrentNodePath", () => {
+  const treeWithNodeZero = {
+    id: 0,
+    name: "root",
+    parent_ids: [],
+    children: [{ ...tree, parent_ids: [0] }],
+  } as NodeSeenByUser;
+
+  test("omits node 0 from the displayed parent path", () => {
+    expect(getCurrentNodePath(treeWithNodeZero, 1)).toEqual(["Festival"]);
+  });
+
+  test("returns an empty path when node 0 is selected", () => {
+    expect(getCurrentNodePath(treeWithNodeZero, 0)).toEqual([]);
+  });
+
   test("returns the root name for a root node route", () => {
     expect(getCurrentNodePath(tree, 1)).toEqual(["Festival"]);
   });

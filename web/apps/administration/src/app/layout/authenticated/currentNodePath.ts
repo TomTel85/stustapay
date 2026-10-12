@@ -26,6 +26,7 @@ export const getCurrentNodePath = (root: NodeSeenByUser, nodeId: number | null):
   }
 
   return [...currentNode.parent_ids, currentNode.id]
+    .filter((id) => id !== 0)
     .map((id) => findNode(id, root)?.name)
     .filter((name): name is string => name != null);
 };
