@@ -17,6 +17,7 @@ import {
   Alert,
   AlertTitle,
   Box,
+  Breadcrumbs,
   Button,
   CircularProgress,
   CssBaseline,
@@ -27,7 +28,7 @@ import {
   Typography,
   useMediaQuery,
 } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import { Loading, TestModeDisclaimer } from "@stustapay/components";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -165,21 +166,57 @@ export const AuthenticatedRoot: React.FC = () => {
             <MenuIcon />
           </IconButton>
           <Box sx={{ flexGrow: 1, minWidth: 0, overflow: "hidden" }}>
-            <Typography
-              variant="h6"
-              component="div"
-              title={currentNodePath?.map((segment) => t(segment)).join(" > ")}
+            <Breadcrumbs
+              aria-label={t("portal.workspace")}
+              separator={<ChevronRightIcon sx={{ fontSize: 16, color: "text.disabled" }} />}
               sx={{
-                overflowWrap: "anywhere",
-                fontSize: { xs: "0.875rem", sm: "1.25rem" },
-                lineHeight: 1.3,
                 py: 1,
+                "& .MuiBreadcrumbs-ol": { gap: 0.5 },
+                "& .MuiBreadcrumbs-li": { minWidth: 0, maxWidth: "100%" },
+                "& .MuiBreadcrumbs-separator": { mx: 0 },
               }}
             >
-              {currentNodePath && currentNodePath.length > 0
-                ? currentNodePath.map((segment) => t(segment)).join(" > ")
-                : t("portal.administration")}
-            </Typography>
+              {(currentNodePath?.length ? currentNodePath : ["portal.administration"]).map((segment, index, path) =>
+                index === path.length - 1 ? (
+                  <Box
+                    key={index}
+                    aria-current="location"
+                    sx={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 1,
+                      px: 1.5,
+                      py: 0.625,
+                      borderRadius: 2,
+                      bgcolor: alpha(theme.palette.primary.main, 0.1),
+                      border: "1px solid",
+                      borderColor: alpha(theme.palette.primary.main, 0.18),
+                      maxWidth: "100%",
+                    }}
+                  >
+                    <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: "primary.main", flexShrink: 0 }} />
+                    <Typography
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: { xs: "0.875rem", sm: "1rem" },
+                        lineHeight: 1.4,
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      {t(segment)}
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Typography
+                    key={index}
+                    color="text.secondary"
+                    sx={{ fontSize: "0.8125rem", overflowWrap: "anywhere" }}
+                  >
+                    {t(segment)}
+                  </Typography>
+                )
+              )}
+            </Breadcrumbs>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1 }, flexShrink: 0 }}>
             {isMobile ? (

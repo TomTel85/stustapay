@@ -130,7 +130,8 @@ describe("AuthenticatedRoot", () => {
     );
 
     expect(screen.queryByText("TeamFestlichPay")).toBeNull();
-    expect(screen.getByText("Festival > Bar 1")).toBeTruthy();
+    expect(screen.getByText("Festival")).toBeTruthy();
+    expect(screen.getByText("Bar 1").closest("[aria-current]")?.getAttribute("aria-current")).toBe("location");
     expect(screen.getByRole("link", { name: "auth.profile" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "logout" })).toBeTruthy();
   });
