@@ -12,6 +12,7 @@ import {
   HelpOutline as HelpOutlineIcon,
   Logout as LogoutIcon,
   Menu as MenuIcon,
+  MoreVert as MoreVertIcon,
 } from "@mui/icons-material";
 import {
   Alert,
@@ -24,6 +25,10 @@ import {
   Divider,
   Drawer,
   IconButton,
+  ListItemIcon,
+  ListSubheader,
+  Menu,
+  MenuItem,
   Toolbar,
   Typography,
   useMediaQuery,
@@ -54,9 +59,11 @@ const readSidebarWidth = () => {
 };
 
 export const AuthenticatedRoot: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const [actionsAnchor, setActionsAnchor] = React.useState<HTMLElement | null>(null);
+  const actionsMenuId = React.useId();
   const [open, setOpen] = React.useState(!isMobile);
   const [sidebarWidth, setSidebarWidth] = React.useState(readSidebarWidth);
   const [resizing, setResizing] = React.useState(false);
@@ -91,6 +98,7 @@ export const AuthenticatedRoot: React.FC = () => {
 
   React.useEffect(() => {
     if (isMobile) setOpen(false);
+    setActionsAnchor(null);
   }, [isMobile, location.pathname]);
 
   React.useEffect(() => {
@@ -155,28 +163,36 @@ export const AuthenticatedRoot: React.FC = () => {
     >
       <CssBaseline />
       <AppBar position="fixed" open={open && !isMobile}>
-        <Toolbar sx={{ gap: { xs: 0.5, sm: 1 } }}>
+        <Toolbar sx={{ gap: 1 }}>
           <IconButton
             color="inherit"
             aria-label={t("portal.openNavigation")}
             onClick={handleDrawerOpen}
             edge="start"
-            sx={{ mr: 1, ...(open && { display: "none" }) }}
+            sx={{ width: 44, height: 44, flexShrink: 0, ...(open && { display: "none" }) }}
           >
             <MenuIcon />
           </IconButton>
-          <Box sx={{ flexGrow: 1, minWidth: 0, overflow: "hidden" }}>
+          <Box
+            title={currentNodePath?.map((segment) => t(segment)).join(" / ")}
+            sx={{ flexGrow: 1, minWidth: 0, overflow: "hidden" }}
+          >
             <Breadcrumbs
               aria-label={t("portal.workspace")}
               separator={<ChevronRightIcon sx={{ fontSize: 16, color: "text.disabled" }} />}
               sx={{
                 py: 1,
-                "& .MuiBreadcrumbs-ol": { gap: 0.5 },
-                "& .MuiBreadcrumbs-li": { minWidth: 0, maxWidth: "100%" },
+                "& .MuiBreadcrumbs-ol": { gap: 0.5, flexWrap: "nowrap" },
+                "& .MuiBreadcrumbs-li": { minWidth: 0, maxWidth: "100%", overflow: "hidden" },
                 "& .MuiBreadcrumbs-separator": { mx: 0 },
               }}
             >
-              {(currentNodePath?.length ? currentNodePath : ["portal.administration"]).map((segment, index, path) =>
+              {(currentNodePath?.length
+                ? isMobile
+                  ? currentNodePath.slice(-1)
+                  : currentNodePath
+                : ["portal.administration"]
+              ).map((segment, index, path) =>
                 index === path.length - 1 ? (
                   <Box
                     key={index}
@@ -200,76 +216,102 @@ export const AuthenticatedRoot: React.FC = () => {
                         fontWeight: 700,
                         fontSize: { xs: "0.875rem", sm: "1rem" },
                         lineHeight: 1.4,
-                        overflowWrap: "anywhere",
+                        minWidth: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
                       }}
                     >
                       {t(segment)}
                     </Typography>
                   </Box>
                 ) : (
-                  <Typography
-                    key={index}
-                    color="text.secondary"
-                    sx={{ fontSize: "0.8125rem", overflowWrap: "anywhere" }}
-                  >
+                  <Typography key={index} color="text.secondary" noWrap sx={{ fontSize: "0.8125rem" }}>
                     {t(segment)}
                   </Typography>
                 )
               )}
             </Breadcrumbs>
           </Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1 }, flexShrink: 0 }}>
-            {isMobile ? (
+          {isMobile ? (
+            <>
               <IconButton
                 color="inherit"
-                component={RouterLink}
-                to={helpRoute}
-                size="small"
-                aria-label={t("help.open")}
+                aria-label={t("actions")}
+                aria-controls={actionsAnchor ? actionsMenuId : undefined}
+                aria-haspopup="menu"
+                aria-expanded={Boolean(actionsAnchor)}
+                onClick={(event) => setActionsAnchor(event.currentTarget)}
+                sx={{ width: 44, height: 44, flexShrink: 0 }}
               >
-                <HelpOutlineIcon fontSize="small" />
+                <MoreVertIcon />
               </IconButton>
-            ) : (
+              <Menu
+                id={actionsMenuId}
+                anchorEl={actionsAnchor}
+                open={Boolean(actionsAnchor)}
+                onClose={() => setActionsAnchor(null)}
+                anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                transformOrigin={{ vertical: "top", horizontal: "right" }}
+                slotProps={{ paper: { sx: { minWidth: 220 } }, list: { "aria-label": t("actions") } }}
+              >
+                <MenuItem component={RouterLink} to={helpRoute} onClick={() => setActionsAnchor(null)}>
+                  <ListItemIcon>
+                    <HelpOutlineIcon fontSize="small" />
+                  </ListItemIcon>
+                  {t("help.open")}
+                </MenuItem>
+                <MenuItem component={RouterLink} to="/profile" onClick={() => setActionsAnchor(null)}>
+                  <ListItemIcon>
+                    <AccountCircleIcon fontSize="small" />
+                  </ListItemIcon>
+                  {t("auth.profile")}
+                </MenuItem>
+                <Divider />
+                <ListSubheader>{t("settings.language")}</ListSubheader>
+                {[
+                  { code: "de-DE", label: "languages.de" },
+                  { code: "en-US", label: "languages.en" },
+                ].map(({ code, label }) => (
+                  <MenuItem
+                    key={code}
+                    selected={i18n.language === code}
+                    onClick={() => {
+                      i18n.changeLanguage(code);
+                      setActionsAnchor(null);
+                    }}
+                  >
+                    {t(label)}
+                  </MenuItem>
+                ))}
+                <Divider />
+                <MenuItem
+                  onClick={() => {
+                    setActionsAnchor(null);
+                    handleLogout();
+                  }}
+                >
+                  <ListItemIcon>
+                    <LogoutIcon fontSize="small" />
+                  </ListItemIcon>
+                  {t("logout")}
+                </MenuItem>
+              </Menu>
+            </>
+          ) : (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0 }}>
               <Button component={RouterLink} color="inherit" to={helpRoute} startIcon={<HelpOutlineIcon />}>
                 {t("help.open")}
               </Button>
-            )}
-            {isMobile ? (
-              <IconButton
-                color="inherit"
-                component={RouterLink}
-                to="/profile"
-                size="small"
-                aria-label={t("auth.profile")}
-              >
-                <AccountCircleIcon fontSize="small" />
-              </IconButton>
-            ) : (
               <Button component={RouterLink} color="inherit" to="/profile">
                 {t("auth.profile")}
               </Button>
-            )}
-            <LanguageSelect
-              variant="outlined"
-              size="small"
-              sx={{
-                color: "inherit",
-                minWidth: { xs: 74, sm: 96 },
-                "& .MuiSelect-select": {
-                  py: { xs: 0.5, sm: 0.75 },
-                },
-              }}
-            />
-            {isMobile ? (
-              <IconButton color="inherit" onClick={handleLogout} size="small" aria-label={t("logout")}>
-                <LogoutIcon fontSize="small" />
-              </IconButton>
-            ) : (
+              <LanguageSelect variant="outlined" size="small" sx={{ color: "inherit", minWidth: 96 }} />
               <Button color="inherit" onClick={handleLogout}>
                 {t("logout")}
               </Button>
-            )}
-          </Box>
+            </Box>
+          )}
         </Toolbar>
       </AppBar>
       <Drawer

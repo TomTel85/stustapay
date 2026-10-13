@@ -19,7 +19,7 @@ class AccountType(enum.Enum):
     sumup_entry = "sumup_entry"
     sumup_online_entry = "sumup_online_entry"
     transport = "transport"
-    # cashier = "cashier"  # LEGACY, not used anymore, kept for reference
+    cashier = "cashier"  # Legacy accounts remain in historical events and must still be readable.
     voucher_create = "voucher_create"
     donation_exit = "donation_exit"
     sepa_exit = "sepa_exit"

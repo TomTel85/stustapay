@@ -69,9 +69,12 @@ jest.mock("@stustapay/components", () => ({
   TestModeDisclaimer: () => null,
 }));
 
+const mockChangeLanguage = jest.fn();
+
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
+    i18n: { language: "de-DE", changeLanguage: mockChangeLanguage },
   }),
 }));
 
@@ -86,6 +89,7 @@ const { AuthenticatedRoot } = require("./AuthenticatedRoot");
 describe("AuthenticatedRoot", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    mockChangeLanguage.mockClear();
   });
 
   beforeAll(() => {
@@ -198,6 +202,17 @@ describe("AuthenticatedRoot", () => {
     }));
     renderLayout();
     expect(window.localStorage.getItem("administration.sidebarWidth")).toBe("450");
+    expect(screen.queryByText("Festival")).toBeNull();
+    expect(screen.getByText("Bar 1").closest("[aria-current]")).toBeTruthy();
+    expect(screen.queryByTestId("language-select")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "actions" }));
+    expect(screen.getByRole("menuitem", { name: "help.open" }).getAttribute("href")).toBe("/help?nodeId=42");
+    expect(screen.getByRole("menuitem", { name: "auth.profile" }).getAttribute("href")).toBe("/profile");
+    expect(screen.getByRole("menuitem", { name: "logout" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: "languages.en" }));
+    expect(mockChangeLanguage).toHaveBeenCalledWith("en-US");
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    expect(screen.getByRole("button", { name: "actions" }).getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByText("navigation-tree")).toBeNull();
     expect(screen.getByRole("main").getAttribute("data-open")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "portal.openNavigation" }));

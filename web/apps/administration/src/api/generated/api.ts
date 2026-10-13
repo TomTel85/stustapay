@@ -3920,6 +3920,7 @@ export type AccountType =
   | "sumup_entry"
   | "sumup_online_entry"
   | "transport"
+  | "cashier"
   | "voucher_create"
   | "donation_exit"
   | "sepa_exit"

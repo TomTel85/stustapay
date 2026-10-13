@@ -6,6 +6,7 @@ import pytest
 from sftkit.database import Connection
 from sftkit.error import AccessDenied, InvalidArgument
 
+from stustapay.core.schema.account import AccountType
 from stustapay.core.schema.tree import ROOT_NODE_ID, NewEvent, Node
 from stustapay.core.schema.user import NewUser, NewUserRole, NewUserToRoles, Privilege
 from stustapay.core.service.account import AccountService
@@ -53,6 +54,27 @@ async def _create_event_token_with_privileges(
     login_result = await user_service.login_user(username=user.login, password="rolf")
     assert login_result.success is not None
     return login_result.success.token
+
+
+async def test_legacy_cashier_account_is_readable(
+    account_service: AccountService,
+    event_admin_token: str,
+    db_connection: Connection,
+    event_node: Node,
+):
+    account_id = await db_connection.fetchval(
+        "insert into account(node_id, type, name, balance) values ($1, 'cashier', 'Legacy cashier', 12.50) returning id",
+        event_node.id,
+    )
+
+    accounts = await account_service.list_system_accounts(token=event_admin_token, node_id=event_node.id)
+    legacy_account = next(account for account in accounts if account.id == account_id)
+    assert legacy_account.type == AccountType.cashier
+    assert legacy_account.balance == 12.50
+    assert legacy_account.model_dump(mode="json")["type"] == "cashier"
+
+    account = await account_service.get_account(token=event_admin_token, node_id=event_node.id, account_id=account_id)
+    assert account == legacy_account
 
 
 async def test_account_comment_updates(
@@ -198,7 +220,9 @@ async def test_swap_customer_tag_without_existing_target_account(
         block_source_tag=True,
     )
 
-    account = await account_service.get_account(token=event_admin_token, node_id=event_node.id, account_id=source_account_id)
+    account = await account_service.get_account(
+        token=event_admin_token, node_id=event_node.id, account_id=source_account_id
+    )
     source_tag_blocked = await db_connection.fetchval(
         "select account_creation_blocked from user_tag where id = $1",
         source_tag.id,
