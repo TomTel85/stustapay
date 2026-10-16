@@ -2,11 +2,54 @@ package de.stustapay.stustapay.ui.sale
 
 import com.ionspin.kotlin.bignum.integer.toBigInteger
 import de.stustapay.api.models.TerminalTillConfig
+import de.stustapay.api.models.PaymentMethod
+import de.stustapay.api.models.PendingSale
+import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class SaleStatusTest {
+    @Test
+    fun `retry after confirmed card cancellation uses a fresh order UUID and keeps the cart`() {
+        val status = checkedCardSale()
+        val firstAttempt = status.getNewSale(method = PaymentMethod.sumup)
+
+        val retryStatus = status.afterCardPaymentCancelled(firstAttempt.uuid)
+        val retry = retryStatus.getNewSale(method = PaymentMethod.sumup)
+
+        assertNotEquals(firstAttempt.uuid, retry.uuid)
+        assertEquals(firstAttempt.copy(uuid = retry.uuid), retry)
+        assertEquals(status.checkedSale!!.copy(uuid = retry.uuid), retryStatus.checkedSale)
+        assertEquals(retry.uuid, retryStatus.getNewSale(method = PaymentMethod.sumup).uuid)
+        assertEquals(firstAttempt.uuid, status.checkedSale!!.uuid)
+    }
+
+    @Test
+    fun `cancellation for another attempt does not change the current sale`() {
+        val status = checkedCardSale()
+        assertEquals(status, status.afterCardPaymentCancelled(UUID.randomUUID()))
+    }
+
+    private fun checkedCardSale(): SaleStatus = SaleStatus(
+        buttonSelection = mutableMapOf(1 to SaleItemAmount.FixedPrice(2)),
+        checkedSale = PendingSale(
+            uuid = UUID.randomUUID(),
+            oldBalance = 0.0,
+            newBalance = 0.0,
+            oldVoucherBalance = 0.toBigInteger(),
+            newVoucherBalance = 0.toBigInteger(),
+            customerAccountId = null,
+            paymentMethod = PaymentMethod.sumup,
+            lineItems = emptyList(),
+            buttons = emptyList(),
+            usedVouchers = 0.toBigInteger(),
+            itemCount = 2.toBigInteger(),
+            totalPrice = 4.0,
+        ),
+    )
+
     @Test
     fun `returnable buttons use signed net quantities and remove zero`() {
         val saleStatus = SaleStatus()

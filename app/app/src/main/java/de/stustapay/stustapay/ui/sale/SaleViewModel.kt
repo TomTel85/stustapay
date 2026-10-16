@@ -639,7 +639,9 @@ class SaleViewModel @Inject constructor(
             when (val paymentResult = ecPaymentRepository.pay(context, payment)) {
                 is ECPaymentResult.Failure -> {
                     if (!paymentResult.mayHaveCreatedCharge) {
-                        saleRepository.cancelPendingSale(newSale.uuid)
+                        if (saleRepository.cancelPendingSale(newSale.uuid) is Response.OK) {
+                            _saleStatus.update { it.afterCardPaymentCancelled(newSale.uuid) }
+                        }
                     }
                     _status.update { context.getString(R.string.topup_status_ec_result, paymentResult.msg) }
                     return

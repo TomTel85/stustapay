@@ -259,6 +259,14 @@ data class SaleStatus(
         statusSerial += 1u
     }
 
+    fun afterCardPaymentCancelled(orderUuid: UUID): SaleStatus {
+        val sale = checkedSale ?: return this
+        if (sale.paymentMethod != PaymentMethod.sumup || sale.uuid != orderUuid) return this
+
+        // Cancelled pending orders keep their UUID in the backend and at SumUp.
+        return copy(checkedSale = sale.copy(uuid = UUID.randomUUID()))
+    }
+
     fun getNewSale(tag: NfcTag? = null, method: PaymentMethod = PaymentMethod.tag): NewSale {
         return NewSale(
             buttons = buttonSelection.mapNotNull {
