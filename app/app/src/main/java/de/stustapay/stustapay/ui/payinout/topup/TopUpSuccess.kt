@@ -140,12 +140,27 @@ fun TopUpSuccess(
                             fontSize = if (profile.isSmallScreen) 14.sp else 18.sp,
                             fontWeight = FontWeight.Medium
                         )
-                        Text(
-                            text = "${stringResource(R.string.new_balance)}: €${"%.2f".format(completedTopUp.newBalance)}",
-                            color = SelfServicePalette.title,
-                            fontSize = if (profile.isSmallScreen) 24.sp else 34.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
+                        SelfServicePanel(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            borderColor = SelfServicePalette.success
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = stringResource(R.string.new_balance),
+                                    color = SelfServicePalette.subtitle,
+                                    fontSize = if (profile.isSmallScreen) 14.sp else 18.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "€${"%.2f".format(completedTopUp.newBalance)}",
+                                    color = SelfServicePalette.title,
+                                    fontSize = if (profile.isSmallScreen) 24.sp else 34.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
                     }
                 }
 
