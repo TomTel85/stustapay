@@ -257,6 +257,41 @@ export const translations: NestedPartialAsStrings<Translations> = {
     key1: "Hex-codierter key1 dieses Secrets",
   },
   auth: {
+    mfa: {
+      confirmChange: "Änderung bestätigen",
+      passwordHint: "Bestätige diese Änderung mit deinem aktuellen Passwort für das Admin-Portal.",
+      password: "dein aktuelles Passwort",
+      reminderTitle: "Schütze dein Admin-Konto",
+      reminderText: "Aktiviere die Zwei-Faktor-Authentifizierung und schütze dein Konto mit einer Authenticator-App.",
+      title: "Zwei-Faktor-Authentifizierung",
+      enabled: "Der Schutz durch eine Authenticator-App ist aktiviert.",
+      disabled: "Schütze deine Admin-Anmeldung zusätzlich mit einer Authenticator-App.",
+      remaining: "Verbleibende Wiederherstellungscodes: {{count}}",
+      loading: "Sicherheitseinstellungen werden geladen…",
+      setup: "Authenticator einrichten",
+      confirm: "Zwei-Faktor-Authentifizierung aktivieren",
+      disable: "Zwei-Faktor-Authentifizierung deaktivieren",
+      regenerate: "Wiederherstellungscodes ersetzen",
+      cancel: "Einrichtung abbrechen",
+      code: "Authenticator- oder Wiederherstellungscode",
+      scan: "Scanne diesen QR-Code mit deiner Authenticator-App oder gib den Einrichtungsschlüssel ein. Bestätige innerhalb von 10 Minuten mit einem aktuellen Code.",
+      secret: "Einrichtungsschlüssel",
+      qrTitle: "QR-Code zur Authenticator-Einrichtung",
+      loginHint:
+        "Gib den aktuellen sechsstelligen Code deiner Authenticator-App oder einen unbenutzten Wiederherstellungscode ein.",
+      saveRecovery:
+        "Bewahre diese Wiederherstellungscodes sicher auf. Jeder gilt einmal. Sie werden nur jetzt angezeigt. Bisherige Wiederherstellungscodes wurden ersetzt.",
+      savedRecovery: "Ich habe meine Wiederherstellungscodes gespeichert",
+      requestFailed: "Die Sicherheitseinstellungen konnten nicht aktualisiert werden. Bitte versuche es erneut.",
+      errors: {
+        invalid_credentials: "Das Passwort ist falsch.",
+        invalid_code:
+          "Der Code ist ungültig oder wurde bereits verwendet. Verwende einen neuen Authenticator-Code oder einen unbenutzten Wiederherstellungscode.",
+        rate_limited: "Zu viele Versuche. Bitte warte 15 Minuten und versuche es erneut.",
+        invalid_state:
+          "Die Einrichtung ist abgelaufen oder die Einstellungen wurden geändert. Lade die Seite neu und beginne erneut.",
+      },
+    },
     resizeSidebar: "Seitenleistenbreite ändern",
     signIn: "Anmelden",
     username: "Benutzername",

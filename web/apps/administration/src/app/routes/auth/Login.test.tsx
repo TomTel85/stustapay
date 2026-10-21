@@ -1,5 +1,5 @@
 import * as React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TextDecoder, TextEncoder } from "util";
 
 (globalThis as typeof globalThis & { TextEncoder: typeof TextEncoder; TextDecoder: typeof TextDecoder }).TextEncoder =
@@ -32,13 +32,6 @@ jest.mock("@stustapay/form-components", () => ({
     formik: { values: Record<string, string>; handleChange: (event: React.ChangeEvent<HTMLInputElement>) => void };
     type?: string;
   }) => <input aria-label={label} name={name} type={type} value={formik.values[name]} onChange={formik.handleChange} />,
-}));
-
-jest.mock("@stustapay/utils", () => ({
-  toFormikValidationSchema: () => ({
-    validate: async (values: unknown) => values,
-    validateSync: (values: unknown) => values,
-  }),
 }));
 
 jest.mock("react-i18next", () => ({
@@ -93,5 +86,59 @@ describe("Login", () => {
 
     expect((screen.getByLabelText("auth.username") as HTMLInputElement).value).toBe("");
     expect(screen.queryByText(/invitation-hint:/)).toBeNull();
+  });
+  test("requests a second factor without dropping the password and submits the code", async () => {
+    mockLogin.mockReturnValue({
+      unwrap: () => Promise.resolve({ success: null, available_nodes: null, mfa_required: true }),
+    });
+    render(
+      <MemoryRouter initialEntries={["/login"]}>
+        <Login />
+      </MemoryRouter>
+    );
+    fireEvent.change(screen.getByLabelText("auth.username"), { target: { value: "admin" } });
+    fireEvent.change(screen.getByLabelText("auth.password"), { target: { value: "test-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "auth.login" }));
+    await screen.findByLabelText("auth.mfa.code");
+    expect((screen.getByLabelText("auth.password") as HTMLInputElement).value).toBe("test-password");
+    fireEvent.change(screen.getByLabelText("auth.mfa.code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "auth.login" }));
+    await waitFor(() =>
+      expect(mockLogin).toHaveBeenLastCalledWith({
+        loginPayload: { username: "admin", password: "test-password", node_id: null, mfa_code: "123456" },
+      })
+    );
+  });
+
+  test("keeps the selected node when it requires MFA", async () => {
+    mockLogin
+      .mockReturnValueOnce({
+        unwrap: () =>
+          Promise.resolve({
+            success: null,
+            available_nodes: [
+              { node_id: 11, name: "Festival A", description: "A" },
+              { node_id: 12, name: "Festival B", description: "B" },
+            ],
+          }),
+      })
+      .mockReturnValue({ unwrap: () => Promise.resolve({ success: null, available_nodes: null, mfa_required: true }) });
+    render(
+      <MemoryRouter initialEntries={["/login"]}>
+        <Login />
+      </MemoryRouter>
+    );
+    fireEvent.change(screen.getByLabelText("auth.username"), { target: { value: "admin" } });
+    fireEvent.change(screen.getByLabelText("auth.password"), { target: { value: "test-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "auth.login" }));
+    fireEvent.click(await screen.findByText("Festival B"));
+    await screen.findByLabelText("auth.mfa.code");
+    fireEvent.change(screen.getByLabelText("auth.mfa.code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "auth.login" }));
+    await waitFor(() =>
+      expect(mockLogin).toHaveBeenLastCalledWith({
+        loginPayload: { username: "admin", password: "test-password", node_id: 12, mfa_code: "123456" },
+      })
+    );
   });
 });

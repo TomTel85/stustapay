@@ -6,7 +6,10 @@ import { TextDecoder, TextEncoder } from "util";
 (globalThis as typeof globalThis & { TextEncoder: typeof TextEncoder; TextDecoder: typeof TextDecoder }).TextDecoder =
   TextDecoder;
 
+const mockMfaStatus = jest.fn();
+
 jest.mock("@/api", () => ({
+  useGetMfaStatusQuery: () => mockMfaStatus(),
   useGetProfileQuery: () => ({
     data: null,
   }),
@@ -90,6 +93,7 @@ describe("AuthenticatedRoot", () => {
   beforeEach(() => {
     window.localStorage.clear();
     mockChangeLanguage.mockClear();
+    mockMfaStatus.mockReturnValue({ data: { enabled: true } });
   });
 
   beforeAll(() => {
@@ -150,6 +154,13 @@ describe("AuthenticatedRoot", () => {
         </Routes>
       </MemoryRouter>
     );
+
+  test("shows unenrolled admin users an MFA setup reminder above their workspace", () => {
+    mockMfaStatus.mockReturnValue({ data: { enabled: false } });
+    renderLayout();
+    expect(screen.getByRole("alert").textContent).toContain("auth.mfa.reminderText");
+    expect(screen.getByRole("link", { name: "auth.mfa.setup" }).getAttribute("href")).toBe("/profile");
+  });
 
   test("resizes by keyboard, limits the width, and restores the saved preference", () => {
     const view = renderLayout();

@@ -1597,6 +1597,82 @@
         ]
       }
     },
+    "/auth/mfa": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "get MFA enrollment status",
+        "operationId": "get_mfa_status",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "manage authenticator-app MFA",
+        "operationId": "update_mfa",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/tills": {
       "get": {
         "tags": [
@@ -17083,6 +17159,18 @@
               }
             ],
             "title": "Node Id"
+          },
+          "mfa_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfa Code"
           }
         },
         "type": "object",
@@ -17091,6 +17179,121 @@
           "password"
         ],
         "title": "LoginPayload"
+      },
+      "MfaResult": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "invalid_credentials",
+                  "invalid_code",
+                  "rate_limited",
+                  "invalid_state"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "provisioning_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provisioning Uri"
+          },
+          "recovery_codes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Codes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "title": "MfaResult"
+      },
+      "MfaStatus": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "recovery_codes_remaining": {
+            "type": "integer",
+            "title": "Recovery Codes Remaining"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "recovery_codes_remaining"
+        ],
+        "title": "MfaStatus"
+      },
+      "MfaUpdate": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "setup",
+              "enable",
+              "disable",
+              "regenerate"
+            ],
+            "title": "Action"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 1024,
+            "title": "Password"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Code",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "action",
+          "password"
+        ],
+        "title": "MfaUpdate"
       },
       "ModifyRegisterBalancePayload": {
         "properties": {
@@ -24257,6 +24460,28 @@
       },
       "UserLoginResult": {
         "properties": {
+          "mfa_required": {
+            "type": "boolean",
+            "title": "Mfa Required",
+            "default": false
+          },
+          "mfa_error": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "invalid_credentials",
+                  "invalid_code",
+                  "rate_limited",
+                  "invalid_state"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfa Error"
+          },
           "success": {
             "anyOf": [
               {

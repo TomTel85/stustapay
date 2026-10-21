@@ -2,7 +2,18 @@ import { useUpdateProfileMutation } from "@/api";
 import { ThemeSelect } from "@/components/features";
 import { useCurrentUser } from "@/hooks";
 import { setCurrentUser, useAppDispatch } from "@/store";
-import { Alert, AlertTitle, Button, LinearProgress, List, ListItem, ListItemText, Paper, Stack, Typography } from "@mui/material";
+import {
+  Alert,
+  AlertTitle,
+  Button,
+  LinearProgress,
+  List,
+  ListItem,
+  ListItemText,
+  Paper,
+  Stack,
+  Typography,
+} from "@mui/material";
 import { FormTextField } from "@stustapay/form-components";
 import { toFormikValidationSchema } from "@stustapay/utils";
 import { Form, Formik, FormikHelpers } from "formik";
@@ -10,6 +21,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { z } from "zod";
+import { MfaSettings } from "./MfaSettings";
 import { PasswordChange } from "./PasswordChange";
 import i18n from "../../../../i18n";
 
@@ -24,6 +36,8 @@ export const Profile: React.FC = () => {
   const currentUser = useCurrentUser();
   const dispatch = useAppDispatch();
   const [updateProfile] = useUpdateProfileMutation();
+  const [showPasswordChange, setShowPasswordChange] = React.useState(false);
+  const passwordChangeId = React.useId();
 
   if (!currentUser) {
     return (
@@ -100,9 +114,22 @@ export const Profile: React.FC = () => {
           )}
         </Formik>
       </Paper>
+      <MfaSettings />
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h5">{t("auth.changePassword")}</Typography>
-        <PasswordChange />
+        <Button
+          variant="outlined"
+          aria-expanded={showPasswordChange}
+          aria-controls={passwordChangeId}
+          onClick={() => setShowPasswordChange((visible) => !visible)}
+        >
+          {t("auth.changePassword")}
+        </Button>
+        {showPasswordChange && (
+          <Stack id={passwordChangeId} spacing={2} sx={{ mt: 2 }}>
+            <PasswordChange />
+            <Button onClick={() => setShowPasswordChange(false)}>{t("cancel")}</Button>
+          </Stack>
+        )}
       </Paper>
     </Stack>
   );

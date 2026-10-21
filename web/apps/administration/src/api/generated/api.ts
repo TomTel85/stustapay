@@ -296,6 +296,14 @@ const injectedRtkApi = api
         query: () => ({ url: `/auth/logout`, method: "POST" }),
         invalidatesTags: ["auth"],
       }),
+      getMfaStatus: build.query<GetMfaStatusApiResponse, GetMfaStatusApiArg>({
+        query: () => ({ url: `/auth/mfa` }),
+        providesTags: ["auth"],
+      }),
+      updateMfa: build.mutation<UpdateMfaApiResponse, UpdateMfaApiArg>({
+        query: (queryArg) => ({ url: `/auth/mfa`, method: "POST", body: queryArg.mfaUpdate }),
+        invalidatesTags: ["auth"],
+      }),
       listTills: build.query<ListTillsApiResponse, ListTillsApiArg>({
         query: (queryArg) => ({
           url: `/tills`,
@@ -2316,6 +2324,12 @@ export type UpdateProfileApiArg = {
 };
 export type LogoutApiResponse = unknown;
 export type LogoutApiArg = void;
+export type GetMfaStatusApiResponse = /** status 200 Successful Response */ MfaStatus;
+export type GetMfaStatusApiArg = void;
+export type UpdateMfaApiResponse = /** status 200 Successful Response */ MfaResult;
+export type UpdateMfaApiArg = {
+  mfaUpdate: MfaUpdate;
+};
 export type ListTillsApiResponse = /** status 200 Successful Response */ NormalizedListTillInt;
 export type ListTillsApiArg = {
   nodeId: number;
@@ -3556,6 +3570,8 @@ export type NodeChoice = {
   description: string;
 };
 export type UserLoginResult = {
+  mfa_required?: boolean;
+  mfa_error?: ("invalid_credentials" | "invalid_code" | "rate_limited" | "invalid_state") | null;
   success: UserLoginSuccess | null;
   available_nodes: NodeChoice[] | null;
 };
@@ -3563,6 +3579,7 @@ export type LoginPayload = {
   username: string;
   password: string;
   node_id?: number | null;
+  mfa_code?: string | null;
 };
 export type ChangePasswordPayload = {
   old_password: string;
@@ -3570,6 +3587,22 @@ export type ChangePasswordPayload = {
 };
 export type UpdateCurrentUserProfilePayload = {
   email?: string | null;
+};
+export type MfaStatus = {
+  enabled: boolean;
+  recovery_codes_remaining: number;
+};
+export type MfaResult = {
+  success: boolean;
+  error?: ("invalid_credentials" | "invalid_code" | "rate_limited" | "invalid_state") | null;
+  secret?: string | null;
+  provisioning_uri?: string | null;
+  recovery_codes?: string[] | null;
+};
+export type MfaUpdate = {
+  action: "setup" | "enable" | "disable" | "regenerate";
+  password: string;
+  code?: string;
 };
 export type Till = {
   name: string;
@@ -5357,6 +5390,9 @@ export const {
   useLazyGetProfileQuery,
   useUpdateProfileMutation,
   useLogoutMutation,
+  useGetMfaStatusQuery,
+  useLazyGetMfaStatusQuery,
+  useUpdateMfaMutation,
   useListTillsQuery,
   useLazyListTillsQuery,
   useCreateTillMutation,

@@ -38,6 +38,7 @@ import { Loading, TestModeDisclaimer } from "@stustapay/components";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, Outlet, Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
+import { MfaReminder } from "./MfaReminder";
 import { getCurrentNodePath } from "./currentNodePath";
 import { NavigationTree } from "./navigation-tree";
 
@@ -421,6 +422,7 @@ export const AuthenticatedRoot: React.FC = () => {
       <Main open={open || isMobile}>
         <DrawerHeader />
         <TestModeDisclaimer testMode={config.testMode} testModeMessage={config.testModeMessage} />
+        <MfaReminder />
         <React.Suspense fallback={<CircularProgress />}>
           {isTreeLoading ? (
             <Loading />

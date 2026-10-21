@@ -1,8 +1,9 @@
-from fastapi import APIRouter, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Response, status
+from pydantic import BaseModel, Field
 
 from stustapay.core.http.auth_user import CurrentAuthToken
 from stustapay.core.http.context import ContextUserService
+from stustapay.core.schema.mfa import MfaResult, MfaStatus, MfaUpdate
 from stustapay.core.schema.user import CurrentUser, UpdateCurrentUserProfilePayload
 from stustapay.core.service.user import UserLoginResult
 
@@ -17,6 +18,7 @@ class LoginPayload(BaseModel):
     username: str
     password: str
     node_id: int | None = None
+    mfa_code: str | None = Field(default=None, max_length=128)
 
 
 @router.post("/login", summary="login with username and password", response_model=UserLoginResult)
@@ -24,7 +26,9 @@ async def login(
     payload: LoginPayload,
     user_service: ContextUserService,
 ):
-    return await user_service.login_user(username=payload.username, password=payload.password, node_id=payload.node_id)
+    return await user_service.login_user(
+        username=payload.username, password=payload.password, node_id=payload.node_id, mfa_code=payload.mfa_code
+    )
 
 
 class ChangePasswordPayload(BaseModel):
@@ -70,3 +74,14 @@ async def logout(
     user_service: ContextUserService,
 ):
     await user_service.logout_user(token=token)
+
+
+@router.get("/mfa", response_model=MfaStatus, summary="get MFA enrollment status")
+async def get_mfa_status(token: CurrentAuthToken, user_service: ContextUserService):
+    return await user_service.get_mfa_status(token=token)
+
+
+@router.post("/mfa", response_model=MfaResult, summary="manage authenticator-app MFA")
+async def update_mfa(token: CurrentAuthToken, payload: MfaUpdate, user_service: ContextUserService, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return await user_service.update_mfa(token=token, payload=payload)

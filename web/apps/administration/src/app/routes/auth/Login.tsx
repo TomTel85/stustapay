@@ -29,6 +29,7 @@ import { z } from "zod";
 const validationSchema = z.object({
   username: z.string(),
   password: z.string(),
+  mfa_code: z.string().optional(),
 });
 
 type FormSchema = z.infer<typeof validationSchema>;
@@ -39,18 +40,12 @@ type NodeSelectInfo = {
   availableNodes: NonNullable<UserLoginResult["available_nodes"]>;
 };
 
-const SelectNode: React.FC<NodeSelectInfo> = ({ username, password, availableNodes }) => {
-  const [login] = useLoginMutation();
+const SelectNode: React.FC<{
+  availableNodes: NodeSelectInfo["availableNodes"];
+  onSelect: (nodeId: number) => void;
+  busy: boolean;
+}> = ({ availableNodes, onSelect, busy }) => {
   const { t } = useTranslation();
-
-  const handleSelectNode = (nodeId: number) => {
-    login({ loginPayload: { username, password, node_id: nodeId } })
-      .unwrap()
-      .catch((err) => {
-        console.log(err);
-        toast.error(t("auth.loginFailed", { reason: err.error }));
-      });
-  };
 
   return (
     <>
@@ -61,7 +56,8 @@ const SelectNode: React.FC<NodeSelectInfo> = ({ username, password, availableNod
         {availableNodes.map((node, index) => (
           <ListItemButton
             key={node.node_id}
-            onClick={() => handleSelectNode(node.node_id)}
+            disabled={busy}
+            onClick={() => onSelect(node.node_id)}
             sx={{
               borderTop: index === 0 ? 1 : 0,
               borderRight: 1,
@@ -85,14 +81,19 @@ export const Login: React.FC = () => {
   const navigate = useNavigate();
   const [login] = useLoginMutation();
   const [nodeSelectInfo, setNodeSelectInfo] = React.useState<NodeSelectInfo | null>(null);
+  const [credentials, setCredentials] = React.useState<{ username: string; password: string } | null>(null);
+  const [mfaRequired, setMfaRequired] = React.useState(false);
+  const [selectedNode, setSelectedNode] = React.useState<number | null>(null);
+  const [busy, setBusy] = React.useState(false);
   const prefilledUsername = query.get("username") ?? "";
   const showInvitationAcceptedHint = query.get("invitationAccepted") === "1" && prefilledUsername !== "";
   const initialValues = React.useMemo(
     () => ({
-      username: prefilledUsername,
-      password: "",
+      username: credentials?.username ?? prefilledUsername,
+      password: credentials?.password ?? "",
+      mfa_code: "",
     }),
-    [prefilledUsername]
+    [prefilledUsername, credentials]
   );
 
   useEffect(() => {
@@ -103,25 +104,35 @@ export const Login: React.FC = () => {
     }
   }, [isLoggedIn, navigate, query]);
 
-  const handleSubmit = (values: FormSchema, { setSubmitting }: FormikHelpers<FormSchema>) => {
-    setSubmitting(true);
-    login({ loginPayload: { username: values.username, password: values.password, node_id: null } })
-      .unwrap()
-      .then((result: UserLoginResult) => {
-        if (result.available_nodes) {
-          setNodeSelectInfo({
-            username: values.username,
-            password: values.password,
-            availableNodes: result.available_nodes,
-          });
-        }
-        setSubmitting(false);
-      })
-      .catch((err) => {
-        setSubmitting(false);
-        console.log(err);
-        toast.error(t("auth.loginFailed", { reason: err.error }));
-      });
+  const submitLogin = async (values: FormSchema, nodeId: number | null) => {
+    setBusy(true);
+    try {
+      const result = await login({
+        loginPayload: { ...values, node_id: nodeId, mfa_code: values.mfa_code || null },
+      }).unwrap();
+      if (result.available_nodes) {
+        setNodeSelectInfo({
+          username: values.username,
+          password: values.password,
+          availableNodes: result.available_nodes,
+        });
+      } else if (result.mfa_required) {
+        setCredentials({ username: values.username, password: values.password });
+        setNodeSelectInfo(null);
+        setMfaRequired(true);
+        if (result.mfa_error) toast.error(t(`auth.mfa.errors.${result.mfa_error}`));
+      }
+    } catch (err) {
+      const error = err as { error?: string; data?: { detail?: string } };
+      toast.error(t("auth.loginFailed", { reason: error.data?.detail ?? error.error }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSubmit = async (values: FormSchema, { setSubmitting }: FormikHelpers<FormSchema>) => {
+    await submitLogin(values, selectedNode);
+    setSubmitting(false);
   };
 
   return (
@@ -185,7 +196,17 @@ export const Login: React.FC = () => {
           </Avatar>
 
           {nodeSelectInfo ? (
-            <SelectNode {...nodeSelectInfo} />
+            <SelectNode
+              availableNodes={nodeSelectInfo.availableNodes}
+              busy={busy}
+              onSelect={(nodeId) => {
+                setSelectedNode(nodeId);
+                void submitLogin(
+                  { username: nodeSelectInfo.username, password: nodeSelectInfo.password, mfa_code: "" },
+                  nodeId
+                );
+              }}
+            />
           ) : (
             <>
               <Box>
@@ -201,7 +222,7 @@ export const Login: React.FC = () => {
                   {t("auth.invitationLoginHint", { username: prefilledUsername })}
                 </Alert>
               )}
-              <Formik
+              <Formik<FormSchema>
                 initialValues={initialValues}
                 enableReinitialize
                 onSubmit={handleSubmit}
@@ -230,6 +251,19 @@ export const Login: React.FC = () => {
                         formik={formik}
                       />
 
+                      {mfaRequired && (
+                        <>
+                          <Alert severity="info">{t("auth.mfa.loginHint")}</Alert>
+                          <FormTextField
+                            autoFocus
+                            variant="outlined"
+                            name="mfa_code"
+                            label={t("auth.mfa.code")}
+                            autoComplete="one-time-code"
+                            formik={formik}
+                          />
+                        </>
+                      )}
                       {formik.isSubmitting && <LinearProgress />}
                       <Button
                         type="submit"

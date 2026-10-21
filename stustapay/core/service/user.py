@@ -1,6 +1,9 @@
 # pylint: disable=unexpected-keyword-arg
+import base64
 import hashlib
+import logging
 import secrets
+import time
 from datetime import datetime, timedelta
 from email.utils import formataddr
 from typing import Optional
@@ -13,6 +16,8 @@ from sftkit.error import AccessDenied, InvalidArgument, NotFound
 from sftkit.service import Service, with_db_transaction
 
 from stustapay.core.config import Config
+from stustapay.core.mfa import decrypt_secret, encrypt_secret, match_totp, recovery_digest, totp_for_secret
+from stustapay.core.schema.mfa import MfaError, MfaResult, MfaStatus, MfaUpdate
 from stustapay.core.schema.tree import ROOT_NODE_ID, Node, ObjectType
 from stustapay.core.schema.user import (
     AcceptInvitationPayload,
@@ -62,6 +67,8 @@ class UserLoginResult(BaseModel):
         name: str
         description: str
 
+    mfa_required: bool = False
+    mfa_error: MfaError | None = None
     success: UserLoginSuccess | None
     available_nodes: list[NodeChoice] | None
 
@@ -626,7 +633,7 @@ class UserService(Service[Config]):
 
     @with_db_transaction
     async def login_user(
-        self, *, conn: Connection, username: str, password: str, node_id: int | None = None
+        self, *, conn: Connection, username: str, password: str, node_id: int | None = None, mfa_code: str | None = None
     ) -> UserLoginResult:
         if node_id is None:
             potential_users = await conn.fetch(
@@ -661,6 +668,11 @@ class UserService(Service[Config]):
 
         logged_in_user = users_with_matching_passwords[0]
         user_id = logged_in_user["id"]
+        mfa = await conn.fetchrow("select * from usr_mfa where usr = $1", user_id)
+        if mfa is not None and mfa["secret"] is not None:
+            error = None if mfa_code is None else await self._verify_mfa(conn=conn, user_id=user_id, code=mfa_code)
+            if mfa_code is None or error is not None:
+                return UserLoginResult(success=None, available_nodes=None, mfa_required=True, mfa_error=error)
         session_id = await conn.fetchval("insert into usr_session (usr) values ($1) returning id", user_id)
         token = self.auth_service.create_user_access_token(UserTokenMetadata(user_id=user_id, session_id=session_id))
         user = await self.auth_service.get_user_from_token(conn=conn, token=token)
@@ -671,6 +683,108 @@ class UserService(Service[Config]):
                 token=token,
             ),
         )
+
+    async def _verify_mfa(self, *, conn: Connection, user_id: int, code: str, pending: bool = False) -> MfaError | None:
+        """Caller holds the usr row lock. Return errors so failed attempts commit."""
+        row = await conn.fetchrow("select *, now() as db_now from usr_mfa where usr = $1", user_id)
+        if row is None:
+            return "invalid_state"
+        now = row["db_now"]
+        expired_window = now - row["attempt_window"] >= timedelta(minutes=15)
+        attempts = 0 if expired_window else row["attempts"]
+        if attempts >= 10:
+            return "rate_limited"
+        await conn.execute(
+            "update usr_mfa set attempts = $2, attempt_window = $3 where usr = $1",
+            user_id,
+            attempts + 1,
+            now if expired_window else row["attempt_window"],
+        )
+        encrypted = row["pending_secret"] if pending else row["secret"]
+        if encrypted is None or (
+            pending and (row["pending_since"] is None or now - row["pending_since"] > timedelta(minutes=10))
+        ):
+            return "invalid_state"
+        secret = decrypt_secret(encrypted, key=self.config.core.secret_key, user_id=user_id)
+        step = match_totp(secret, code.strip(), now=time.time(), last_step=-1 if pending else row["last_step"])
+        if step is not None:
+            await conn.execute("update usr_mfa set last_step = $2, attempts = 0 where usr = $1", user_id, step)
+            return None
+        digest = recovery_digest(code)
+        if not pending and digest in row["recovery_hashes"]:
+            await conn.execute(
+                "update usr_mfa set recovery_hashes = array_remove(recovery_hashes, $2), attempts = 0 where usr = $1",
+                user_id,
+                digest,
+            )
+            return None
+        return "invalid_code"
+
+    @with_db_transaction(read_only=True)
+    @requires_user(node_required=False)
+    async def get_mfa_status(self, *, conn: Connection, current_user: CurrentUser) -> MfaStatus:
+        row = await conn.fetchrow("select * from usr_mfa where usr = $1", current_user.id)
+        return MfaStatus(
+            enabled=row is not None and row["secret"] is not None,
+            recovery_codes_remaining=len(row["recovery_hashes"]) if row else 0,
+        )
+
+    @with_db_transaction
+    @requires_user(node_required=False)
+    async def update_mfa(
+        self, *, conn: Connection, current_user: CurrentUser, token: str, payload: MfaUpdate
+    ) -> MfaResult:
+        user_id = current_user.id
+        password_hash = await conn.fetchval("select password from usr where id = $1 for update", user_id)
+        # Re-check after acquiring the user lock: enrollment can revoke a waiting session.
+        if await self.auth_service.get_user_from_token(conn=conn, token=token) is None:
+            raise AccessDenied("Session expired")
+        row = await conn.fetchrow("select * from usr_mfa where usr = $1", user_id)
+        enabled = row is not None and row["secret"] is not None
+        if payload.action == "setup":
+            if enabled:
+                return MfaResult(success=False, error="invalid_state")
+            secret = base64.b32encode(secrets.token_bytes(20)).decode()
+            encrypted = encrypt_secret(secret, key=self.config.core.secret_key, user_id=user_id)
+            await conn.execute(
+                "insert into usr_mfa (usr, pending_secret, pending_since) values ($1, $2, now()) "
+                "on conflict (usr) do update set pending_secret = $2, pending_since = now()",
+                user_id,
+                encrypted,
+            )
+            uri = totp_for_secret(secret).get_provisioning_uri(
+                account_name=f"{current_user.login} ({current_user.node_id})", issuer="TeamFestlichPay Admin"
+            )
+            return MfaResult(success=True, secret=secret, provisioning_uri=uri)
+        # Preparing a seed does not change authentication. Activating or changing
+        # factors still requires the account password and a valid second factor.
+        if not self._check_password(payload.password, password_hash):
+            return MfaResult(success=False, error="invalid_credentials")
+        if (payload.action == "enable" and enabled) or (payload.action != "enable" and not enabled):
+            return MfaResult(success=False, error="invalid_state")
+        error = await self._verify_mfa(
+            conn=conn, user_id=user_id, code=payload.code, pending=payload.action == "enable"
+        )
+        if error is not None:
+            return MfaResult(success=False, error=error)
+        codes = None
+        if payload.action == "disable":
+            await conn.execute("delete from usr_mfa where usr = $1", user_id)
+        else:
+            codes = [secrets.token_hex(16).upper() for _ in range(10)]
+            await conn.execute(
+                "update usr_mfa set recovery_hashes = $2 where usr = $1", user_id, [recovery_digest(c) for c in codes]
+            )
+            if payload.action == "enable":
+                await conn.execute(
+                    "update usr_mfa set secret = pending_secret, pending_secret = null, pending_since = null where usr = $1",
+                    user_id,
+                )
+        metadata = self.auth_service.decode_user_jwt_payload(token)
+        assert metadata is not None
+        await conn.execute("delete from usr_session where usr = $1 and id != $2", user_id, metadata.session_id)
+        logging.getLogger(__name__).info("Admin MFA %s for user %s", payload.action, user_id)
+        return MfaResult(success=True, recovery_codes=codes)
 
     @with_db_transaction
     @requires_user(node_required=False)
