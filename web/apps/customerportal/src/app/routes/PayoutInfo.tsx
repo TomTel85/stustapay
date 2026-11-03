@@ -94,7 +94,7 @@ export const PayoutInfo: React.FC = () => {
     account_name: customer.account_name ?? "",
     email: customer.email ?? "",
     privacy_policy: false,
-    donation: customer.donation ?? 0.0,
+    donation: config.donation_enabled ? (customer.donation ?? 0.0) : 0.0,
   };
 
   const onSubmit = (values: FormVal, { setSubmitting }: FormikHelpers<FormVal>) => {
@@ -238,7 +238,11 @@ export const PayoutInfo: React.FC = () => {
                     {t("payout.payoutAmount")}
                   </Typography>
                   <Typography variant="h6" fontWeight="bold" color="primary">
-                    {formatCurrency(customer.balance - (formik.values.donation || 0))}
+                    {formatCurrency(
+                      payoutInfo.in_payout_run && customer.payout
+                        ? customer.payout.amount
+                        : customer.balance - (formik.values.donation || 0)
+                    )}
                   </Typography>
                 </Stack>
 

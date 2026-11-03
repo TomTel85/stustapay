@@ -13,7 +13,7 @@ export interface ChangeLayoutProps<T extends Record<string, any>> {
   initialValues: T;
   validationSchema: z.ZodSchema<T>;
   successRoute: string;
-  onSubmit: (t: T) => MutationActionCreatorResult<any>;
+  onSubmit: (t: T, helpers: FormikHelpers<T>) => MutationActionCreatorResult<any> | Promise<unknown>;
   form: React.FC<FormikProps<T>>;
 }
 
@@ -28,19 +28,17 @@ export function ChangeLayout<T extends Record<string, any>>({
 }: ChangeLayoutProps<T>) {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const handleSubmit = (values: T, { setSubmitting }: FormikHelpers<T>) => {
-    setSubmitting(true);
-
-    onSubmit(values)
-      .unwrap()
-      .then(() => {
-        setSubmitting(false);
-        navigate(successRoute);
-      })
-      .catch((err) => {
-        setSubmitting(false);
-        console.warn("error in change", err);
-      });
+  const handleSubmit = async (values: T, helpers: FormikHelpers<T>) => {
+    helpers.setSubmitting(true);
+    try {
+      const result = onSubmit(values, helpers);
+      await ("unwrap" in result ? result.unwrap() : result);
+      navigate(successRoute);
+    } catch (err) {
+      console.warn("error in change", err);
+    } finally {
+      helpers.setSubmitting(false);
+    }
   };
 
   return (

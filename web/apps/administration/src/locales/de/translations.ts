@@ -534,6 +534,18 @@ export const translations: NestedPartialAsStrings<Translations> = {
     deleteDescription: "Ticketlöschung bestätigen",
   },
   product: {
+    buttonSection: "Kassenbutton und Pfand",
+    createButton: "Kassenbutton anlegen",
+    createButtonHelp:
+      "Der Button übernimmt den Produktnamen. Anschließend kannst du ihn einem Kassenlayout hinzufügen.",
+    depositProduct: "Pfandprodukt (optional)",
+    depositProductHelp:
+      "Wähle ein vorhandenes, rückgabefähiges Produkt. Es wird beim Verkauf über diesen Button zusätzlich gebucht. Leer lassen für Verkauf ohne Pfand.",
+    depositLoadFailed:
+      "Pfandprodukte konnten nicht geladen werden. Lade die Seite neu, wenn du Pfand hinzufügen möchtest.",
+    buttonCreationFailed:
+      "Das Produkt wurde gespeichert, der Button konnte nicht angelegt werden. Versuche es erneut oder wähle „Kassenbutton anlegen“ ab, um ohne Button abzuschließen. Das Produkt wird nicht erneut angelegt.",
+    productCreationFailed: "Das Produkt konnte nicht gespeichert werden. Bitte versuche es erneut.",
     name: "Name",
     price: "Preis",
     priceInVouchers: "Preis in Gutscheinen",

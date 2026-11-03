@@ -537,6 +537,16 @@ export const translations = {
     deleteDescription: "Confirm ticket deletion",
   },
   product: {
+    buttonSection: "Till button and deposit",
+    createButton: "Create till button",
+    createButtonHelp: "The button uses the product name. You can then add it to a till layout.",
+    depositProduct: "Deposit product (optional)",
+    depositProductHelp:
+      "Choose an existing returnable product. It will be added when selling via this button. Leave empty to sell without a deposit.",
+    depositLoadFailed: "Deposit products could not be loaded. Reload the page if you want to add a deposit.",
+    buttonCreationFailed:
+      "The product was saved, but the button could not be created. Try again or uncheck “Create till button” to finish without a button. The product will not be created again.",
+    productCreationFailed: "The product could not be saved. Please try again.",
     name: "Name",
     price: "Price",
     priceInVouchers: "Price in Vouchers",

@@ -450,6 +450,140 @@ async def test_max_payout_sum(
     check_sepa_xml(xml_content, customers_to_transfer, event.sepa_config)
 
 
+@pytest.mark.parametrize(
+    ("balances", "donations", "donate_all", "limit", "expected"),
+    [
+        ([10, 100], [100, 0], [False, False], 10, [(0, 10)]),
+        ([10], [None], [True], 0, [(0, 10)]),
+        ([10, 100], [None, 0], [True, False], 100, [(0, 10), (100, 0)]),
+        ([10], [1], [True], 0, [(0, 10)]),
+    ],
+    ids=["donation-exceeds-balance", "donate-all-only", "leading-donate-all", "donate-all-with-fixed-donation"],
+)
+async def test_payout_limit_uses_actual_transfer_amount(
+    db_connection: Connection,
+    customers: list[CustomerTestInfo],
+    event_node: Node,
+    event_admin_token: str,
+    customer_service: CustomerService,
+    balances,
+    donations,
+    donate_all,
+    limit,
+    expected,
+):
+    await db_connection.execute(
+        "update customer_info set has_entered_info = false where customer_account_id = any($1::bigint[])",
+        [customer.id for customer in customers],
+    )
+    for customer, balance, donation, all_donated in zip(customers, balances, donations, donate_all):
+        await db_connection.execute("update account set balance = $2 where id = $1", customer.id, balance)
+        await db_connection.execute(
+            "update customer_info set has_entered_info = true, donation = $2, donate_all = $3 "
+            "where customer_account_id = $1",
+            customer.id,
+            donation,
+            all_donated,
+        )
+
+    payout_run = await customer_service.payout.create_payout_run(
+        token=event_admin_token,
+        node_id=event_node.id,
+        new_payout_run=NewPayoutRun(max_num_payouts=10, max_payout_sum=limit),
+    )
+    payouts = await db_connection.fetch(
+        "select customer_account_id, amount, donation from payout where payout_run_id = $1 order by customer_account_id",
+        payout_run.id,
+    )
+    assert [(p["customer_account_id"], p["amount"], p["donation"]) for p in payouts] == [
+        (customer.id, amount, donation) for customer, (amount, donation) in zip(customers, expected)
+    ]
+    assert payout_run.total_payout_amount <= limit
+
+
+@pytest.mark.parametrize(
+    ("balance", "donation", "donate_all", "expected_payout", "expected_donation"),
+    [(20, None, True, 0, 20), (10, 100, False, 0, 10), (20, 5, False, 15, 5)],
+)
+async def test_pending_payout_detail_matches_created_run(
+    db_connection: Connection,
+    customers: list[CustomerTestInfo],
+    event_node: Node,
+    event_admin_token: str,
+    customer_service: CustomerService,
+    balance,
+    donation,
+    donate_all,
+    expected_payout,
+    expected_donation,
+):
+    await db_connection.execute(
+        "update customer_info set has_entered_info = false where customer_account_id = any($1::bigint[])",
+        [customer.id for customer in customers],
+    )
+    await db_connection.execute("update account set balance = $2 where id = $1", customers[0].id, balance)
+    await db_connection.execute(
+        "update customer_info set has_entered_info = true, donation = $2, donate_all = $3 "
+        "where customer_account_id = $1",
+        customers[0].id,
+        donation,
+        donate_all,
+    )
+    detail = await customer_service.payout.get_pending_payout_detail(token=event_admin_token, node_id=event_node.id)
+    assert detail.n_payouts == 1
+    assert detail.total_payout_amount == expected_payout
+    assert detail.total_donation_amount == expected_donation
+    run = await customer_service.payout.create_payout_run(
+        token=event_admin_token,
+        node_id=event_node.id,
+        new_payout_run=NewPayoutRun(max_num_payouts=10, max_payout_sum=100),
+    )
+    assert run.total_payout_amount == detail.total_payout_amount
+    assert run.total_donation_amount == detail.total_donation_amount
+
+
+async def test_payout_completion_failure_rolls_back_emails(
+    db_connection: Connection,
+    customers: list[CustomerTestInfo],
+    event_node: Node,
+    event_admin_token: str,
+    customer_service: CustomerService,
+    mail_service: MailService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    assert event_node.event is not None
+    await db_connection.execute(
+        "update event set payout_email_enabled = true, payout_sender = 'noreply@test.invalid' where id = $1",
+        event_node.event.id,
+    )
+    await db_connection.execute("update config set value = 'true' where key = 'mail.enabled'")
+    await db_connection.execute("delete from mails")
+    run = await customer_service.payout.create_payout_run(
+        token=event_admin_token,
+        node_id=event_node.id,
+        new_payout_run=NewPayoutRun(max_num_payouts=15, max_payout_sum=15000),
+    )
+
+    async def fail_reset(**kwargs):
+        del kwargs
+        raise RuntimeError("forced completion failure")
+
+    monkeypatch.setattr("stustapay.core.service.customer.payout.reset_customer_payout_info", fail_reset)
+    with pytest.raises(RuntimeError, match="forced completion failure"):
+        await customer_service.payout.set_payout_run_as_done(
+            token=event_admin_token,
+            node_id=event_node.id,
+            payout_run_id=run.id,
+            mail_service=mail_service,
+        )
+    assert not await db_connection.fetchval("select done from payout_run where id = $1", run.id)
+    assert await db_connection.fetchval("select count(*) from mails") == 0
+    for customer in customers:
+        assert await db_connection.fetchval("select balance from account where id = $1", customer.id) == pytest.approx(
+            customer.balance
+        )
+
+
 async def test_max_num_payouts(
     customers: list[CustomerTestInfo],
     event_node: Node,

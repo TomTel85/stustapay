@@ -1074,6 +1074,66 @@ async def test_shared_topup_checkout_books_contributor_without_reserving_pending
     assert shared_topup_order.shared_topup_contributor_name == "Alice"
 
 
+@pytest.mark.parametrize(
+    ("provider_status", "expected_status", "expected_local_status"),
+    [
+        (SumUpCheckoutStatus.PAID, SumUpCheckoutStatus.PAID, PendingOrderStatus.booked),
+        (SumUpCheckoutStatus.PENDING, SumUpCheckoutStatus.PENDING, PendingOrderStatus.pending),
+        (SumUpCheckoutStatus.FAILED, SumUpCheckoutStatus.FAILED, PendingOrderStatus.cancelled),
+        (None, SumUpCheckoutStatus.FAILED, PendingOrderStatus.cancelled),
+    ],
+)
+async def test_overdue_shared_topup_checks_provider_before_cancelling(
+    customer_service: CustomerService,
+    db_connection: Connection,
+    test_customer: Customer,
+    event_node: Node,
+    provider_status,
+    expected_status,
+    expected_local_status,
+):
+    await _set_group_topup_enabled(db_connection, event_node, True)
+    customer_service.sumup.config.core.sumup_enabled = True
+    auth = await customer_service.login_customer(
+        uid=test_customer.user_tag_uid, pin=test_customer.user_tag_pin, node_id=event_node.id
+    )
+    link = await customer_service.create_shared_topup_link(token=auth.token)
+    assert link.token is not None
+    sumup_api = OnlineTopUpSumUpApiMock(api_key="test", merchant_code="merchant")
+    customer_service.sumup._create_sumup_api = lambda merchant_code, api_key: sumup_api  # type: ignore
+    _, order_uuid = await customer_service.sumup.create_shared_topup_checkout(
+        token=link.token, amount=20, contributor_name="Alice"
+    )
+    await db_connection.execute(
+        "update pending_sumup_order set created_at = $1 where uuid = $2",
+        datetime.now(timezone.utc) - timedelta(minutes=6),
+        order_uuid,
+    )
+    if provider_status is None:
+        del sumup_api.checkouts[order_uuid]
+    else:
+        sumup_api.checkouts[order_uuid].status = provider_status
+
+    assert (
+        await customer_service.sumup.check_shared_topup_checkout(token=link.token, order_uuid=order_uuid)
+        == expected_status
+    )
+    assert (
+        await db_connection.fetchval("select status from pending_sumup_order where uuid = $1", order_uuid)
+        == expected_local_status.value
+    )
+    assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", order_uuid) == (
+        1 if provider_status == SumUpCheckoutStatus.PAID else 0
+    )
+    if provider_status == SumUpCheckoutStatus.PAID:
+        assert await db_connection.fetchval("select balance from account where id = $1", test_customer.id) == 140
+        assert (
+            await customer_service.sumup.check_shared_topup_checkout(token=link.token, order_uuid=order_uuid)
+            == SumUpCheckoutStatus.PAID
+        )
+        assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", order_uuid) == 1
+
+
 async def test_shared_topup_checkout_books_late_paid_checkout_after_local_cancellation(
     customer_service: CustomerService, db_connection: Connection, test_customer: Customer, event_node: Node
 ):

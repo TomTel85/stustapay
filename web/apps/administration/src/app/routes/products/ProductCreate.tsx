@@ -1,14 +1,15 @@
-import { useCreateProductMutation } from "@/api";
+import { Product, useCreateProductMutation, useCreateTillButtonMutation } from "@/api";
 import { ProductRoutes } from "@/app/routes";
 import { CreateLayout } from "@/components";
 import { useCurrentNode } from "@/hooks";
-import { NewProduct, NewProductSchema } from "@stustapay/models";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { ProductForm } from "./ProductForm";
+import { ProductCreateForm, ProductCreateSchema, ProductCreateValues } from "./ProductCreateForm";
 import { withPrivilegeGuard } from "@/app/layout";
 
-const initialValues: NewProduct = {
+const initialValues: ProductCreateValues = {
+  create_button: true,
+  deposit_product_id: null,
   name: "",
   price: 0,
   tax_rate_id: null as unknown as number,
@@ -19,10 +20,11 @@ const initialValues: NewProduct = {
   is_donation: false,
 };
 
-export const ProductCreate: React.FC = withPrivilegeGuard("node_administration", () => {
+const ProductCreateAtNode: React.FC<{ nodeId: number }> = ({ nodeId }) => {
   const { t } = useTranslation();
-  const { currentNode } = useCurrentNode();
   const [createProduct] = useCreateProductMutation();
+  const [createTillButton] = useCreateTillButtonMutation();
+  const savedProduct = React.useRef<Product | null>(null);
 
   return (
     <CreateLayout
@@ -30,9 +32,37 @@ export const ProductCreate: React.FC = withPrivilegeGuard("node_administration",
       submitLabel={t("add")}
       successRoute={ProductRoutes.list()}
       initialValues={initialValues}
-      validationSchema={NewProductSchema}
-      onSubmit={(product) => createProduct({ nodeId: currentNode.id, newProduct: product })}
-      form={ProductForm}
+      validationSchema={ProductCreateSchema}
+      onSubmit={async ({ create_button, deposit_product_id, ...product }, { setStatus }) => {
+        try {
+          if (!savedProduct.current) {
+            savedProduct.current = await createProduct({ nodeId, newProduct: product }).unwrap();
+          }
+          setStatus({ productCreated: true });
+          if (create_button) {
+            await createTillButton({
+              nodeId,
+              newTillButton: {
+                name: savedProduct.current.name,
+                product_ids: [savedProduct.current.id, ...(deposit_product_id == null ? [] : [deposit_product_id])],
+              },
+            }).unwrap();
+          }
+        } catch (error) {
+          setStatus(
+            savedProduct.current
+              ? { productCreated: true, buttonCreationFailed: true }
+              : { productCreationFailed: true }
+          );
+          throw error;
+        }
+      }}
+      form={ProductCreateForm}
     />
   );
+};
+
+export const ProductCreate: React.FC = withPrivilegeGuard("node_administration", () => {
+  const { currentNode } = useCurrentNode();
+  return <ProductCreateAtNode key={currentNode.id} nodeId={currentNode.id} />;
 });

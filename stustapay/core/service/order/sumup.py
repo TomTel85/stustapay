@@ -389,7 +389,9 @@ class SumupService(Service[Config]):
                 return SumUpCheckoutStatus.PAID
             if pending_order.status == PendingOrderStatus.cancelled:
                 try:
-                    sumup_checkout = await self._fetch_checkout_for_pending_order(conn=conn, pending_order=pending_order)
+                    sumup_checkout = await self._fetch_checkout_for_pending_order(
+                        conn=conn, pending_order=pending_order
+                    )
                 except SumUpError as e:
                     self.logger.error(f"SumUp API error while finding checkout for cancelled order {order_uuid}: {e}")
                     return SumUpCheckoutStatus.FAILED
@@ -404,7 +406,9 @@ class SumupService(Service[Config]):
             # Only process if the order is still pending
             if pending_order.status == PendingOrderStatus.pending:
                 try:
-                    sumup_checkout = await self._fetch_checkout_for_pending_order(conn=conn, pending_order=pending_order)
+                    sumup_checkout = await self._fetch_checkout_for_pending_order(
+                        conn=conn, pending_order=pending_order
+                    )
                     if sumup_checkout:
                         self.logger.info(f"Found checkout for order {order_uuid} with status {sumup_checkout.status}")
                         if sumup_checkout.status == SumUpCheckoutStatus.PAID:
@@ -453,9 +457,7 @@ class SumupService(Service[Config]):
         event_node = await fetch_event_node_for_node(conn=conn, node_id=current_customer.node_id)
         assert event_node is not None
         event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=current_customer.node_id)
-        resolved = await create_sumup_api_for_node(
-            conn=conn, node_id=event_node.id, api_factory=self._create_sumup_api
-        )
+        resolved = await create_sumup_api_for_node(conn=conn, node_id=event_node.id, api_factory=self._create_sumup_api)
         if resolved is None:
             raise InvalidArgument("SumUp is enabled but no merchant connection is configured")
         api, access = resolved
@@ -465,7 +467,9 @@ class SumupService(Service[Config]):
             raise InvalidArgument("Must top up more than 0€")
 
         # Get the appropriate balance limit based on VIP status
-        max_limit = event_settings.vip_max_account_balance if current_customer.is_vip else event_settings.max_account_balance
+        max_limit = (
+            event_settings.vip_max_account_balance if current_customer.is_vip else event_settings.max_account_balance
+        )
         old_balance = current_customer.balance
         new_balance = current_customer.balance + amount
         if amount != int(amount):
@@ -541,7 +545,9 @@ class SumupService(Service[Config]):
             description=f"{event_node.name} Online TopUp {current_customer.user_tag_uid_hex} {order_uuid}",
             redirect_url=f"{event_settings.customer_portal_url}/topup?order_uuid={order_uuid}",
         )
-        self.logger.info(f"Creating SumUp checkout for amount {amount} {event_settings.currency_identifier} with redirect_url: {create_checkout.redirect_url}")
+        self.logger.info(
+            f"Creating SumUp checkout for amount {amount} {event_settings.currency_identifier} with redirect_url: {create_checkout.redirect_url}"
+        )
         checkout_response = await api.create_sumup_checkout(create_checkout)
         virtual_till = await fetch_virtual_till(conn=conn, node=event_node)
         completed_top_up = CompletedTopUp(
@@ -585,9 +591,7 @@ class SumupService(Service[Config]):
         if not event_settings.is_group_topup_enabled(self.config.core):
             raise InvalidArgument(GROUP_TOPUP_DISABLED_MESSAGE)
 
-        resolved = await create_sumup_api_for_node(
-            conn=conn, node_id=event_node.id, api_factory=self._create_sumup_api
-        )
+        resolved = await create_sumup_api_for_node(conn=conn, node_id=event_node.id, api_factory=self._create_sumup_api)
         if resolved is None:
             raise InvalidArgument("SumUp is enabled but no merchant connection is configured")
         api, access = resolved
@@ -700,16 +704,6 @@ class SumupService(Service[Config]):
                 return await self._book_paid_online_topup_for_checkout(conn=conn, pending_order=pending_order)
             return SumUpCheckoutStatus.FAILED
 
-        current_time = datetime.now(timezone.utc)
-        order_creation_time = pending_order.created_at
-        if order_creation_time is not None and (current_time - order_creation_time) > SUMUP_PENDING_ORDER_TIMEOUT:
-            await conn.execute(
-                "UPDATE pending_sumup_order SET status = $1 WHERE uuid = $2",
-                PendingOrderStatus.cancelled.value,
-                order_uuid,
-            )
-            return SumUpCheckoutStatus.FAILED
-
         resolved = await create_sumup_api_for_node(
             conn=conn,
             node_id=pending_order.node_id,
@@ -725,6 +719,8 @@ class SumupService(Service[Config]):
             self.logger.exception("SumUp API error while checking shared topup order %s", order_uuid)
             return SumUpCheckoutStatus.FAILED
         if sumup_checkout is None:
+            if self._has_pending_order_timed_out(pending_order):
+                await self._mark_pending_order_cancelled(conn=conn, order_uuid=order_uuid)
             return SumUpCheckoutStatus.FAILED
         if sumup_checkout.status == SumUpCheckoutStatus.PAID:
             try:

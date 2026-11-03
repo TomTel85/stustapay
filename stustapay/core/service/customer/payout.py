@@ -179,8 +179,8 @@ class PayoutService(Service[Config]):
     async def get_pending_payout_detail(self, *, conn: Connection, node: Node) -> PendingPayoutDetail:
         return await conn.fetch_one(
             PendingPayoutDetail,
-            "select coalesce(sum(c.balance), 0) - coalesce(sum(c.donation), 0) as total_payout_amount, "
-            "   coalesce(sum(c.donation), 0) as total_donation_amount, "
+            "select coalesce(sum(case when c.donate_all then 0.0 else greatest(0.0, c.balance - c.donation) end), 0) as total_payout_amount, "
+            "   coalesce(sum(case when c.donate_all then c.balance else least(c.balance, c.donation) end), 0) as total_donation_amount, "
             "   count(*) as n_payouts "
             "from customers_without_payout_run c where c.node_id = $1",
             node.id,
@@ -355,14 +355,11 @@ class PayoutService(Service[Config]):
                 subject = res_config.payout_done_subject or ""
                 payout_sender = res_config.payout_sender
                 await mail_service.send_mail(
+                    conn=conn,
                     subject=subject,
                     text_message=message,
                     html_message=render_plain_text_payout_html(message, subject),
-                    from_addr=(
-                        formataddr((f"{node.name} Auszahlung", payout_sender))
-                        if payout_sender
-                        else None
-                    ),
+                    from_addr=(formataddr((f"{node.name} Auszahlung", payout_sender)) if payout_sender else None),
                     to_addr=payout.email,
                     node_id=node.id,
                 )
@@ -421,7 +418,7 @@ class PayoutService(Service[Config]):
             "select count(*) from ( "
             "   select "
             "       customer_account_id, "
-            "       sum(balance - donation) over (order by customer_account_id rows between unbounded preceding and current row) as running_total "
+            "       sum(case when donate_all then 0.0 else greatest(0.0, balance - donation) end) over (order by customer_account_id rows between unbounded preceding and current row) as running_total "
             "   from customers_without_payout_run p where p.node_id = $2 and p.payout_export and round(p.balance, 2) > 0 "
             "   order by customer_account_id "
             ") as agr "
@@ -460,7 +457,7 @@ class PayoutService(Service[Config]):
             "           select "
             "               customer_account_id, "
             "               count(*) over (order by customer_account_id rows between unbounded preceding and current row) as index, "
-            "               sum(balance - donation) over (order by customer_account_id rows between unbounded preceding and current row) as running_total "
+            "               sum(case when donate_all then 0.0 else greatest(0.0, balance - donation) end) over (order by customer_account_id rows between unbounded preceding and current row) as running_total "
             "           from customers_without_payout_run p "
             "           where p.node_id = $3 and p.payout_export and round(p.balance, 2) > 0 "
             "           order by customer_account_id "
