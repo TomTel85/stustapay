@@ -1,18 +1,20 @@
 import {
   selectUserById,
   selectUserRoleById,
+  findNode,
   useGetUserQuery,
   useListUsersQuery,
   useListUserRolesQuery,
   useListUserToRoleQuery,
   UserToRoles,
   useUpdateUserToRolesMutation,
+  useNodeTree,
 } from "@/api";
 import { UserRoleRoutes, UserRoutes, UserToRoleRoutes } from "@/app/routes";
 import { ListLayout } from "@/components";
-import { useCurrentNode, useCurrentUserHasPrivilege, useRenderNode } from "@/hooks";
+import { useCurrentNode, useCurrentUserHasPrivilege } from "@/hooks";
 import { Delete as DeleteIcon, Edit as EditIcon } from "@mui/icons-material";
-import { Box, Link } from "@mui/material";
+import { Alert, Box, Link } from "@mui/material";
 import { DataGrid, GridActionsCellItem, GridColDef } from "@stustapay/framework";
 import { Loading } from "@stustapay/components";
 import { useOpenModal } from "@stustapay/modal-provider";
@@ -40,7 +42,7 @@ const UserLinkCell: React.FC<UserLinkCellProps> = ({ currentNodeId, userId, user
   }
 
   return (
-    <Link component={RouterLink} to={UserRoutes.detail(userId, user.node_id)}>
+    <Link component={RouterLink} to={UserRoutes.detail(userId, currentNodeId)}>
       {getUserName(user)}
     </Link>
   );
@@ -51,15 +53,19 @@ export const UserToRoleList: React.FC = () => {
   const { currentNode } = useCurrentNode();
   const canManageNode = useCurrentUserHasPrivilege(UserToRoleRoutes.privilege);
 
-  const { data: userToRoles, isLoading } = useListUserToRoleQuery({ nodeId: currentNode.id });
-  const { data: users, isLoading: isUsersLoading } = useListUsersQuery({ nodeId: currentNode.id });
-  const { data: userRoles, isLoading: isUserRolesLoading } = useListUserRolesQuery({ nodeId: currentNode.id });
+  const { currentData: userToRoles, error: assignmentsError } = useListUserToRoleQuery({ nodeId: currentNode.id });
+  const { currentData: users, error: usersError } = useListUsersQuery({ nodeId: currentNode.id });
+  const { currentData: userRoles, error: rolesError } = useListUserRolesQuery({ nodeId: currentNode.id });
   const [updateUserToRoles] = useUpdateUserToRolesMutation();
-  const { dataGridNodeColumn } = useRenderNode();
+  const { root } = useNodeTree();
   const openModal = useOpenModal();
   const navigate = useNavigate();
 
-  if (isLoading || isUsersLoading || isUserRolesLoading) {
+  if (assignmentsError || usersError || rolesError) {
+    return <Alert severity="error">{t("common.loadingError")}</Alert>;
+  }
+
+  if (!userToRoles || !users || !userRoles) {
     return <Loading />;
   }
 
@@ -92,11 +98,11 @@ export const UserToRoleList: React.FC = () => {
     }
     const roles = ids.map((id) => selectUserRoleById(userRoles, id));
     roles.sort((lhs, rhs) =>
-      lhs !== undefined && rhs && undefined ? lhs.name.toLowerCase().localeCompare(rhs.name.toLowerCase()) : -1
+      (lhs?.name ?? "").localeCompare(rhs?.name ?? "")
     );
 
     return (
-      <Box sx={{ display: "grid", gap: 1, gridAutoFlow: "column" }}>
+      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
         {roles.map(
           (role) =>
             role != null && (
@@ -114,15 +120,25 @@ export const UserToRoleList: React.FC = () => {
       field: "user_id",
       headerName: t("userToRole.user"),
       flex: 1,
+      valueGetter: (_, row) =>
+        (users && getUserName(selectUserById(users, row.user_id))) || String(row.user_id),
       renderCell: (params) => renderUser(params.row.user_id),
     },
     {
       field: "role_ids",
       headerName: t("userToRole.role"),
       flex: 1,
+      valueGetter: (_, row) =>
+        row.role_ids.map((id) => (userRoles && selectUserRoleById(userRoles, id)?.name) || `#${id}`).join(", "),
       renderCell: (params) => renderRoles(params.row.role_ids),
     },
-    dataGridNodeColumn,
+    {
+      field: "node_name",
+      headerName: t("common.definedAtNode"),
+      minWidth: 180,
+      valueGetter: (_, row) => findNode(row.node_id, root)?.name ?? `#${row.node_id}`,
+      renderCell: ({ row, value }) => row.node_id === currentNode.id ? value : t("userToRole.inheritedAt", { node: value }),
+    },
   ];
 
   if (canManageNode) {
@@ -155,6 +171,8 @@ export const UserToRoleList: React.FC = () => {
     <ListLayout title={t("userToRoles")} routes={UserToRoleRoutes}>
       <DataGrid
         autoHeight
+        showToolbar
+        disableColumnFilter={false}
         getRowId={(row) => `${row.node_id}-${row.user_id}`}
         rows={userToRoles ?? []}
         columns={columns}

@@ -1,5 +1,9 @@
 import { hasAnyPrivilege } from "@/core/privileges";
-import { OrderRoutes } from "./routes";
+import { OrderRoutes, UserToRoleRoutes } from "./routes";
+
+test("uses the backend's user management privilege for role assignments", () => {
+  expect(UserToRoleRoutes.privilege).toBe("user_management");
+});
 
 describe("OrderRoutes", () => {
   test("accepts can_book_orders for order access", () => {

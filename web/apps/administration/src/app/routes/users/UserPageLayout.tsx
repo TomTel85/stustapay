@@ -1,5 +1,5 @@
 import { useNode } from "@/api/nodes";
-import { UserRoleRoutes, UserRoutes } from "@/app/routes";
+import { CashierRoutes, UserRoleRoutes, UserRoutes, UserToRoleRoutes } from "@/app/routes";
 import { Person as PersonIcon } from "@mui/icons-material";
 import { Box, Tab, Tabs } from "@mui/material";
 import { Loading } from "@stustapay/components";
@@ -7,11 +7,17 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Outlet, Link as RouterLink, useLocation, useParams } from "react-router-dom";
 
-const getActiveTab = (location: string) => {
-  if (location.startsWith(UserRoleRoutes.list())) {
-    return UserRoleRoutes.list();
+const getActiveTab = (location: string, nodeId: number, showCashiers: boolean) => {
+  if (showCashiers && location.startsWith(CashierRoutes.list(nodeId))) {
+    return CashierRoutes.list(nodeId);
   }
-  return UserRoutes.list();
+  if (location.startsWith(UserToRoleRoutes.list(nodeId))) {
+    return UserToRoleRoutes.list(nodeId);
+  }
+  if (location.startsWith(UserRoleRoutes.list(nodeId))) {
+    return UserRoleRoutes.list(nodeId);
+  }
+  return UserRoutes.list(nodeId);
 };
 
 export const UserPageLayout: React.FC = () => {
@@ -29,26 +35,52 @@ export const UserPageLayout: React.FC = () => {
     return <Loading />;
   }
 
-  if (node.computed_forbidden_objects_at_node.includes("user_role")) {
-    return (
-      <Box sx={{ mt: 2 }}>
-        <Outlet />
-      </Box>
-    );
-  }
+  const showCashiers =
+    node.event != null &&
+    node.privileges_at_node.includes("node_administration") &&
+    (!node.computed_forbidden_objects_at_node.includes("user") ||
+      !node.computed_forbidden_objects_at_node.includes("user_role"));
 
   return (
-    <Box>
-      <Tabs value={getActiveTab(location.pathname)} sx={{ borderBottom: 1, borderColor: "divider" }} aria-label="Users">
+    <Box sx={{ minWidth: 0 }}>
+      <Tabs
+        value={getActiveTab(location.pathname, node.id, showCashiers)}
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
+        sx={{ borderBottom: 1, borderColor: "divider" }}
+        aria-label={t("users")}
+      >
         <Tab
           label={t("user.users")}
           component={RouterLink}
           icon={<PersonIcon />}
           iconPosition="start"
-          value={UserRoutes.list()}
-          to={UserRoutes.list()}
+          value={UserRoutes.list(node.id)}
+          to={UserRoutes.list(node.id)}
         />
-        <Tab label={t("user.roles")} component={RouterLink} value={UserRoleRoutes.list()} to={UserRoleRoutes.list()} />
+        {!node.computed_forbidden_objects_at_node.includes("user_role") && (
+          <Tab
+            label={t("user.roles")}
+            component={RouterLink}
+            value={UserRoleRoutes.list(node.id)}
+            to={UserRoleRoutes.list(node.id)}
+          />
+        )}
+        <Tab
+          label={t("userToRoles")}
+          component={RouterLink}
+          value={UserToRoleRoutes.list(node.id)}
+          to={UserToRoleRoutes.list(node.id)}
+        />
+        {showCashiers && (
+          <Tab
+            label={t("cashiers")}
+            component={RouterLink}
+            value={CashierRoutes.list(node.id)}
+            to={CashierRoutes.list(node.id)}
+          />
+        )}
       </Tabs>
       <Box sx={{ mt: 2 }}>
         <Outlet />

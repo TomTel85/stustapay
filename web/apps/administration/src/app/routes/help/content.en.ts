@@ -86,11 +86,14 @@ This area controls who can work in the portal and which workflows are visible.
 
 - **Users** represent real portal accounts.
 - **Roles** bundle privileges for operational responsibilities.
-- **User to roles** assigns those roles at node level.
+- **Role assignments** in the Users area assigns roles at the selected node. Inherited assignments are also shown there and are managed at their original node.
+- **Cashiers** in the Users area shows cash drawer balances and assigned terminals for the event.
+
+The user list and user details show roles, including where they are inherited from. The assignment form edits local roles only; inherited roles remain assigned. Search assignments by name and use the column menu to filter roles.
 
 Recommended flow for new team members:
 
-1. Create or review the user account.
+1. Create or review the user account. “Create user and assign roles” opens role assignment immediately.
 2. Select or create the correct role.
 3. Assign the role at the correct node.
 4. Verify in the target event that only the intended sections are visible.
@@ -109,7 +112,7 @@ Recommended flow for new team members:
           requiresNodeContext: true,
         },
         {
-          label: "User to roles",
+          label: "Role assignments",
           description: "Assign roles at the current node",
           buildTo: helpLinkTargets.userAssignments,
           requiresNodeContext: true,

@@ -3,7 +3,8 @@ import { UserRoutes, UserTagRoutes } from "@/app/routes";
 import { ListLayout } from "@/components";
 import { useCurrentNode, useCurrentUserHasPrivilege, useCurrentUserHasPrivilegeAtNode, useRenderNode } from "@/hooks";
 import { Delete as DeleteIcon, Edit as EditIcon } from "@mui/icons-material";
-import { Link } from "@mui/material";
+import { Alert, Box, Link } from "@mui/material";
+import { RoleAssignmentSummary, useUserRoleAssignments } from "../roleAssignments";
 import { DataGrid, GridActionsCellItem, GridColDef } from "@stustapay/framework";
 import { Loading } from "@stustapay/components";
 import { useOpenModal } from "@stustapay/modal-provider";
@@ -18,20 +19,25 @@ export const UserList: React.FC = () => {
   const canManageUsersAtNode = useCurrentUserHasPrivilegeAtNode(UserRoutes.privilege);
   const navigate = useNavigate();
   const openModal = useOpenModal();
+  const roleAssignments = useUserRoleAssignments();
 
-  const { users, isLoading } = useListUsersQuery(
+  const { users, isLoading, error } = useListUsersQuery(
     { nodeId: currentNode.id },
     {
-      selectFromResult: ({ data, ...rest }) => ({
+      selectFromResult: ({ currentData, ...rest }) => ({
         ...rest,
-        users: data ? selectUserAll(data) : undefined,
+        users: currentData ? selectUserAll(currentData) : undefined,
       }),
     }
   );
   const [deleteUser] = useDeleteUserMutation();
   const { dataGridNodeColumn } = useRenderNode();
 
-  if (isLoading) {
+  if (error) {
+    return <Alert severity="error">{t("common.loadingError")}</Alert>;
+  }
+
+  if (isLoading || users === undefined || roleAssignments.isLoading) {
     return <Loading />;
   }
 
@@ -54,7 +60,7 @@ export const UserList: React.FC = () => {
       headerName: t("userLogin"),
       flex: 1,
       renderCell: (params) => (
-        <Link component={RouterLink} to={UserRoutes.detail(params.row.id, params.row.node_id)}>
+        <Link component={RouterLink} to={UserRoutes.detail(params.row.id, currentNode.id)}>
           {params.row.login}
         </Link>
       ),
@@ -69,6 +75,21 @@ export const UserList: React.FC = () => {
       headerName: t("userEmail"),
       flex: 1,
       renderCell: (params) => params.row.email || t("user.noEmail"),
+    },
+    {
+      field: "roles",
+      headerName: t("user.roles"),
+      flex: 2,
+      minWidth: 220,
+      valueGetter: (_, user) =>
+        (roleAssignments.byUser.get(user.id) ?? []).map((role) => `${role.roleName} ${role.nodeName}`).join("; "),
+      renderCell: ({ row }) => (
+        <Box component="span" sx={{ whiteSpace: "normal", py: 1, lineHeight: 1.5 }}>
+          {roleAssignments.error ? t("common.loadingError") : (
+            <RoleAssignmentSummary assignments={roleAssignments.byUser.get(row.id) ?? []} />
+          )}
+        </Box>
+      ),
     },
     {
       field: "description",
@@ -117,8 +138,10 @@ export const UserList: React.FC = () => {
 
   return (
     <ListLayout title={t("users")} routes={UserRoutes}>
+      {roleAssignments.error != null && <Alert severity="error">{t("common.loadingError")}</Alert>}
       <DataGrid
         autoHeight
+        getRowHeight={() => "auto"}
         rows={users ?? []}
         columns={columns}
         disableRowSelectionOnClick

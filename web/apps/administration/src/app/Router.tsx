@@ -305,20 +305,25 @@ const router = createBrowserRouter([
             element: <PrivilegeGuard privilege="node_administration" />,
             children: [
               {
-                index: true,
-                element: <CashierList />,
-              },
-              {
-                path: ":cashierId",
-                element: <CashierDetail />,
-              },
-              {
-                path: ":cashierId/close-out",
-                element: <CashierCloseOut />,
-              },
-              {
-                path: ":cashierId/shifts/:shiftId",
-                element: <CashierShiftDetail />,
+                element: <UserPageLayout />,
+                children: [
+                  {
+                    index: true,
+                    element: <CashierList />,
+                  },
+                  {
+                    path: ":cashierId",
+                    element: <CashierDetail />,
+                  },
+                  {
+                    path: ":cashierId/close-out",
+                    element: <CashierCloseOut />,
+                  },
+                  {
+                    path: ":cashierId/shifts/:shiftId",
+                    element: <CashierShiftDetail />,
+                  },
+                ],
               },
             ],
           },
@@ -629,6 +634,7 @@ const router = createBrowserRouter([
           },
           {
             path: "user-to-roles",
+            element: <UserPageLayout />,
             children: [
               {
                 index: true,

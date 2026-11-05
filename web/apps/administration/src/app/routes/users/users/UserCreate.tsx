@@ -1,5 +1,5 @@
 import { useCreateUserMutation } from "@/api";
-import { UserRoutes } from "@/app/routes";
+import { UserRoutes, UserToRoleRoutes } from "@/app/routes";
 import { CreateLayout } from "@/components";
 import { useCurrentNode } from "@/hooks";
 import { NewUser, NewUserSchema } from "@stustapay/models";
@@ -29,7 +29,12 @@ export const UserCreate: React.FC = withPrivilegeGuard("user_management", () => 
       initialValues={initialValues}
       validationSchema={NewUserSchema}
       submitLabel={t("add")}
-      successRoute={UserRoutes.list()}
+      alternativeSubmitLabel={t("user.createAndAssignRoles")}
+      successRoute={(user: unknown, alternative: boolean) =>
+        alternative
+          ? UserToRoleRoutes.edit((user as { id: number }).id, currentNode.id)
+          : UserRoutes.list(currentNode.id)
+      }
       onSubmit={(u) => createUser({ nodeId: currentNode.id, createUserPayload: u })}
       form={UserCreateForm}
     />

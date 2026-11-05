@@ -84,6 +84,15 @@ describe("isMenuEntryValidAtNode", () => {
     expect(isMenuEntryValidAtNode(findEntryByRoute("/node/7/users"), node)).toBe(true);
   });
 
+  test("keeps one users entry for node administrators even where user objects are forbidden", () => {
+    const node = createNode(["node_administration"]);
+    node.computed_forbidden_objects_at_node = ["user", "user_role"];
+
+    expect(isMenuEntryValidAtNode(findEntryByRoute("/node/7/users"), node)).toBe(true);
+    expect(nodeMenuEntryDefinitions.some((entry) => entry.route(node) === "/node/7/user-to-roles")).toBe(false);
+    expect(nodeMenuEntryDefinitions.some((entry) => entry.route(node) === "/node/7/cashiers")).toBe(false);
+  });
+
   test("shows entry management entry when entry management is granted", () => {
     const node = createNode(["entry_management"]);
 

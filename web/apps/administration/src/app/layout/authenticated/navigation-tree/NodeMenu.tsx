@@ -18,7 +18,6 @@ import {
 import * as React from "react";
 import { NavigationTreeItem } from "./NavigationTreeItem";
 import {
-  CashierRoutes,
   CustomerRoutes,
   EntryAreaRoutes,
   MdmRoutes,
@@ -31,7 +30,6 @@ import {
   TseRoutes,
   UserRoutes,
   UserTagRoutes,
-  UserToRoleRoutes,
 } from "@/app/routes";
 import {
   PrivilegeRequirement,
@@ -75,22 +73,7 @@ export const nodeMenuEntryDefinitions: NodeMenuItem[] = [
     route: (node) => UserRoutes.list(node.id),
     label: i18n.t("users"),
     icon: PersonIcon,
-    requiredPrivileges: privilegeOf(UserRoutes.privilege),
-    requiresOneOfObjectType: ["user", "user_role"],
-  },
-  {
-    route: (node) => CashierRoutes.list(node.id),
-    label: i18n.t("cashiers"),
-    icon: PersonIcon,
-    requiredPrivileges: privilegeOf(CashierRoutes.privilege),
-    requiresOneOfObjectType: ["user", "user_role"],
-    requiresEvent: true,
-  },
-  {
-    route: (node) => UserToRoleRoutes.list(node.id),
-    label: i18n.t("userToRoles"),
-    icon: PersonIcon,
-    requiredPrivileges: privilegeOf(UserToRoleRoutes.privilege),
+    requiredAnyPrivileges: ["user_management", "node_administration"],
   },
   {
     route: (node) => ProductRoutes.list(node.id),

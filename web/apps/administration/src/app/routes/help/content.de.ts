@@ -86,11 +86,14 @@ In diesem Bereich steuerst du, wer im Portal arbeiten darf und welche Aufgaben s
 
 - **Benutzer** verwalten reale Accounts mit Login und Profil.
 - **Rollen** bündeln Berechtigungen für bestimmte Aufgabenbereiche.
-- **Benutzer zu Rollen** ordnet Rollen auf Knotenebene zu.
+- **Rollenzuordnungen** im Benutzerbereich weist Rollen am ausgewählten Knoten zu. Geerbte Zuordnungen werden dort ebenfalls angezeigt und am Ursprungsknoten gepflegt.
+- **Kassierer** im Benutzerbereich zeigt im Event die Kassenbestände und zugeordneten Terminals.
+
+Die Benutzerliste und die Benutzerdetails zeigen die Rollen einschließlich ihrer geerbten Herkunft. Im Zuordnungsformular bearbeitest du nur lokale Rollen; geerbte Rollen bleiben erhalten. Die Zuordnungsliste lässt sich nach Namen durchsuchen und über das Spaltenmenü nach Rollen filtern.
 
 Empfohlener Ablauf für neue Teammitglieder:
 
-1. Benutzerkonto anlegen oder prüfen.
+1. Benutzerkonto anlegen oder prüfen. „Benutzer anlegen und Rollen zuordnen“ führt direkt zur Rollenpflege.
 2. Passende Rolle auswählen oder anlegen.
 3. Rolle dem Benutzer am richtigen Knoten zuweisen.
 4. Anschließend im betroffenen Event testen, ob nur die gewünschten Bereiche sichtbar sind.
@@ -109,7 +112,7 @@ Empfohlener Ablauf für neue Teammitglieder:
           requiresNodeContext: true,
         },
         {
-          label: "Benutzer zu Rollen",
+          label: "Rollenzuordnungen",
           description: "Rollen auf Knotenebene zuweisen",
           buildTo: helpLinkTargets.userAssignments,
           requiresNodeContext: true,

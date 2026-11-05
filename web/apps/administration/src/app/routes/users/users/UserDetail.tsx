@@ -1,25 +1,28 @@
 import { useDeleteUserMutation, useGetUserQuery, UserRead } from "@/api";
 import { UserRoutes, UserTagRoutes, UserToRoleRoutes } from "@/app/routes";
 import { DetailField, DetailLayout, DetailView } from "@/components";
-import { useCurrentNode, useCurrentUserHasPrivilegeAtNode } from "@/hooks";
+import { useCurrentNode, useCurrentUserHasPrivilege } from "@/hooks";
 import { selectAuthToken, useAppSelector } from "@/store";
-import { Delete as DeleteIcon, Edit as EditIcon, GroupAdd as GroupAddIcon, Mail as MailIcon } from "@mui/icons-material";
+import { Delete as DeleteIcon, Edit as EditIcon, Mail as MailIcon } from "@mui/icons-material";
+import { Link } from "@mui/material";
 import { Loading } from "@stustapay/components";
 import { useOpenModal } from "@stustapay/modal-provider";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link as RouterLink, Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import { RoleAssignmentSummary, useUserRoleAssignments } from "../roleAssignments";
 
 export const UserDetail: React.FC = () => {
   const { t } = useTranslation();
   const { currentNode } = useCurrentNode();
-  const canManageUserRolesAtNode = useCurrentUserHasPrivilegeAtNode(UserToRoleRoutes.privilege);
+  const canManageUserRoles = useCurrentUserHasPrivilege(UserToRoleRoutes.privilege);
   const { userId } = useParams();
   const navigate = useNavigate();
   const [deleteUser] = useDeleteUserMutation();
-  const { data: user, error } = useGetUserQuery({ nodeId: currentNode.id, userId: Number(userId) });
+  const { currentData: user, error } = useGetUserQuery({ nodeId: currentNode.id, userId: Number(userId) });
   const openModal = useOpenModal();
+  const roleAssignments = useUserRoleAssignments();
 
   const token = useAppSelector(selectAuthToken);
   const handleInvite = async () => {
@@ -75,16 +78,6 @@ export const UserDetail: React.FC = () => {
       routes={UserRoutes}
       elementNodeId={user.node_id}
       actions={[
-        ...(canManageUserRolesAtNode(user.node_id)
-          ? [
-              {
-                label: t("user.assignRoles"),
-                onClick: () => navigate(UserToRoleRoutes.edit(user.id, user.node_id)),
-                color: "primary" as const,
-                icon: <GroupAddIcon />,
-              },
-            ]
-          : []),
         {
           label: t("user.invite"),
           onClick: handleInvite,
@@ -112,6 +105,22 @@ export const UserDetail: React.FC = () => {
         <DetailField label={t("userDisplayName")} value={user.display_name} />
         <DetailField label={t("userEmail")} value={(user as UserRead & { email?: string | null }).email || t("user.noEmail")} />
         <DetailField label={t("userDescription")} value={user.description} />
+        <DetailField
+          label={t("user.roles")}
+          value={roleAssignments.error ? t("common.loadingError") : roleAssignments.isLoading ? (
+            t("userToRole.loadingRoles")
+          ) : <RoleAssignmentSummary assignments={roleAssignments.byUser.get(user.id) ?? []} />}
+        />
+        {canManageUserRoles && (
+          <DetailField
+            label={t("userToRoles")}
+            value={
+              <Link component={RouterLink} to={UserToRoleRoutes.edit(user.id, currentNode.id)}>
+                {t("userToRole.assignAtNode", { node: currentNode.name })}
+              </Link>
+            }
+          />
+        )}
         {user.user_tag_id ? (
           <DetailField
             label={t("user.tagId")}
