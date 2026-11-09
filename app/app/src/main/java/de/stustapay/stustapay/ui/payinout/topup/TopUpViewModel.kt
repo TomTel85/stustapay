@@ -251,28 +251,19 @@ class TopUpViewModel @Inject constructor(
 
             val payment = getECPayment(newTopUp)
 
-            // pre-register the payment so the backend starts polling sumup
-            // if the transaction has completed, but the callback to the POS terminal got missing
-            // due to wlan glitches etc.
-
-            if (!registerTopUp(topUpTypeCard(), newTopUp)) {
-                // already updates status message
-                return
+            val paymentResult = ecPaymentRepository.pay(context, payment) {
+                if (!registerTopUp(topUpTypeCard(), newTopUp)) return@pay false
+                _status.update { context.getString(R.string.topup_status_remove_chip_start_ec) }
+                _waitingForSumUpLaunch.update { true }
+                // Give the operator time to remove the wristband before the SDK takes over NFC.
+                delay(800)
+                _waitingForSumUpLaunch.update { false }
+                true
             }
-
-            _status.update { context.getString(R.string.topup_status_remove_chip_start_ec) }
-            _waitingForSumUpLaunch.update { true }
-
-            // workaround so the sumup activity is not in foreground too quickly.
-            // when it's active, nfc intents are no longer captured by us, apparently,
-            // and then the system nfc handler spawns the default handler (e.g. stustapay) again.
-            // https://stackoverflow.com/questions/60868912
-            delay(800)
-            _waitingForSumUpLaunch.update { false }
-
-            // perform ec transaction
-            when (val paymentResult = ecPaymentRepository.pay(context, payment)) {
+            when (paymentResult) {
+                null -> return
                 is ECPaymentResult.Failure -> {
+                    if (paymentResult.previousPaymentBooked) clearDraft()
                     _status.update { context.getString(R.string.topup_status_ec_result, paymentResult.msg) }
                     if (!paymentResult.mayHaveCreatedCharge) {
                         topUpApi.cancelPendingTopUp(newTopUp.uuid)
@@ -350,6 +341,7 @@ class TopUpViewModel @Inject constructor(
         _status.update { context.getString(R.string.topup_status_booking, topUpType) }
         when (val response = infallibleRepository.bookTopUp(newTopUp)) {
             is Response.OK -> {
+                if (newTopUp.paymentMethod == PaymentMethod.sumup) ecPaymentRepository.confirmBooking(newTopUp.uuid)
                 clearDraft()
                 _topUpCompleted.update { response.data }
                 _status.update { context.getString(R.string.topup_status_successful, topUpType) }
@@ -357,6 +349,14 @@ class TopUpViewModel @Inject constructor(
                 
                 // Update the customer display with the top-up information
                 updateCustomerDisplay(response.data)
+            }
+
+            is Response.Error.Service.AlreadyProcessed -> {
+                ecPaymentRepository.confirmBooking(newTopUp.uuid)
+                clearDraft()
+                _status.update { context.getString(R.string.topup_status_successful, topUpType) }
+                _navState.update { TopUpPage.Selection }
+                updateCustomerDisplay(null)
             }
 
             is Response.Error -> {

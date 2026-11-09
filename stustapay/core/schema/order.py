@@ -376,6 +376,7 @@ class PendingOrderStatus(enum.Enum):
 
 class PendingOrder(BaseModel):
     uuid: UUID
+    terminal_id: int | None = None
     node_id: int
     till_id: int
     cashier_id: int | None

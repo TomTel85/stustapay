@@ -29,6 +29,31 @@ from .conftest import (
 START_BALANCE = 100
 
 
+async def test_post_payment_balance_cannot_be_settled_as_cash_payout(
+    order_service: OrderService,
+    customer: Customer,
+    cashier: Cashier,
+    login_supervised_user: LoginSupervisedUser,
+    assign_cash_register: AssignCashRegister,
+    get_account_balance: GetAccountBalance,
+    db_connection: Connection,
+    event_node: Node,
+    terminal_token: str,
+):
+    cash_register_id = await assign_cash_register(cashier=cashier)
+    await login_supervised_user(user_tag_uid=cashier.user_tag_uid, user_role_id=cashier.cashier_role.id)
+    assert event_node.event is not None
+    await db_connection.execute("update event set post_payment_allowed = true where id = $1", event_node.event.id)
+    await db_connection.execute("update account set balance = -10 where id = $1", customer.account_id)
+    drawer_balance = await get_account_balance(account_id=cash_register_id)
+    request = NewPayOut(uuid=uuid.uuid4(), customer_tag_uid=customer.tag.uid)
+
+    with pytest.raises(InvalidArgument, match="Use a top-up"):
+        await order_service.book_pay_out(token=terminal_token, new_pay_out=request)
+    assert await get_account_balance(account_id=customer.account_id) == -10
+    assert await get_account_balance(account_id=cash_register_id) == drawer_balance
+
+
 async def test_cash_pay_out_flow_with_amount(
     order_service: OrderService,
     till_service: TillService,
@@ -84,6 +109,12 @@ async def test_cash_pay_out_flow_with_amount(
 
     completed_pay_out = await order_service.book_pay_out(token=terminal_token, new_pay_out=new_pay_out)
     assert completed_pay_out is not None
+    replay = await order_service.book_pay_out(token=terminal_token, new_pay_out=new_pay_out)
+    assert replay == completed_pay_out
+    with pytest.raises(InvalidArgument, match="UUID reused"):
+        await order_service.book_pay_out(
+            token=terminal_token, new_pay_out=new_pay_out.model_copy(update={"amount": 21})
+        )
 
     cleared_payout_info = await db_connection.fetchrow(
         "select iban, account_name, email, donation, donate_all, has_entered_info, payout_export "
@@ -256,16 +287,19 @@ async def test_payout_money_conservation(
 
     # Calculate total money in system before payout
     total_money_before = (
-        balances_before["customer"] +
-        balances_before["cash_register"] +
-        sum(balances_before[acc_type] for acc_type in [
-            AccountType.cash_topup_source.name,
-            AccountType.cash_exit.name,
-            AccountType.cash_entry.name,
-            AccountType.sale_exit.name,
-            AccountType.cash_vault.name,
-            AccountType.cash_imbalance.name,
-        ])
+        balances_before["customer"]
+        + balances_before["cash_register"]
+        + sum(
+            balances_before[acc_type]
+            for acc_type in [
+                AccountType.cash_topup_source.name,
+                AccountType.cash_exit.name,
+                AccountType.cash_entry.name,
+                AccountType.sale_exit.name,
+                AccountType.cash_vault.name,
+                AccountType.cash_imbalance.name,
+            ]
+        )
     )
 
     # Perform payout (partial payout to keep it simple)
@@ -298,16 +332,19 @@ async def test_payout_money_conservation(
 
     # Calculate total money in system after payout
     total_money_after = (
-        balances_after["customer"] +
-        balances_after["cash_register"] +
-        sum(balances_after[acc_type] for acc_type in [
-            AccountType.cash_topup_source.name,
-            AccountType.cash_exit.name,
-            AccountType.cash_entry.name,
-            AccountType.sale_exit.name,
-            AccountType.cash_vault.name,
-            AccountType.cash_imbalance.name,
-        ])
+        balances_after["customer"]
+        + balances_after["cash_register"]
+        + sum(
+            balances_after[acc_type]
+            for acc_type in [
+                AccountType.cash_topup_source.name,
+                AccountType.cash_exit.name,
+                AccountType.cash_entry.name,
+                AccountType.sale_exit.name,
+                AccountType.cash_vault.name,
+                AccountType.cash_imbalance.name,
+            ]
+        )
     )
 
     # MONEY CONSERVATION LAW: Total money in system must remain the same

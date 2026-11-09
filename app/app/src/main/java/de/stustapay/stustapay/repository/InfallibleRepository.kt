@@ -1,7 +1,6 @@
 package de.stustapay.stustapay.repository
 
 import android.util.Log
-import de.stustapay.api.models.CompletedSale
 import de.stustapay.api.models.CompletedTicketSale
 import de.stustapay.api.models.CompletedTopUp
 import de.stustapay.api.models.NewSale
@@ -11,7 +10,6 @@ import de.stustapay.libssp.net.Response
 import de.stustapay.libssp.util.waitFor
 import de.stustapay.stustapay.model.InfallibleApiRequest
 import de.stustapay.stustapay.model.InfallibleApiResponse
-import de.stustapay.stustapay.netsource.SaleRemoteDataSource
 import de.stustapay.stustapay.netsource.TicketRemoteDataSource
 import de.stustapay.stustapay.netsource.TopUpRemoteDataSource
 import de.stustapay.stustapay.storage.InfallibleApiRequestLocalDataSource
@@ -52,7 +50,6 @@ class InfallibleRepository @Inject constructor(
     private val dataSource: InfallibleApiRequestLocalDataSource,
     private val topUpApi: TopUpRemoteDataSource,
     private val ticketApi: TicketRemoteDataSource,
-    private val saleApi: SaleRemoteDataSource,
     private val offlineSales: de.stustapay.stustapay.offline.OfflineSalesRepository,
 ) {
     private val scope: CoroutineScope =
@@ -168,11 +165,7 @@ class InfallibleRepository @Inject constructor(
                             InfallibleApiResponse.TicketSale(repoResponse)
                         }
 
-                        is InfallibleApiRequest.Sale -> {
-                            val repoResponse = saleApi.bookSale(request.sale)
-                            success = repoResponse.submitSuccess()
-                            InfallibleApiResponse.Sale(repoResponse)
-                        }
+                        is InfallibleApiRequest.Sale -> error("legacy sales are migrated before delivery")
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -186,9 +179,7 @@ class InfallibleRepository @Inject constructor(
                         is InfallibleApiRequest.TicketSale -> InfallibleApiResponse.TicketSale(
                             Response.Error.Request(throwable = e)
                         )
-                        is InfallibleApiRequest.Sale -> InfallibleApiResponse.Sale(
-                            Response.Error.Request(throwable = e)
-                        )
+                        is InfallibleApiRequest.Sale -> throw e
                     }
                 }
 

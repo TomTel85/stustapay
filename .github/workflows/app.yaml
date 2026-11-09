@@ -21,7 +21,7 @@ jobs:
       - name: build with gradle
         uses: gradle/gradle-build-action@v3
         with:
-          arguments: :app:assembleStandardDebug :chip_debug:assembleDebug
+          arguments: :app:assembleStandardDebug :app:assembleStandardDebugAndroidTest :chip_debug:assembleDebug
           build-root-directory: app/
       - name: Upload APK
         uses: actions/upload-artifact@v4

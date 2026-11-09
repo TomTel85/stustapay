@@ -129,6 +129,7 @@ data class SumUpPaymentState(
     var targetAction: SumUpAction = SumUpAction.None,
     var config: SumUpConfig? = null,
     var payment: ECPayment? = null,
+    var beforeCheckoutLaunch: (() -> Boolean)? = null,
     var actionsDone: MutableSet<SumUpAction> = mutableSetOf()
 )
 
@@ -348,7 +349,11 @@ class SumUp @Inject constructor(
         }
     }
 
-    private suspend fun setState(target: SumUpAction, payment: ECPayment? = null): Boolean {
+    private suspend fun setState(
+        target: SumUpAction,
+        payment: ECPayment? = null,
+        beforeCheckoutLaunch: (() -> Boolean)? = null,
+    ): Boolean {
         return when (val sumUpConfig = fetchConfig()) {
             is SumUpConfigState.Error -> {
                 _paymentStatus.update { SumUpState.Failed(toUserFacingSumUpConfigError(sumUpConfig.msg)) }
@@ -363,6 +368,7 @@ class SumUp @Inject constructor(
                     targetAction = target,
                     config = sumUpConfig.cfg,
                     payment = payment,
+                    beforeCheckoutLaunch = beforeCheckoutLaunch,
                 )
                 true
             }
@@ -468,6 +474,7 @@ class SumUp @Inject constructor(
     suspend fun pay(
         context: Activity,
         payment: ECPayment,
+        beforeCheckoutLaunch: (() -> Boolean)? = null,
     ) {
         if (!ensureInitialized()) {
             _paymentStatus.update { SumUpState.Error("sumup api not initialized") }
@@ -476,7 +483,11 @@ class SumUp @Inject constructor(
         // Reset the payment state to avoid any leftover state from previous attempts
         _paymentStatus.update { SumUpState.None }
         
-        if (setState(target = SumUpAction.Checkout, payment = payment)) {
+        if (setState(
+                target = SumUpAction.Checkout,
+                payment = payment,
+                beforeCheckoutLaunch = beforeCheckoutLaunch,
+            )) {
             nextAction(context)
         }
     }
@@ -692,15 +703,19 @@ class SumUp @Inject constructor(
 
         _paymentStatus.update { SumUpState.Started(payment.id) }
 
+        if (sumUpPaymentState.beforeCheckoutLaunch?.invoke() == false) {
+            _paymentStatus.update { SumUpState.Error("Could not persist payment launch state") }
+            return
+        }
         checkoutLauncher!!.launch(sumUpPayment)
     }
 
     private fun paymentResult(context: Activity, resultCode: Int, extras: Bundle?) {
         refreshReaderInfo()
-        if (!checkResultCode("payment", resultCode)) {
+        if (resultCode < Activity.RESULT_FIRST_USER) {
             // Completely reset state machine on failure
             sumUpPaymentState = SumUpPaymentState()
-            _paymentStatus.update { SumUpState.Failed("payment was aborted or cancelled: $resultCode") }
+            _paymentStatus.update { SumUpState.Error("Missing checkout result: $resultCode", mayHaveCreatedCharge = true) }
             return
         }
 

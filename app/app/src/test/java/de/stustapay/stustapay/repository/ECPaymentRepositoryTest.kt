@@ -33,6 +33,19 @@ class ECPaymentRepositoryTest {
         assertRequiresReconciliation(" ", " ")
     }
 
+    @Test
+    fun `only definitely unlaunched attempts may be discarded on restart`() {
+        assertEquals(false, pendingPaymentMayHaveLaunched(true, false))
+        assertEquals(true, pendingPaymentMayHaveLaunched(true, true))
+        assertEquals(true, pendingPaymentMayHaveLaunched(true, null))
+        assertEquals(false, pendingPaymentMayHaveLaunched(false, null))
+        assertEquals(true, shouldRetryWithNewPaymentId("same", "same", false))
+        assertEquals(false, shouldRetryWithNewPaymentId("same", "same", true))
+        assertEquals(false, shouldRetryWithNewPaymentId("same", "other", false))
+        assertEquals(true, wasPaymentReleased("released", "released"))
+        assertEquals(false, wasPaymentReleased("released", "other"))
+    }
+
     private fun assertRequiresReconciliation(expectedId: String, actualId: String?) {
         val result = verifiedCardPaymentResult(success, expectedId, actualId)
         assertTrue(result is ECPaymentResult.Failure)

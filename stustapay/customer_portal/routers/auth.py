@@ -39,6 +39,7 @@ async def login(
 
     response = await customer_service.login_customer(
         uid=user_tag_uid,
+        source=request.client.host if request.client else "unknown",
         pin=payload.pin,
         node_id=payload.node_id,
         customer_portal_base_url=get_customer_portal_base_url(request),

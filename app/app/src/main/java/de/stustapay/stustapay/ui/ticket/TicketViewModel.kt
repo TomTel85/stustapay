@@ -17,6 +17,7 @@ import de.stustapay.libssp.util.mapState
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ec.ECPayment
 import de.stustapay.stustapay.netsource.TicketRemoteDataSource
+import de.stustapay.stustapay.offline.confirmedCents
 import de.stustapay.stustapay.repository.ECPaymentRepository
 import de.stustapay.stustapay.repository.ECPaymentResult
 import de.stustapay.stustapay.repository.InfallibleRepository
@@ -254,30 +255,36 @@ class TicketViewModel @Inject constructor(
             tag = _ticketDraft.value.scans[0].tag,
         )
 
-        // register the sale so the backend can ask sumup for completion
-        val response = ticketApi.registerTicketSale(newSale)
-        when (response) {
-            is Response.OK -> {
-                _status.update { resourcesProvider.getString(R.string.ticket_status_order_announced) }
-            }
-
-            is Response.Error.Service -> {
-                _status.update { response.msg() }
-                _navState.update { TicketPage.Error }
-                return
-            }
-
-            is Response.Error -> {
-                _status.update { response.msg() }
-                return
+        val ecResult = ecPaymentRepository.pay(context, payment) {
+            when (val response = ticketApi.registerTicketSale(newSale)) {
+                is Response.OK -> {
+                    if (confirmedCents(response.data.totalPrice) != confirmedCents(pendingSale.totalPrice)) {
+                        _status.update { resourcesProvider.getString(R.string.card_payment_amount_changed) }
+                        _navState.update { TicketPage.Scan }
+                        ticketApi.cancelPendingTicketSale(newSale.uuid)
+                        return@pay false
+                    }
+                    _status.update { resourcesProvider.getString(R.string.ticket_status_order_announced) }
+                    true
+                }
+                is Response.Error -> {
+                    _status.update { response.msg() }
+                    if (response is Response.Error.Service) _navState.update { TicketPage.Error }
+                    false
+                }
             }
         }
 
-        when (val ecResult = ecPaymentRepository.pay(context = context, ecPayment = payment)) {
+        when (ecResult) {
+            null -> return
             is ECPaymentResult.Failure -> {
                 if (!ecResult.mayHaveCreatedCharge) {
                     // oh dear, the ec payment failed - let's tell the backend.
                     ticketApi.cancelPendingTicketSale(orderUUID = newSale.uuid)
+                }
+                if (ecResult.previousPaymentBooked) {
+                    clearDraft()
+                    _navState.update { TicketPage.Scan }
                 }
                 _status.update { ecResult.msg }
             }
@@ -296,12 +303,20 @@ class TicketViewModel @Inject constructor(
 
         when (response) {
             is Response.OK -> {
+                if (newTicketSale.paymentMethod == PaymentMethod.sumup) ecPaymentRepository.confirmBooking(newTicketSale.uuid)
                 // delete the sale draft
                 clearDraft()
                 _status.update { resourcesProvider.getString(R.string.ticket_order_booked) }
                 // now we have a completed sale
                 _saleCompleted.update { response.data }
                 _navState.update { TicketPage.Done }
+            }
+
+            is Response.Error.Service.AlreadyProcessed -> {
+                ecPaymentRepository.confirmBooking(newTicketSale.uuid)
+                clearDraft()
+                _status.update { resourcesProvider.getString(R.string.ticket_order_booked) }
+                _navState.update { TicketPage.Scan }
             }
 
             is Response.Error.Service -> {

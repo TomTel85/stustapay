@@ -33,6 +33,7 @@ from stustapay.core.schema.order import (
     OrderType,
     PaymentMethod,
     PendingLineItem,
+    PendingOrder,
     PendingOrderStatus,
     PendingOrderType,
     PendingPayOut,
@@ -55,6 +56,7 @@ from stustapay.core.schema.ticket import (
 from stustapay.core.schema.till import Till
 from stustapay.core.schema.tree import Node, RestrictedEventSettings
 from stustapay.core.schema.user import CurrentUser, Privilege, User, format_user_tag_uid
+from stustapay.core.schema.user_tag import UserTagScan
 from stustapay.core.service.account import (
     get_account_by_id,
     get_system_account_for_node,
@@ -69,6 +71,7 @@ from stustapay.core.service.common.error import InvalidArgument, ServiceExceptio
 from stustapay.core.service.customer.common import reset_customer_payout_info
 from stustapay.core.service.order.pending_order import (
     fetch_pending_order,
+    load_pending_sale,
     load_pending_ticket_sale,
     load_pending_topup,
     make_sale_bookings,
@@ -533,6 +536,18 @@ class OrderService(OfflineOrderMixin, Service[Config]):
         new_topup: NewTopUp,
         pending: bool = False,
     ) -> CompletedTopUp:
+        if not pending:
+            registered = await self._get_terminal_card_order(
+                conn, current_terminal, current_till, new_topup.uuid, new_topup.payment_method, PendingOrderType.topup
+            )
+            if registered is not None:
+                topup = load_pending_topup(registered)
+                if topup.customer_tag_uid != new_topup.customer_tag_uid or topup.amount != new_topup.amount:
+                    raise InvalidArgument("Top-up does not match the registered card payment")
+                result = await self.sumup.settle_terminal_card_order(conn, registered)
+                assert isinstance(result, CompletedTopUp)
+                return result
+
         pending_top_up: PendingTopUp = await self.check_topup(  # pylint: disable=unexpected-keyword-arg, missing-kwoa
             conn=conn,
             node=node,
@@ -570,38 +585,57 @@ class OrderService(OfflineOrderMixin, Service[Config]):
 
         if pending:
             await save_pending_topup(
-                conn=conn, node_id=node.id, till_id=current_till.id, cashier_id=current_user.id, topup=completed_top_up
+                conn=conn,
+                node_id=node.id,
+                till_id=current_till.id,
+                cashier_id=current_user.id,
+                topup=completed_top_up,
+                terminal_id=current_terminal.id,
             )
 
         return completed_top_up
 
-    @with_db_transaction(read_only=False)
-    @requires_terminal(user_privileges=[Privilege.can_book_orders])
-    async def check_pending_topup(
-        self,
-        *,
+    @staticmethod
+    async def _get_terminal_card_order(
         conn: Connection,
-        current_till: Till,
-        order_uuid: UUID,
-    ) -> CompletedTopUp | None:
-        pending_order = await fetch_pending_order(conn=conn, uuid=order_uuid)
-        if pending_order.till_id != current_till.id:
-            raise InvalidArgument("Cannot check an order for a different till")
-        if pending_order.order_type != PendingOrderType.topup:
-            raise InvalidArgument("Invalid order uuid")
-        if pending_order.status == PendingOrderStatus.booked:
-            return load_pending_topup(pending_order)
-
-        topup = await self.sumup.process_pending_order(conn=conn, pending_order=pending_order)
-        if topup is None:
+        terminal: CurrentTerminal,
+        till: Till,
+        uuid: UUID,
+        payment_method: PaymentMethod,
+        order_type: PendingOrderType,
+    ) -> PendingOrder | None:
+        if payment_method == PaymentMethod.sumup_online:
+            raise InvalidArgument("Online payments cannot be booked by a terminal")
+        registered = await conn.fetch_maybe_one(PendingOrder, "select * from pending_sumup_order where uuid = $1", uuid)
+        if payment_method != PaymentMethod.sumup:
+            if registered is not None:
+                raise InvalidArgument("Order UUID is reserved for a card payment")
             return None
-        if isinstance(topup, CompletedTopUp):
-            return topup
+        if (
+            registered is None
+            or registered.order_type != order_type
+            or registered.till_id != till.id
+            or registered.node_id != till.node_id
+            or registered.cashier_id is None
+            or registered.terminal_id not in (None, terminal.id)
+        ):
+            raise InvalidArgument("No matching registered card payment for this terminal")
+        return registered
 
-        logger.warning(
-            f"Weird order state for uuid = {order_uuid}. Sumup order was accepted but we have the wrong order type"
+    @with_db_transaction(read_only=True)
+    @requires_terminal(requires_till=False, allow_read_only=True)
+    async def card_payment_status(
+        self, *, conn: Connection, current_terminal: CurrentTerminal, order_uuid: UUID
+    ) -> PendingOrderStatus:
+        state = await conn.fetchval(
+            "select case when exists (select from ordr where uuid = p.uuid) then 'booked' else p.status::text end "
+            "from pending_sumup_order p where p.uuid = $1 and p.terminal_id = $2",
+            order_uuid,
+            current_terminal.id,
         )
-        return None
+        if state is None:
+            raise NotFound(element_type="card payment", element_id=str(order_uuid))
+        return PendingOrderStatus(state)
 
     @with_db_transaction(read_only=False)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
@@ -615,10 +649,13 @@ class OrderService(OfflineOrderMixin, Service[Config]):
             raise InvalidArgument("Order was already successfully booked")
 
         order_exists_at_sumup = await self.sumup.pending_order_exists_at_sumup(conn=conn, pending_order=pending_order)
-        if order_exists_at_sumup is None:
+        if order_exists_at_sumup:
             return
 
-        await conn.execute("update pending_sumup_order set status = 'cancelled' where uuid = $1", pending_order.uuid)
+        await conn.execute(
+            "update pending_sumup_order set status = 'cancelled' where uuid = $1 and status = 'pending'",
+            pending_order.uuid,
+        )
 
     async def _check_sale(
         self,
@@ -810,40 +847,9 @@ class OrderService(OfflineOrderMixin, Service[Config]):
             till_id=current_till.id,
             cashier_id=current_user.id,
             sale=pending_sale,
+            terminal_id=current_terminal.id,
         )
         return pending_sale
-
-    @with_db_transaction(read_only=False)
-    @requires_terminal(user_privileges=[Privilege.can_book_orders])
-    async def check_pending_sale(
-        self,
-        *,
-        conn: Connection,
-        current_till: Till,
-        order_uuid: UUID,
-    ) -> CompletedSale | None:
-        pending_order = await fetch_pending_order(conn=conn, uuid=order_uuid)
-        if pending_order.till_id != current_till.id:
-            raise InvalidArgument("Cannot check an order for a different till")
-        if pending_order.order_type != PendingOrderType.sale:
-            raise InvalidArgument("Invalid order uuid")
-        if pending_order.status == PendingOrderStatus.booked:
-            return None
-        if pending_order.status == PendingOrderStatus.cancelled:
-            return None
-
-        sale = await self.sumup.process_pending_order(conn=conn, pending_order=pending_order)
-        if sale is None:
-            return None
-        if isinstance(sale, CompletedSale):
-            event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=current_till.node_id)
-            sale.bon_url = event_settings.customer_portal_url + "/bon/" + str(sale.uuid)
-            return sale
-
-        logger.warning(
-            f"Weird order state for uuid = {order_uuid}. Sumup order was accepted but we have the wrong order type"
-        )
-        return None
 
     @with_db_transaction(read_only=True)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
@@ -920,12 +926,6 @@ class OrderService(OfflineOrderMixin, Service[Config]):
             cash_register_id=current_user.cash_register_id,
             buttons=[],
         )
-        if pending_sale.payment_method == PaymentMethod.sumup:
-            await conn.execute(
-                "update pending_sumup_order set status = 'booked' "
-                "where uuid = $1 and order_type = 'sale' and status = 'pending'",
-                pending_sale.uuid,
-            )
         completed_order = InternalCompletedSale(
             **booked_sale.model_dump(exclude={"bon_url", "buttons"}),
             buttons=pending_sale.buttons,
@@ -968,6 +968,27 @@ class OrderService(OfflineOrderMixin, Service[Config]):
             ) != new_sale.model_dump(mode="json"):
                 raise InvalidArgument("Booking UUID reused with different content")
             return CompletedSale.model_validate(json_object(existing["result"]))
+        registered = await self._get_terminal_card_order(
+            conn, current_terminal, current_till, new_sale.uuid, new_sale.payment_method, PendingOrderType.sale
+        )
+        if registered is not None:
+            sale = load_pending_sale(registered)
+            if (
+                sale.buttons != new_sale.buttons
+                or new_sale.customer_tag_uid is not None
+                or new_sale.used_vouchers not in (None, 0)
+            ):
+                raise InvalidArgument("Sale does not match the registered card payment")
+            result = await self.sumup.settle_terminal_card_order(conn, registered)
+            assert isinstance(result, CompletedSale)
+            await conn.execute(
+                "insert into terminal_sale_journal(uuid,terminal_id,request,result) values($1,$2,$3,$4)",
+                new_sale.uuid,
+                current_terminal.id,
+                new_sale.model_dump(mode="json"),
+                result.model_dump(mode="json"),
+            )
+            return result
         if new_sale.customer_tag_uid is not None:
             await conn.fetchrow(
                 "select a.id from account a join user_tag ut on ut.id=a.user_tag_id "
@@ -1352,81 +1373,34 @@ class OrderService(OfflineOrderMixin, Service[Config]):
             event_settings = await fetch_event_for_node(conn=conn, node=node)
 
         if event_settings.post_payment_allowed:
-            # Post-payment is allowed; customers can only pay in to reduce their debt
+            raise InvalidArgument("Use a top-up to settle a post-payment balance")
 
-            if new_pay_out.amount is None:
-                # Set amount to pay out the entire balance
-                new_pay_out.amount = -1 * customer_account.balance
-
-            new_balance = customer_account.balance + new_pay_out.amount
-
-            # Get the appropriate balance limit based on VIP status
-            max_negative_balance = -1 * (
-                event_settings.vip_max_account_balance
-                if customer_account.is_vip
-                else event_settings.max_account_balance
-            )  # Should be negative
-            if new_balance < max_negative_balance:
-                too_much = max_negative_balance - new_balance
-                raise InvalidArgument(
-                    f"More than {abs(max_negative_balance):.02f}€ of debt is disallowed! "
-                    f"New balance would be {new_balance:.02f}€, which exceeds the limit by {too_much:.02f}€."
-                )
-
-            if new_balance > 0:
-                # No need to payout a positive amount
-                raise InvalidArgument(
-                    f"Cannot payout positive amount when the customer already has debt. "
-                    f"Current balance: {customer_account.balance:.02f}€"
-                )
-
-            payout_amount = new_pay_out.amount
-        else:
-            if new_pay_out.amount is None:
-                # Pay out all the money
-                payout_amount = customer_account.balance
-            else:
-                # Pay out a specific amount
-                payout_amount = new_pay_out.amount
-
-            # Regular payouts can only happen if the customer has a positive balance
-            if customer_account.balance <= 0:
-                raise InvalidArgument(
-                    f"Cannot payout from a zero or negative balance. Current balance: {customer_account.balance:.02f}€"
-                )
-
-            # Customer cannot payout more than they have
-            # Use abs() to handle both positive and negative input amounts
-            if abs(payout_amount) > customer_account.balance:
-                raise InvalidArgument(
-                    f"Cannot payout more than the customer has. "
-                    f"Payout amount ({abs(payout_amount):.02f}€) is more than balance ({customer_account.balance:.02f}€)"
-                )
-
-            # Calculate the new balance after payout
-            new_balance = customer_account.balance - abs(payout_amount)
-
-            # Get the appropriate balance limit based on VIP status
-            max_positive_balance = (
-                event_settings.vip_max_account_balance
-                if customer_account.is_vip
-                else event_settings.max_account_balance
+        payout_amount = customer_account.balance if new_pay_out.amount is None else abs(new_pay_out.amount)
+        if customer_account.balance <= 0:
+            raise InvalidArgument(
+                f"Cannot payout from a zero or negative balance. Current balance: {customer_account.balance:.02f}€"
             )
 
-            # Ensure the payout does not violate any constraints
-            if new_balance > max_positive_balance:
-                too_much = new_balance - max_positive_balance
-                raise InvalidArgument(
-                    f"Cannot payout this amount. Remaining balance ({new_balance:.02f}€) "
-                    f"would still exceed the maximum allowed balance ({max_positive_balance:.02f}€) by {too_much:.02f}€"
-                )
+        if payout_amount > customer_account.balance:
+            raise InvalidArgument(
+                f"Cannot payout more than the customer has. "
+                f"Payout amount ({payout_amount:.02f}€) is more than balance ({customer_account.balance:.02f}€)"
+            )
 
-        # Store the absolute payout amount
-        # For normal payouts: payout_amount is positive (e.g., 100 when paying out 100€)
-        # For post-payment: payout_amount can be negative (customer paying into debt)
+        new_balance = customer_account.balance - payout_amount
+        max_positive_balance = (
+            event_settings.vip_max_account_balance if customer_account.is_vip else event_settings.max_account_balance
+        )
+        if new_balance > max_positive_balance:
+            too_much = new_balance - max_positive_balance
+            raise InvalidArgument(
+                f"Cannot payout this amount. Remaining balance ({new_balance:.02f}€) "
+                f"would still exceed the maximum allowed balance ({max_positive_balance:.02f}€) by {too_much:.02f}€"
+            )
+
         return PendingPayOut(
             uuid=new_pay_out.uuid,
-            amount=abs(payout_amount) if not event_settings.post_payment_allowed else payout_amount,
+            amount=payout_amount,
             customer_tag_uid=new_pay_out.customer_tag_uid,
             customer_account_id=customer_account.id,
             old_balance=customer_account.balance,
@@ -1445,6 +1419,17 @@ class OrderService(OfflineOrderMixin, Service[Config]):
         current_user: CurrentUser,
         new_pay_out: NewPayOut,
     ) -> CompletedPayOut:
+        await conn.execute("select pg_advisory_xact_lock(hashtextextended($1,0))", str(new_pay_out.uuid))
+        request = new_pay_out.model_dump(mode="json")
+        existing = await conn.fetchrow("select * from terminal_payout_journal where uuid=$1", new_pay_out.uuid)
+        if existing is not None:
+            if (
+                existing["terminal_id"] != current_terminal.id
+                or existing["till_id"] != current_till.id
+                or json_object(existing["request"]) != request
+            ):
+                raise InvalidArgument("Booking UUID reused with different content")
+            return CompletedPayOut.model_validate(json_object(existing["result"]))
         pending_pay_out: PendingPayOut = await self.check_pay_out(  # pylint: disable=unexpected-keyword-arg, missing-kwoa
             conn=conn,
             node=node,
@@ -1476,14 +1461,13 @@ class OrderService(OfflineOrderMixin, Service[Config]):
         # For payouts, positive amounts mean money leaving the customer account
         # The bookings use positive amounts to transfer from customer -> cash_topup (money leaves customer)
         # and from cash_register -> cash_exit (cash leaves register)
-        payout_amount_abs = abs(pending_pay_out.amount)
         prepared_bookings: Dict[BookingIdentifier, float] = {
             BookingIdentifier(
                 source_account_id=pending_pay_out.customer_account_id, target_account_id=cash_topup_acc.id
-            ): payout_amount_abs,
+            ): pending_pay_out.amount,
             BookingIdentifier(
                 source_account_id=cash_register_account_id, target_account_id=cash_exit_acc.id
-            ): payout_amount_abs,
+            ): pending_pay_out.amount,
         }
 
         order_info = await book_order(
@@ -1510,7 +1494,7 @@ class OrderService(OfflineOrderMixin, Service[Config]):
         )
         actual_new_balance = updated_account["balance"] if updated_account else 0.0
 
-        return CompletedPayOut(
+        result = CompletedPayOut(
             amount=pending_pay_out.amount,
             customer_tag_uid=pending_pay_out.customer_tag_uid,
             customer_account_id=pending_pay_out.customer_account_id,
@@ -1521,6 +1505,15 @@ class OrderService(OfflineOrderMixin, Service[Config]):
             cashier_id=current_user.id,
             till_id=current_till.id,
         )
+        await conn.execute(
+            "insert into terminal_payout_journal(uuid,terminal_id,till_id,request,result) values($1,$2,$3,$4,$5)",
+            result.uuid,
+            current_terminal.id,
+            current_till.id,
+            request,
+            result.model_dump(mode="json"),
+        )
+        return result
 
     @with_db_transaction(read_only=True)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
@@ -1747,6 +1740,31 @@ class OrderService(OfflineOrderMixin, Service[Config]):
     ) -> CompletedTicketSale:
         if new_ticket_sale.payment_method is None:
             raise InvalidArgument("No payment method provided")
+        if not pending:
+            registered = await self._get_terminal_card_order(
+                conn,
+                current_terminal,
+                current_till,
+                new_ticket_sale.uuid,
+                new_ticket_sale.payment_method,
+                PendingOrderType.ticket,
+            )
+            if registered is not None:
+                ticket_sale = load_pending_ticket_sale(registered)
+                registered_tags = [
+                    UserTagScan(
+                        tag_uid=scan.customer_tag_uid,
+                        tag_pin=scan.customer_tag_pin,
+                        top_up_amount=scan.top_up_amount,
+                        voucher_token=scan.ticket_voucher.token if scan.ticket_voucher else None,
+                    )
+                    for scan in ticket_sale.scanned_tickets
+                ]
+                if registered_tags != new_ticket_sale.customer_tags:
+                    raise InvalidArgument("Ticket sale does not match the registered card payment")
+                result = await self.sumup.settle_terminal_card_order(conn, registered)
+                assert isinstance(result, CompletedTicketSale)
+                return result
 
         pending_ticket_sale: PendingTicketSale = await self.check_ticket_sale(  # pylint: disable=missing-kwoa
             conn=conn,
@@ -1787,39 +1805,10 @@ class OrderService(OfflineOrderMixin, Service[Config]):
                 till_id=current_till.id,
                 cashier_id=current_user.id,
                 ticket_sale=completed_ticket_sale,
+                terminal_id=current_terminal.id,
             )
 
         return completed_ticket_sale
-
-    @with_db_transaction(read_only=False)
-    @requires_terminal(user_privileges=[Privilege.can_book_orders])
-    async def check_pending_ticket_sale(
-        self,
-        *,
-        conn: Connection,
-        current_till: Till,
-        order_uuid: UUID,
-    ) -> CompletedTicketSale | None:
-        pending_order = await fetch_pending_order(conn=conn, uuid=order_uuid)
-        if pending_order.till_id != current_till.id:
-            raise InvalidArgument("Cannot check an order for a different till")
-        if pending_order.order_type != PendingOrderType.ticket:
-            raise InvalidArgument("Invalid order uuid")
-        if pending_order.status == PendingOrderStatus.booked:
-            return load_pending_ticket_sale(pending_order)
-        if pending_order.status == PendingOrderStatus.cancelled:
-            return None
-
-        ticket_sale = await self.sumup.process_pending_order(conn=conn, pending_order=pending_order)
-        if ticket_sale is None:
-            return None
-        if isinstance(ticket_sale, CompletedTicketSale):
-            return ticket_sale
-
-        logger.warning(
-            f"Weird order state for uuid = {order_uuid}. Sumup order was accepted but we have the wrong order type"
-        )
-        return None
 
     @with_db_transaction(read_only=True)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])

@@ -214,6 +214,8 @@ async def test_ticket_flow_with_initial_topup_sumup(
     cashier: Cashier,
     create_random_user_tag: CreateRandomUserTag,
 ):
+    # pylint: disable=protected-access
+    order_service.sumup._create_sumup_api = lambda merchant_code, api_key: MockSumUpApi(api_key, merchant_code)  # type: ignore
     await login_supervised_user(user_tag_uid=cashier.user_tag_uid, user_role_id=cashier.cashier_role.id)
     sumup_start_balance = await get_system_account_balance(account_type=AccountType.sumup_entry)
     sale_exit_start_balance = await get_system_account_balance(account_type=AccountType.sale_exit)
@@ -231,6 +233,8 @@ async def test_ticket_flow_with_initial_topup_sumup(
     pending_ticket = await order_service.check_ticket_sale(token=terminal_token, new_ticket_sale=new_ticket)
     assert 2 == pending_ticket.item_count
     assert sale_tickets.ticket.total_price == pending_ticket.total_price
+    MockSumUpApi.mock_amount(pending_ticket.total_price)
+    await order_service.book_ticket_sale(token=terminal_token, new_ticket_sale=new_ticket, pending=True)
     completed_ticket = await order_service.book_ticket_sale(token=terminal_token, new_ticket_sale=new_ticket)
     assert completed_ticket is not None
 
@@ -255,6 +259,8 @@ async def test_ticket_flow_with_user_defined_topup_sumup(
     cashier: Cashier,
     create_random_user_tag: CreateRandomUserTag,
 ):
+    # pylint: disable=protected-access
+    order_service.sumup._create_sumup_api = lambda merchant_code, api_key: MockSumUpApi(api_key, merchant_code)  # type: ignore
     await login_supervised_user(user_tag_uid=cashier.user_tag_uid, user_role_id=cashier.cashier_role.id)
     sumup_start_balance = await get_system_account_balance(account_type=AccountType.sumup_entry)
     sale_exit_start_balance = await get_system_account_balance(account_type=AccountType.sale_exit)
@@ -275,6 +281,8 @@ async def test_ticket_flow_with_user_defined_topup_sumup(
     pending_ticket = await order_service.check_ticket_sale(token=terminal_token, new_ticket_sale=new_ticket)
     assert 2 == pending_ticket.item_count
     assert sale_tickets.ticket.total_price + topup_amount == pending_ticket.total_price
+    MockSumUpApi.mock_amount(pending_ticket.total_price)
+    await order_service.book_ticket_sale(token=terminal_token, new_ticket_sale=new_ticket, pending=True)
     completed_ticket = await order_service.book_ticket_sale(token=terminal_token, new_ticket_sale=new_ticket)
     assert completed_ticket is not None
 
@@ -327,10 +335,7 @@ async def test_ticket_flow_with_deferred_sumup_payment(
     with pytest.raises(InvalidArgument):
         await till_service.get_customer(token=terminal_token, customer_tag_uid=unused_tag.uid)
 
-    completed_ticket = await order_service.check_pending_ticket_sale(
-        token=terminal_token,
-        order_uuid=new_ticket.uuid,
-    )
+    completed_ticket = await order_service.book_ticket_sale(token=terminal_token, new_ticket_sale=new_ticket)
     assert completed_ticket.uuid == new_ticket.uuid
     customer = await till_service.get_customer(token=terminal_token, customer_tag_uid=unused_tag.uid)
     assert sale_tickets.ticket.initial_top_up_amount == customer.balance

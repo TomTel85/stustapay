@@ -15,6 +15,7 @@ from stustapay.core.schema.user import (
     NewUser,
     NewUserRole,
     Privilege,
+    RoleToNode,
     UpdateCurrentUserProfilePayload,
     User,
 )
@@ -479,3 +480,81 @@ async def test_update_user_rejects_blocked_tag_assignment(
                 email=user.email,
             ),
         )
+
+
+async def test_role_management_respects_assignable_privileges_and_owning_node(
+    user_service: UserService, global_admin_token: str, event_node: Node
+):
+    manager_role = await user_service.create_user_role(
+        token=global_admin_token,
+        node_id=event_node.id,
+        new_role=NewUserRole(
+            name=f"manager-{secrets.token_hex(4)}", is_privileged=False, privileges=[Privilege.user_management]
+        ),
+    )
+    manager = await user_service.create_user_no_auth(
+        node_id=event_node.id,
+        new_user=NewUser(login=f"manager-{secrets.token_hex(4)}", display_name="Manager"),
+        password="password",
+        roles=[RoleToNode(node_id=event_node.id, role_id=manager_role.id)],
+    )
+    login = await user_service.login_user(username=manager.login, password="password")
+    assert login.success is not None
+    token = login.success.token
+    role = await user_service.create_user_role(
+        token=token,
+        node_id=event_node.id,
+        new_role=NewUserRole(name=f"role-{secrets.token_hex(4)}", is_privileged=False, privileges=[]),
+    )
+    with pytest.raises(AccessDenied):
+        await user_service.create_user_role(
+            token=token,
+            node_id=event_node.id,
+            new_role=NewUserRole(name=f"high-{secrets.token_hex(4)}", is_privileged=True, privileges=[]),
+        )
+    with pytest.raises(AccessDenied):
+        await user_service.update_user_role_privileges(
+            token=token,
+            node_id=event_node.id,
+            role_id=role.id,
+            is_privileged=False,
+            privileges=[Privilege.allow_privileged_role_assignment],
+        )
+    high_role = await user_service.create_user_role(
+        token=global_admin_token,
+        node_id=event_node.id,
+        new_role=NewUserRole(name=f"high-{secrets.token_hex(4)}", is_privileged=True, privileges=[]),
+    )
+    with pytest.raises(AccessDenied):
+        await user_service.update_user_role_privileges(
+            token=token,
+            node_id=event_node.id,
+            role_id=high_role.id,
+            is_privileged=False,
+            privileges=[],
+        )
+    with pytest.raises(AccessDenied):
+        await user_service.delete_user_role(token=token, node_id=event_node.id, role_id=high_role.id)
+    root_role = await user_service.create_user_role(
+        token=global_admin_token,
+        node_id=ROOT_NODE_ID,
+        new_role=NewUserRole(name=f"root-{secrets.token_hex(4)}", is_privileged=False, privileges=[]),
+    )
+    with pytest.raises(AccessDenied):
+        await user_service.update_user_role_privileges(
+            token=token,
+            node_id=event_node.id,
+            role_id=root_role.id,
+            is_privileged=False,
+            privileges=[],
+        )
+    with pytest.raises(AccessDenied):
+        await user_service.delete_user_role(token=token, node_id=event_node.id, role_id=root_role.id)
+    await user_service.update_user_role_privileges(
+        token=token,
+        node_id=event_node.id,
+        role_id=role.id,
+        is_privileged=False,
+        privileges=[Privilege.user_management],
+    )
+    assert await user_service.delete_user_role(token=token, node_id=event_node.id, role_id=role.id)

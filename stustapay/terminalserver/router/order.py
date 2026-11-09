@@ -21,6 +21,7 @@ from stustapay.core.schema.order import (
     NewTicketSale,
     NewTopUp,
     Order,
+    PendingOrderStatus,
     PendingPayOut,
     PendingSale,
     PendingTicketSale,
@@ -124,6 +125,13 @@ async def register_pending_topup(
 
 class CancelOrderPayload(BaseModel):
     order_uuid: UUID
+
+
+@router.get("/card-payment-status/{order_uuid}", response_model=PendingOrderStatus)
+async def get_card_payment_status(
+    order_uuid: UUID, token: CurrentAuthToken, order_service: ContextOrderService
+) -> PendingOrderStatus:
+    return await order_service.card_payment_status(token=token, order_uuid=order_uuid)
 
 
 @router.post(

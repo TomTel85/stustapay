@@ -36,7 +36,8 @@ class AutonomousSalesRepositoryTest {
             cashRegisterName = null, allowTopUp = false, allowCashOut = false, allowTicketSale = false,
             allowTicketVouchers = false, enableSspPayment = true, enableCashPayment = true,
             enableCardPayment = false, buttons = emptyList(), sumupSecrets = null,
-            postPaymentAllowed = false, sumupPaymentEnabled = false, userPrivileges = emptyList(),
+            postPaymentAllowed = false, sumupPaymentEnabled = false, tapToPayEnabled = false,
+            tapToPayAvailable = false, userPrivileges = emptyList(),
             secrets = null, activeUserId = operator.id, availableRoles = emptyList()) },
         testMode = true, testModeMessage = "Test", eventNodeId = eventId?.toBigInteger())
     private val product = Product("Drink", 5.0, true, 1.toBigInteger(), emptyList(), true, false,
@@ -60,6 +61,7 @@ class AutonomousSalesRepositoryTest {
         var checks = 0
         var books = 0
         var imports = 0
+        var statusChecks = 0
         var importFailureStatus: String? = null
         var statusReply: OfflineResult? = null
         var preparations = 0
@@ -113,7 +115,10 @@ class AutonomousSalesRepositoryTest {
                 OfflineResult(booking.sale.uuid, status, completed(booking.sale))
             }))
         }
-        override suspend fun status(uuid: String) = Response.OK(statusReply ?: OfflineResult(UUID.fromString(uuid), "not_found"))
+        override suspend fun status(uuid: String): Response<OfflineResult> {
+            statusChecks++
+            return Response.OK(statusReply ?: OfflineResult(UUID.fromString(uuid), "not_found"))
+        }
         override suspend fun currentUser(): Response<CurrentUser> {
             userEntered?.complete(Unit)
             return userReply?.await() ?: Response.OK(operator)
@@ -153,6 +158,52 @@ class AutonomousSalesRepositoryTest {
             val fixture = Fixture(context)
             try { fixture.block() } finally { fixture.close() }
         }
+    }
+
+    @Test fun saleSynchronizationReusesOnlyARecentValidPreparation() = test {
+        prepare()
+        assertEquals(1, transport.preparations)
+        assertTrue(repo.synchronizeAfterSale())
+        assertEquals(1, transport.preparations)
+        assertTrue(repo.synchronize())
+        assertEquals(2, transport.preparations)
+
+        val preparation = db.journal().preparation()!!
+        val snapshot = journalJson.decodeFromString<PreparedOfflineSnapshot>(preparation.payload)
+        db.journal().prepare(preparation.copy(payload = journalJson.encodeToString(
+            snapshot.copy(validUntil = snapshot.serverTime.plusSeconds(30)))))
+        assertTrue(repo.synchronizeAfterSale())
+        assertEquals(3, transport.preparations)
+        db.journal().revoke()
+        assertTrue(repo.synchronizeAfterSale())
+        assertEquals(4, transport.preparations)
+    }
+
+    @Test fun missingOnlineSaleWaitsForItsOriginalCashierWithoutBlockingOtherTags() = test {
+        prepare()
+        val waiting = sale()
+        db.journal().insert(JournalSale(waiting.uuid.toString(), journalJson.encodeToString(waiting),
+            operatorId = operator.id.toString(), operatorRole = operator.activeRoleId.toString(),
+            sequence = 1, recordedAt = OffsetDateTime.now().toString(), tagUid = "42"))
+        val nextCashier = operator.copy(id = 2.toBigInteger())
+        repo.rememberConfig(config().copy(activeUserId = nextCashier.id))
+        transport.prepared = snapshot().copy(userId = 2)
+        repo.rememberUser(nextCashier)
+        assertEquals("needs_review", db.journal().sale(waiting.uuid.toString())!!.state)
+        assertTrue(repo.hasUnresolved())
+        assertTrue(repo.check(sale()) is Response.Error.Service)
+        val other = sale().copy(customerTagUid = 43.toBigInteger())
+        assertTrue(repo.check(other) is Response.OK)
+        assertTrue(repo.book(other) is Response.OK)
+        val checks = transport.statusChecks
+        assertTrue(repo.synchronize())
+        assertTrue(transport.statusChecks > checks)
+        assertEquals(operator.id.toString(), db.journal().sale(waiting.uuid.toString())!!.operatorId)
+        repo.rememberConfig(config())
+        transport.prepared = snapshot()
+        repo.rememberUser(operator)
+        assertEquals("booked", db.journal().sale(waiting.uuid.toString())!!.state)
+        assertFalse(repo.hasUnresolved())
     }
 
     @Test fun lowStorageBlocksNewSalesButPreservesAcceptedReplayAndSynchronization() = test {

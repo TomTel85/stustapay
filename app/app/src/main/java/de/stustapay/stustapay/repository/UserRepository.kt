@@ -11,9 +11,14 @@ import de.stustapay.stustapay.model.UserCreateState
 import de.stustapay.stustapay.model.UserRolesState
 import de.stustapay.stustapay.model.UserState
 import de.stustapay.stustapay.model.UserUpdateState
+import de.stustapay.stustapay.model.RegistrationState
 import de.stustapay.stustapay.netsource.UserRemoteDataSource
+import de.stustapay.stustapay.storage.RegistrationLocalDataSource
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,8 +27,10 @@ import javax.inject.Singleton
 class UserRepository @Inject constructor(
     private val userRemoteDataSource: UserRemoteDataSource,
     private val offlineSales: de.stustapay.stustapay.offline.OfflineSalesRepository,
-    private val terminalConfigRepository: TerminalConfigRepository
+    private val terminalConfigRepository: TerminalConfigRepository,
+    private val registrationLocalDataSource: RegistrationLocalDataSource,
 ) {
+    private val sessionMutex = Mutex()
     private var _userState = MutableStateFlow<UserState>(UserState.Error("loading..."))
     var userState = _userState.asStateFlow()
 
@@ -32,7 +39,13 @@ class UserRepository @Inject constructor(
 
     var status = MutableStateFlow<String?>(null)
 
-    suspend fun fetchLogin() {
+    suspend fun fetchLogin() = sessionMutex.withLock {
+        if (retryPendingLogout()) {
+            offlineSales.revoke()
+            offlineSales.start()
+            _userState.value = UserState.NoLogin
+            return@withLock
+        }
         val result = userRemoteDataSource.currentUser(offlinePrepared = offlineSales.restoredConfig() != null)
         if (result is UserState.LoggedIn) {
             _userState.value = result
@@ -64,7 +77,12 @@ class UserRepository @Inject constructor(
         }
     }
 
-    suspend fun login(userTag: NfcTag, roleID: BigInteger) {
+    suspend fun login(userTag: NfcTag, roleID: BigInteger) = sessionMutex.withLock {
+        if (retryPendingLogout()) {
+            _userState.value = UserState.NoLogin
+            status.update { "Previous logout is still pending; reconnect to the server before logging in." }
+            return@withLock
+        }
         when (val loginResult =
             userRemoteDataSource.userLogin(LoginPayload(UserTag(userTag.uid), roleID))) {
             is UserState.Error -> {
@@ -80,16 +98,44 @@ class UserRepository @Inject constructor(
         }
     }
 
-    suspend fun logout() {
+    suspend fun logout() = sessionMutex.withLock {
+        val registered = registrationLocalDataSource.registrationState.first() as? RegistrationState.Registered
+        val intentSaved = registered != null &&
+            registrationLocalDataSource.setLogoutPending(registered.token, registered.apiUrl, true)
         offlineSales.revoke()
         _userState.value = UserState.NoLogin
+        if (!intentSaved) {
+            status.update { if (registered == null) "Logged out." else "Terminal registration changed; logout was not sent." }
+            return@withLock
+        }
+        val expectedRegistration = registered ?: return@withLock
+        val currentRegistration = registrationLocalDataSource.registrationState.first() as? RegistrationState.Registered
+        if (currentRegistration == null || currentRegistration.token != expectedRegistration.token ||
+            currentRegistration.apiUrl != expectedRegistration.apiUrl || !currentRegistration.logoutPending) {
+            status.update { "Terminal registration changed; logout was not sent." }
+            return@withLock
+        }
         val result = userRemoteDataSource.userLogout()
         if (result != null) {
             status.emit(result)
         } else {
+            registrationLocalDataSource.setLogoutPending(expectedRegistration.token, expectedRegistration.apiUrl, false)
             status.update { "Logged out." }
             _userState.update { UserState.NoLogin }
         }
+    }
+
+    private suspend fun retryPendingLogout(): Boolean {
+        val registered = registrationLocalDataSource.registrationState.first() as? RegistrationState.Registered
+            ?: return false
+        if (!registered.logoutPending) return false
+        val result = userRemoteDataSource.userLogout()
+        if (result == null) {
+            registrationLocalDataSource.setLogoutPending(registered.token, registered.apiUrl, false)
+            return (registrationLocalDataSource.registrationState.first() as? RegistrationState.Registered)?.logoutPending == true
+        }
+        status.update { result }
+        return (registrationLocalDataSource.registrationState.first() as? RegistrationState.Registered)?.logoutPending == true
     }
 
     suspend fun create(

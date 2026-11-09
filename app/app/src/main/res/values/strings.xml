@@ -647,4 +647,20 @@
     <string name="sale_journal_dismissed">Manually clarified</string>
     <string name="sale_journal_rejected">Rejected</string>
     <string name="sale_offline_assignment_changed">The till or event assignment changed. Refresh the preparation and validate the sale again.</string>
+    <string name="card_payment_amount_changed">The price changed. Check the total again before taking payment.</string>
+    <string name="card_payment_busy">A card payment is already in progress.</string>
+    <string name="card_payment_pending">Card payment %1$s is awaiting confirmation. Check its status before charging again.</string>
+    <string name="card_payment_previous_booked">Previous card payment %1$s was booked.</string>
+    <string name="card_payment_previous_cancelled">The previous card payment was cancelled. You can start a new payment.</string>
+    <string name="card_payment_storage_failed">Could not save the payment reference. The card was not charged.</string>
+    <string name="card_payment_not_started">The card payment did not start. No charge was made; you can try again.</string>
+    <string name="card_payment_prelaunch_retry">The previous payment did not reach the card provider. Start again to use a new payment reference.</string>
+    <string name="card_payment_released_retry">This payment reference was released for reconciliation. Use a new payment reference before charging again.</string>
+    <string name="card_payment_pending_operator_title">Unresolved card payment</string>
+    <string name="card_payment_pending_operator">Payment %1$s may have reached the provider. Check the provider records before taking action.</string>
+    <string name="card_payment_release_button">Release local block</string>
+    <string name="card_payment_release_title">Release this payment reference?</string>
+    <string name="card_payment_release_warning">Check payment %1$s in the provider records first. A missing record does not prove the card was not charged. Releasing clears only this device retry block; the pending order stays on the server and may still be reconciled. Confirm only if you accept the risk of a duplicate charge.</string>
+    <string name="card_payment_release_confirm">Release local block</string>
+    <string name="card_payment_released">Released the local block for payment %1$s. The server order remains pending; use a new payment reference.</string>
 </resources>

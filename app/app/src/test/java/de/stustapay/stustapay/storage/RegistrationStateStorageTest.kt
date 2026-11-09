@@ -33,6 +33,7 @@ class RegistrationStateStorageTest {
         assertEquals("https://legacy.example", parsed.apiUrl)
         assertEquals(RegistrationSource.UNKNOWN, parsed.source)
         assertFalse(parsed.managedConfigDisabled)
+        assertFalse(parsed.logoutPending)
     }
 
     @Test
@@ -45,6 +46,7 @@ class RegistrationStateStorageTest {
                 message = "manual",
                 source = RegistrationSource.MANUAL,
                 managedConfigDisabled = true,
+                logoutPending = true,
             ),
             serialized,
         )
@@ -57,6 +59,17 @@ class RegistrationStateStorageTest {
         assertEquals("https://manual.example", parsed.apiUrl)
         assertEquals(RegistrationSource.MANUAL, parsed.source)
         assertTrue(parsed.managedConfigDisabled)
+        assertTrue(parsed.logoutPending)
+    }
+
+    @Test
+    fun `logout intent updates only its terminal registration`() = runBlocking {
+        val localDataSource = RegistrationLocalDataSource(createDataStore())
+        localDataSource.setState(RegistrationState.Registered(token = "token-a", apiUrl = "https://a.example"))
+
+        assertTrue(localDataSource.setLogoutPending("token-a", "https://a.example", true))
+        assertFalse(localDataSource.setLogoutPending("token-b", "https://b.example", false))
+        assertTrue((localDataSource.registrationState.first() as RegistrationState.Registered).logoutPending)
     }
 
     @Test

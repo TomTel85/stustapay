@@ -69,7 +69,7 @@ case "$args" in
   *" rev-parse origin/"*) printf '%s\n' "${EXPECTED_SHA:-newsha}";;
   *" fetch "*) exit 0;;
   *" pull --ff-only "*)
-    if [[ "${SCENARIO:-}" == "non_fast_forward" ]]; then exit 1; fi
+    if [[ "${SCENARIO:-}" == "non_fast_forward" || "${SCENARIO:-}" == "recovery_partial_failure" ]]; then exit 1; fi
     if [[ "${SCENARIO:-}" == "sha_mismatch" ]]; then
       printf 'wrongsha\n' >"$STATE_FILE"
     else
@@ -92,7 +92,15 @@ printf '%s\n' "$*" >>"$SERVICE_LOG"
 case "${1:-}" in
   cat|stop) exit 0;;
   start) [[ "${SCENARIO:-}" == "service_failure" ]] && exit 1 || exit 0;;
-  is-active) [[ "${SCENARIO:-}" == "service_failure" ]] && exit 1 || { printf 'active\n'; exit 0; };;
+  is-active)
+    if [[ "${SCENARIO:-}" == "service_failure" ]] || \
+      { [[ "${SCENARIO:-}" == "partial_service_failure" || "${SCENARIO:-}" == "recovery_partial_failure" ]] && [[ "${2:-}" == "svc-b.service" ]]; }; then
+      printf 'inactive\n'
+      exit 3
+    fi
+    printf 'active\n'
+    exit 0
+    ;;
   *) exit 0;;
 esac
 EOF
@@ -162,6 +170,20 @@ assert_service_failure_keeps_new_commit() {
   [[ "$(<"${TEST_ROOT}/state")" == "newsha" ]]
 }
 
+assert_partial_service_failure_detected() {
+  run_remote partial_service_failure deploy >"${TEST_ROOT}/partial-service-output" 2>&1 && return 1
+  grep -q '^is-active svc-a.service$' "${TEST_ROOT}/services.log"
+  grep -q '^is-active svc-b.service$' "${TEST_ROOT}/services.log"
+  ! grep -q '^DEPLOY_RESULT ' "${TEST_ROOT}/partial-service-output"
+}
+
+assert_partial_recovery_failure_detected() {
+  run_remote recovery_partial_failure deploy >"${TEST_ROOT}/recovery-output" 2>&1 && return 1
+  grep -q '^is-active svc-a.service$' "${TEST_ROOT}/services.log"
+  grep -q '^is-active svc-b.service$' "${TEST_ROOT}/services.log"
+  grep -q 'Automatic recovery was incomplete' "${TEST_ROOT}/recovery-output"
+}
+
 assert_venv_ownership_normalized() {
   run_remote success deploy >/dev/null 2>&1
   grep -Fq -- "-R cashless: ${REMOTE_ROOT}/venv" "${TEST_ROOT}/ownership.log"
@@ -175,6 +197,8 @@ expect_success 'commit mismatch recovery' assert_recovered sha_mismatch
 expect_success 'dependency failure recovery' assert_recovered dependency_failure
 expect_success 'migration failure is not rewound' assert_migration_not_rewound
 expect_success 'service failure keeps migrated commit' assert_service_failure_keeps_new_commit
+expect_success 'partial service startup failure is detected' assert_partial_service_failure_detected
+expect_success 'partial recovery startup failure is detected' assert_partial_recovery_failure_detected
 expect_success 'successful remote deployment' run_remote success deploy
 expect_success 'virtual environment ownership normalization' assert_venv_ownership_normalized
 

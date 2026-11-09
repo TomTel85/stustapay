@@ -222,6 +222,18 @@ class UserService(Service[Config]):
             )
 
     @staticmethod
+    async def _check_role_management(
+        *, conn: Connection, user_id: int, node_id: int, is_privileged: bool, privileges: list[Privilege]
+    ) -> None:
+        user_privileges = await get_user_privileges_at_node(conn=conn, user_id=user_id, node_id=node_id)
+        if Privilege.user_management not in user_privileges:
+            raise AccessDenied("Privilege user_management is required at the role's node")
+        if Privilege.allow_privileged_role_assignment not in user_privileges and (
+            is_privileged or set(privileges).difference(user_privileges)
+        ):
+            raise AccessDenied("Cannot manage a role that the user cannot assign")
+
+    @staticmethod
     def _get_invitation_template_context(
         *, user: User, node_name: str, invitation_url: str, expires_at: datetime
     ) -> dict[str, object]:
@@ -264,8 +276,17 @@ class UserService(Service[Config]):
     @with_db_transaction
     @requires_node(object_types=[ObjectType.user_role])
     @requires_user([Privilege.user_management])
-    async def create_user_role(self, *, conn: Connection, node: Node, new_role: NewUserRole) -> UserRole:
+    async def create_user_role(
+        self, *, conn: Connection, node: Node, current_user: CurrentUser, new_role: NewUserRole
+    ) -> UserRole:
         self._validate_role_privileges(node.id, new_role.privileges)
+        await self._check_role_management(
+            conn=conn,
+            user_id=current_user.id,
+            node_id=node.id,
+            is_privileged=new_role.is_privileged,
+            privileges=new_role.privileges,
+        )
         role_id = await conn.fetchval(
             "insert into user_role (node_id, name, is_privileged) values ($1, $2, $3) returning id",
             node.id,
@@ -286,12 +307,33 @@ class UserService(Service[Config]):
     @requires_node(object_types=[ObjectType.user_role])
     @requires_user([Privilege.user_management])
     async def update_user_role_privileges(
-        self, *, conn: Connection, node: Node, role_id: int, is_privileged: bool, privileges: list[Privilege]
+        self,
+        *,
+        conn: Connection,
+        node: Node,
+        current_user: CurrentUser,
+        role_id: int,
+        is_privileged: bool,
+        privileges: list[Privilege],
     ) -> UserRole:
         role = await _get_user_role(conn=conn, role_id=role_id)
         if role is None or role.node_id not in node.ids_to_root:
             raise NotFound(element_type="user_role", element_id=role_id)
         self._validate_role_privileges(role.node_id, privileges)
+        await self._check_role_management(
+            conn=conn,
+            user_id=current_user.id,
+            node_id=role.node_id,
+            is_privileged=role.is_privileged,
+            privileges=role.privileges,
+        )
+        await self._check_role_management(
+            conn=conn,
+            user_id=current_user.id,
+            node_id=role.node_id,
+            is_privileged=is_privileged,
+            privileges=privileges,
+        )
 
         await conn.execute("update user_role set is_privileged = $2 where id = $1", role_id, is_privileged)
 
@@ -308,7 +350,17 @@ class UserService(Service[Config]):
     @with_db_transaction
     @requires_node(object_types=[ObjectType.user_role])
     @requires_user([Privilege.user_management])
-    async def delete_user_role(self, *, conn: Connection, node: Node, role_id: int) -> bool:
+    async def delete_user_role(self, *, conn: Connection, node: Node, current_user: CurrentUser, role_id: int) -> bool:
+        role = await _get_user_role(conn=conn, role_id=role_id)
+        if role is None or role.node_id not in node.ids_to_root:
+            return False
+        await self._check_role_management(
+            conn=conn,
+            user_id=current_user.id,
+            node_id=role.node_id,
+            is_privileged=role.is_privileged,
+            privileges=role.privileges,
+        )
         result = await conn.execute(
             "delete from user_role where id = $1 and node_id = any($2)", role_id, node.ids_to_root
         )

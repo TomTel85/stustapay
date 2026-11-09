@@ -23,6 +23,7 @@ class StandardTapToPaySdkGateway @Inject constructor() : TapToPaySdkGateway {
     override fun startPayment(
         totalAmount: Long,
         clientUniqueTransactionId: String,
+        affiliateKey: String,
     ): Flow<TapToPaySdkEvent> = error("Tap To Pay SDK is not included in this build")
 }
 

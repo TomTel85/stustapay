@@ -1087,3 +1087,26 @@ async def test_sepa_export(
             currency_ident=event.currency_identifier,
             execution_date=datetime.date.today(),
         )
+
+
+async def test_payout_run_excludes_disallowed_iban_but_keeps_donations(
+    db_connection: Connection,
+    event_node: Node,
+    customer_service: CustomerService,
+    event_admin_token: str,
+    customers: list[CustomerTestInfo],
+):
+    disallowed, donation = customers[1].id, customers[2].id
+    await db_connection.execute(
+        "update customer_info set iban = 'VG67BGXY9228788158369211' where customer_account_id = any($1::bigint[])",
+        [disallowed, donation],
+    )
+    await db_connection.execute("update customer_info set donate_all = true where customer_account_id = $1", donation)
+    run = await customer_service.payout.create_payout_run(
+        token=event_admin_token,
+        node_id=event_node.id,
+        new_payout_run=NewPayoutRun(max_num_payouts=10, max_payout_sum=10000),
+    )
+    account_ids = await db_connection.fetch("select customer_account_id from payout where payout_run_id = $1", run.id)
+    assert disallowed not in {row["customer_account_id"] for row in account_ids}
+    assert donation in {row["customer_account_id"] for row in account_ids}

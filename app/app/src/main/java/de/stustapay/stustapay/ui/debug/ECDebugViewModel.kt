@@ -11,6 +11,7 @@ import de.stustapay.libssp.model.NfcTag
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ec.ECPayment
 import de.stustapay.stustapay.ec.SumUp
+import de.stustapay.stustapay.repository.ECPaymentRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -22,10 +23,25 @@ import javax.inject.Inject
 class ECDebugViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val sumUp: SumUp,
+    private val ecPaymentRepository: ECPaymentRepository,
 ) : ViewModel() {
     private val _status = MutableStateFlow(context.getString(R.string.ec_debug_status_loading))
     val status = _status.asStateFlow()
     val sumUpState = sumUp.paymentStatus
+    private val _ambiguousPaymentId = MutableStateFlow<String?>(null)
+    val ambiguousPaymentId = _ambiguousPaymentId.asStateFlow()
+
+    suspend fun refreshAmbiguousPayment() {
+        _ambiguousPaymentId.update { ecPaymentRepository.ambiguousPaymentIdForOperator() }
+    }
+
+    suspend fun releaseAmbiguousPayment(): Boolean {
+        val paymentId = _ambiguousPaymentId.value ?: return false
+        if (!ecPaymentRepository.releaseAmbiguousPaymentAfterProviderCheck(paymentId)) return false
+        _ambiguousPaymentId.update { null }
+        _status.update { context.getString(R.string.card_payment_released, paymentId) }
+        return true
+    }
 
     suspend fun openLogin(context: Activity) {
         _status.update { this.context.getString(R.string.ec_debug_status_opening_login) }

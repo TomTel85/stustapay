@@ -638,4 +638,20 @@
     <string name="sale_journal_dismissed">Handmatig verduidelijkt</string>
     <string name="sale_journal_rejected">Afgewezen</string>
     <string name="sale_offline_assignment_changed">De kassa- of evenementtoewijzing is gewijzigd. Werk de voorbereiding bij en controleer de verkoop opnieuw.</string>
+    <string name="card_payment_amount_changed">De prijs is gewijzigd. Controleer het bedrag opnieuw voordat je de betaling start.</string>
+    <string name="card_payment_busy">Er loopt al een kaartbetaling.</string>
+    <string name="card_payment_pending">Kaartbetaling %1$s wacht op bevestiging. Controleer de status voordat je opnieuw afrekent.</string>
+    <string name="card_payment_previous_booked">De vorige kaartbetaling %1$s is geboekt.</string>
+    <string name="card_payment_previous_cancelled">De vorige kaartbetaling is geannuleerd. Je kunt een nieuwe betaling starten.</string>
+    <string name="card_payment_storage_failed">De betalingsreferentie kon niet worden opgeslagen. Er is niets afgeschreven.</string>
+    <string name="card_payment_not_started">De kaartbetaling is niet gestart. Er is niets afgeschreven; je kunt het opnieuw proberen.</string>
+    <string name="card_payment_prelaunch_retry">De vorige betaling heeft de kaartaanbieder niet bereikt. Start opnieuw om een nieuwe betalingsreferentie te gebruiken.</string>
+    <string name="card_payment_released_retry">Deze betalingsreferentie is vrijgegeven voor afstemming. Gebruik een nieuwe betalingsreferentie voordat je opnieuw afrekent.</string>
+    <string name="card_payment_pending_operator_title">Onopgeloste kaartbetaling</string>
+    <string name="card_payment_pending_operator">Betaling %1$s heeft de aanbieder mogelijk bereikt. Controleer de gegevens van de aanbieder voordat je actie onderneemt.</string>
+    <string name="card_payment_release_button">Lokale blokkering opheffen</string>
+    <string name="card_payment_release_title">Deze betalingsreferentie vrijgeven?</string>
+    <string name="card_payment_release_warning">Controleer betaling %1$s eerst in de gegevens van de aanbieder. Een ontbrekende registratie bewijst niet dat de kaart niet is belast. Vrijgeven heft alleen de herhaalblokkering op dit apparaat op; de openstaande bestelling blijft op de server en kan nog steeds worden verwerkt. Bevestig alleen als je het risico op een dubbele afschrijving accepteert.</string>
+    <string name="card_payment_release_confirm">Lokale blokkering opheffen</string>
+    <string name="card_payment_released">Lokale blokkering voor betaling %1$s opgeheven. De serverbestelling blijft open; gebruik een nieuwe betalingsreferentie.</string>
 </resources>

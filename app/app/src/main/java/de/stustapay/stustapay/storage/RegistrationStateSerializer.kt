@@ -33,6 +33,7 @@ object RegistrationStateSerializer : Serializer<RegistrationState> {
                     "in local storage",
                     source = regState.source.toRegistrationSource(),
                     managedConfigDisabled = regState.managedConfigDisabled,
+                    logoutPending = regState.logoutPending,
                 )
             } else {
                 RegistrationState.NotRegistered(
@@ -54,6 +55,7 @@ object RegistrationStateSerializer : Serializer<RegistrationState> {
                     .setAuthToken(t.token)
                     .setSource(t.source.toProto())
                     .setManagedConfigDisabled(t.managedConfigDisabled)
+                    .setLogoutPending(t.logoutPending)
                     .build()
                 regState.writeTo(output)
             }

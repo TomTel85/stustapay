@@ -42,6 +42,7 @@ class MultiDeviceOfflineSalesTest {
             allowTopUp = false, allowCashOut = false, allowTicketSale = false, allowTicketVouchers = false,
             enableSspPayment = true, enableCashPayment = false, enableCardPayment = false,
             buttons = emptyList(), sumupSecrets = null, postPaymentAllowed = false, sumupPaymentEnabled = false,
+            tapToPayEnabled = false, tapToPayAvailable = false,
             userPrivileges = emptyList(), secrets = null, activeUserId = operator.id, availableRoles = emptyList()),
         testMode = true, testModeMessage = "Emulator integration test", eventNodeId = 1.toBigInteger())
 

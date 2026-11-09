@@ -15,7 +15,7 @@ from stustapay.core.schema.order import Button, NewSale, NewTopUp, PaymentMethod
 from stustapay.core.schema.product import NewProduct, ProductType
 from stustapay.core.schema.till import NewTillButton, NewTillLayout
 from stustapay.core.service.common.error import NodeIsReadOnly
-from stustapay.core.service.order.offline import check_offline_budget, offline_positions
+from stustapay.core.service.order.offline import OfflineBudgetTotals, check_offline_budget, offline_positions
 from stustapay.tests.terminal.test_sale import sale_products  # noqa: F401
 
 
@@ -366,7 +366,7 @@ async def test_offline_limits_count_gross_returns_separately(prepared_offline, c
     _, positive, negative = offline_positions(prepared_offline, sale)
     assert (positive, negative) == (2500, 1000)
     with pytest.raises(InvalidArgument, match="budget"):
-        check_offline_budget(prepared_offline, sale, positive, negative, [])
+        check_offline_budget(prepared_offline, sale, positive, negative, OfflineBudgetTotals())
 
 
 async def test_offline_snapshot_accepts_single_variable_price_product(
@@ -532,11 +532,16 @@ async def test_offline_free_price_import_preserves_amount_tax_and_distinct_price
 
 async def test_offline_returns_never_replenish_estimated_balance(prepared_offline, customer, sale_products):
     sale = sale_for(customer, sale_products)
-    uid = customer.tag.uid
-    c = next(c for c in prepared_offline.customers if c.customer_tag_uid == uid)
+    c = next(c for c in prepared_offline.customers if c.customer_tag_uid == customer.tag.uid)
     c.balance_cents = 500
     with pytest.raises(InvalidArgument, match="balance"):
-        check_offline_budget(prepared_offline, sale, 500, 0, [(uid, 500, 0), (uid, 0, 500)])
+        check_offline_budget(
+            prepared_offline,
+            sale,
+            500,
+            0,
+            OfflineBudgetTotals(customer_positive=500, customer_negative=500, customer_spent=500),
+        )
 
 
 async def test_offline_requires_explicit_zero_vouchers(prepared_offline, customer, sale_products):
@@ -824,3 +829,43 @@ async def test_distinct_terminals_serialize_customer_balance(
     )
     assert sum(isinstance(r, NotEnoughFundsException) for r in results) == 1
     assert await db_connection.fetchval("select balance from account where id=$1", customer.account_id) == 2
+
+
+async def test_offline_budget_caches_legacy_contributions_and_preserves_vouchers(
+    prepared_offline, order_service, terminal_token, customer, sale_products, db_connection, monkeypatch
+):
+    from stustapay.core.service.order import offline  # pylint: disable=import-outside-toplevel
+
+    await db_connection.execute("update account set vouchers=7 where id=$1", customer.account_id)
+    calls = []
+    original = offline.offline_positions
+
+    def count_positions(snapshot, sale):
+        calls.append(sale.uuid)
+        return original(snapshot, sale)
+
+    monkeypatch.setattr(offline, "offline_positions", count_positions)
+    sales = [sale_for(customer, sale_products) for _ in range(3)]
+    bookings = [
+        OfflineBooking(snapshot_id=prepared_offline.id, sale=sale, sequence=i, recorded_at=prepared_offline.server_time)
+        for i, sale in enumerate(sales, 1)
+    ]
+    first = await order_service.import_offline(token=terminal_token, payload=OfflineImport(bookings=[bookings[0]]))
+    assert first.results[0].status == OfflineBookingStatus.booked
+    assert first.results[0].sale.old_voucher_balance == 7
+    assert first.results[0].sale.new_voucher_balance == 7
+    assert await db_connection.fetchval("select vouchers from account where id=$1", customer.account_id) == 7
+    await db_connection.execute(
+        "update terminal_offline_import set budget_positive=null,budget_negative=null where uuid=$1", sales[0].uuid
+    )
+    second = await order_service.import_offline(token=terminal_token, payload=OfflineImport(bookings=[bookings[1]]))
+    assert second.results[0].status == OfflineBookingStatus.booked
+    assert calls.count(sales[0].uuid) == 2
+    third = await order_service.import_offline(token=terminal_token, payload=OfflineImport(bookings=[bookings[2]]))
+    assert third.results[0].status == OfflineBookingStatus.booked
+    assert calls.count(sales[0].uuid) == 2
+    assert calls.count(sales[1].uuid) == 1
+    replay = await order_service.import_offline(token=terminal_token, payload=OfflineImport(bookings=[bookings[0]]))
+    assert replay.results[0].status == OfflineBookingStatus.already_booked
+    assert replay.results[0].sale == first.results[0].sale
+    assert calls.count(sales[0].uuid) == 2

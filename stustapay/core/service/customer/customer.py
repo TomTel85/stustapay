@@ -258,8 +258,26 @@ class CustomerService(Service[Config]):
             customer_portal_base_url=customer_portal_base_url,
         )
 
-    @with_db_transaction
     async def login_customer(
+        self,
+        *,
+        uid: int | None,
+        pin: str | None,
+        node_id: int,
+        customer_portal_base_url: str | None = None,
+        source: str = "unknown",
+    ) -> CustomerLoginSuccess:
+        if uid is None or pin is None:
+            raise AccessDenied("Invalid user tag or pin")
+        result = await self._login_customer(  # pylint: disable=missing-kwoa
+            uid=uid, pin=pin, node_id=node_id, customer_portal_base_url=customer_portal_base_url, source=source
+        )
+        if result is None:
+            raise AccessDenied("Invalid user tag or pin")
+        return result
+
+    @with_db_transaction
+    async def _login_customer(
         self,
         *,
         conn: Connection,
@@ -267,7 +285,8 @@ class CustomerService(Service[Config]):
         pin: str,
         node_id: int,
         customer_portal_base_url: str | None = None,
-    ) -> CustomerLoginSuccess:
+        source: str,
+    ) -> CustomerLoginSuccess | None:
         if customer_portal_base_url is not None:
             portal_event_node_id = await fetch_customer_portal_event_node_id(
                 conn=conn,
@@ -277,6 +296,22 @@ class CustomerService(Service[Config]):
             requested_event_node_id = requested_event_node.id if requested_event_node is not None else None
             if portal_event_node_id is None or requested_event_node_id != portal_event_node_id:
                 raise AccessDenied("Login does not match current customer portal")
+
+        source_key = f"source:{source}"
+        tag_key = f"tag:{node_id}:{uid}"
+        for key, limit in ((source_key, 100), (tag_key, 10)):
+            attempts = await conn.fetchval(
+                "insert into customer_login_attempt (key, attempts, window_start) values ($1, 1, now()) "
+                "on conflict (key) do update set "
+                "attempts = case when customer_login_attempt.window_start < now() - interval '15 minutes' "
+                "then 1 else least(customer_login_attempt.attempts + 1, $2 + 1) end, "
+                "window_start = case when customer_login_attempt.window_start < now() - interval '15 minutes' "
+                "then now() else customer_login_attempt.window_start end returning attempts",
+                key,
+                limit,
+            )
+            if attempts > limit:
+                return None
 
         customer = await conn.fetch_maybe_one(
             Customer,
@@ -292,7 +327,9 @@ class CustomerService(Service[Config]):
             node_id,
         )
         if customer is None:
-            raise AccessDenied("Invalid user tag or pin")
+            return None
+        await conn.execute("delete from customer_login_attempt where key = $1", tag_key)
+        await conn.execute("update customer_login_attempt set attempts = attempts - 1 where key = $1", source_key)
 
         session_id = await conn.fetchval(
             "insert into customer_session (customer) values ($1) returning id", customer.id
@@ -413,6 +450,8 @@ class CustomerService(Service[Config]):
         if event_node.event is None:
             raise InvalidArgument("Invalid event node")
 
+        if not event_node.event.sepa_enabled:
+            raise InvalidArgument("SEPA payout is disabled for this event")
         await self.check_payout_run(conn, current_customer)
 
         # If donations are disabled, override any incoming donation value to 0
@@ -428,6 +467,9 @@ class CustomerService(Service[Config]):
             iban = str(iban_obj)
         except ValueError as exc:
             raise InvalidArgument("IBAN is not valid") from exc
+
+        if iban_obj.country_code not in event_node.event.sepa_allowed_country_codes:
+            raise InvalidArgument("IBAN country is not allowed for this event")
 
         account_name = customer_bank.account_name
         if account_name is not None:

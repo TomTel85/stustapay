@@ -33,6 +33,7 @@ import de.stustapay.api.models.OfflineImport
 import de.stustapay.api.models.OfflineImportResult
 import de.stustapay.api.models.OfflineSnapshot
 import de.stustapay.api.models.Order
+import de.stustapay.api.models.PendingOrderStatus
 import de.stustapay.api.models.PendingPayOut
 import de.stustapay.api.models.PendingSale
 import de.stustapay.api.models.PendingTicketSale
@@ -479,6 +480,40 @@ import io.ktor.http.ParametersBuilder
             )
 
             return jsonRequest(
+            localVariableConfig,
+            localVariableBody,
+            localVariableAuthNames
+            ).wrap()
+            }
+
+        /**
+        * GET /order/card-payment-status/{order_uuid}
+        * Get Card Payment Status
+        *
+         * @param orderUuid
+         * @return PendingOrderStatus
+        */
+            @Suppress("UNCHECKED_CAST")
+        open suspend fun getCardPaymentStatus(orderUuid: java.util.UUID): HttpResponse<PendingOrderStatus> {
+
+            val localVariableAuthNames = listOf<String>("OAuth2PasswordBearer")
+
+            val localVariableBody =
+                    io.ktor.client.utils.EmptyContent
+
+            val localVariableQuery = mutableMapOf<String, List<String>>()
+
+            val localVariableHeaders = mutableMapOf<String, String>()
+
+            val localVariableConfig = RequestConfig<kotlin.Any?>(
+            RequestMethod.GET,
+            "/order/card-payment-status/{order_uuid}".replace("{" + "order_uuid" + "}", "$orderUuid"),
+            query = localVariableQuery,
+            headers = localVariableHeaders,
+            requiresAuthentication = true,
+            )
+
+            return request(
             localVariableConfig,
             localVariableBody,
             localVariableAuthNames

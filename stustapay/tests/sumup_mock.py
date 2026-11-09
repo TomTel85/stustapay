@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from stustapay.payment.sumup.api import SumUpCheckout, SumUpCheckoutStatus
+from stustapay.payment.sumup.api import SumUpCheckout, SumUpCheckoutStatus, SumUpTransactionDetail
 
 
 class MockSumUpApi:
@@ -27,3 +27,20 @@ class MockSumUpApi:
     @classmethod
     def mock_amount(cls, amount: float):
         cls.amount = amount
+
+    async def find_pos_transaction(self, order_uuid: uuid.UUID) -> SumUpTransactionDetail | None:
+        return pos_transaction_from_checkout(await self.find_checkout(order_uuid))
+
+
+def pos_transaction_from_checkout(checkout: SumUpCheckout | None) -> SumUpTransactionDetail | None:
+    if checkout is None:
+        return None
+    return SumUpTransactionDetail(
+        id=checkout.id,
+        amount=checkout.amount,
+        currency=checkout.currency,
+        timestamp=checkout.date,
+        status="SUCCESSFUL" if checkout.status == SumUpCheckoutStatus.PAID else checkout.status.value,
+        transaction_code="TEST",
+        foreign_transaction_id=str(checkout.checkout_reference),
+    )

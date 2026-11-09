@@ -13,6 +13,7 @@ sealed interface RegistrationState {
         var message: String? = null,
         val source: RegistrationSource = RegistrationSource.UNKNOWN,
         val managedConfigDisabled: Boolean = false,
+        val logoutPending: Boolean = false,
     ) : RegistrationState
 
     data class Registering(

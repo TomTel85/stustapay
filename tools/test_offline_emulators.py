@@ -81,13 +81,13 @@ class Emulator:
         return run([self.adb, "-P", str(self.adb_port), "-s", self.serial, *args], timeout=timeout)
 
     def install(self, coordinator_port: int):
-        self.command("install", "--no-streaming", "-r", str(ROOT / "app/app/build/outputs/apk/debug/app-debug.apk"))
+        self.command("install", "--no-streaming", "-r", str(ROOT / "app/app/build/outputs/apk/standard/debug/app-standard-debug.apk"))
         self.command(
             "install",
             "--no-streaming",
             "-t",
             "-r",
-            str(ROOT / "app/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"),
+            str(ROOT / "app/app/build/outputs/apk/androidTest/standard/debug/app-standard-debug-androidTest.apk"),
         )
         if self.command("shell", "pm", "clear", PACKAGE).strip() != "Success":
             raise RuntimeError(f"Could not clear the disposable test app on {self.serial}")
@@ -439,7 +439,7 @@ def main() -> int:
         print("Building Android debug and instrumentation APKs…", flush=True)
         with (args.output / "gradle.log").open("w", encoding="utf-8") as log:
             result = subprocess.run(
-                ["./gradlew", ":app:assembleDebug", ":app:assembleDebugAndroidTest"],
+                ["./gradlew", ":app:assembleStandardDebug", ":app:assembleStandardDebugAndroidTest"],
                 cwd=ROOT / "app",
                 stdout=log,
                 stderr=subprocess.STDOUT,
@@ -448,7 +448,7 @@ def main() -> int:
         if result.returncode:
             print(f"Android build failed; inspect {args.output / 'gradle.log'}", file=sys.stderr)
             return 1
-    for apk in ("debug/app-debug.apk", "androidTest/debug/app-debug-androidTest.apk"):
+    for apk in ("standard/debug/app-standard-debug.apk", "androidTest/standard/debug/app-standard-debug-androidTest.apk"):
         if not (ROOT / "app/app/build/outputs/apk" / apk).is_file():
             parser.error(f"APK missing: {apk}; run without --skip-build")
 

@@ -15,4 +15,16 @@ class RegistrationLocalDataSource @Inject constructor(
     suspend fun setState(registrationState: RegistrationState) {
         regStateStore.updateData { registrationState }
     }
+
+    suspend fun setLogoutPending(token: String, apiUrl: String, pending: Boolean): Boolean =
+        regStateStore.updateData { state ->
+            if (state is RegistrationState.Registered && state.token == token && state.apiUrl == apiUrl) {
+                state.copy(logoutPending = pending)
+            } else {
+                state
+            }
+        }.let { state ->
+            state is RegistrationState.Registered && state.token == token && state.apiUrl == apiUrl &&
+                state.logoutPending == pending
+        }
 }

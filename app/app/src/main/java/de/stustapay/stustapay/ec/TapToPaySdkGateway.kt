@@ -23,6 +23,7 @@ interface TapToPaySdkGateway {
     fun startPayment(
         totalAmount: Long,
         clientUniqueTransactionId: String,
+        affiliateKey: String,
     ): Flow<TapToPaySdkEvent>
 }
 

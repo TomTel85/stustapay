@@ -97,10 +97,6 @@ class UserRemoteDataSource @Inject constructor(
      * Logout the current user
      */
     suspend fun userLogout(): String? {
-        if (!checkNetworkConnectivity()) {
-            return "No internet connection available"
-        }
-        
         return when (val userLogoutResponse =
             terminalApiAccessor.execute { it.user()?.logoutUser() }) {
             is Response.OK -> {

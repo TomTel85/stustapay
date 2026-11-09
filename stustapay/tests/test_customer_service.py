@@ -1543,14 +1543,13 @@ async def test_update_customer_info(
             mail_service=mail_service,
         )
 
-    # test not allowed country codes - validation was removed, so this should now succeed
-    # (Business logic change: country code validation is no longer enforced)
     customer_bank = CustomerBank(iban=invalid_country_code, account_name=account_name, email=email, donation=0)
-    await customer_service.update_customer_info(
-        token=auth.token,
-        customer_bank=customer_bank,
-        mail_service=mail_service,
-    )
+    with pytest.raises(InvalidArgument):
+        await customer_service.update_customer_info(
+            token=auth.token,
+            customer_bank=customer_bank,
+            mail_service=mail_service,
+        )
 
     # test invalid email - Business logic change: email validation was removed
     # CustomerBank.email is now plain str instead of EmailStr, so no validation occurs
@@ -1748,3 +1747,63 @@ async def test_portal_uses_global_privacy_policy_and_preserves_event_texts(
     )
     cleared = await customer_service.get_api_config(base_url=base_url)
     assert cleared.translation_texts[Language.en_US]["privacy_policy"] == ""
+
+
+async def test_customer_login_failed_attempts_are_persistent(
+    customer_service: CustomerService, test_customer: Customer, event_node: Node, db_connection: Connection
+):
+    for _ in range(10):
+        with pytest.raises(AccessDenied):
+            await customer_service.login_customer(
+                uid=test_customer.user_tag_uid, pin="wrong", node_id=event_node.id, source="test-login-limit"
+            )
+    with pytest.raises(AccessDenied):
+        await customer_service.login_customer(
+            uid=test_customer.user_tag_uid,
+            pin=test_customer.user_tag_pin,
+            node_id=event_node.id,
+            source="another-source",
+        )
+    await db_connection.execute(
+        "update customer_login_attempt set window_start = now() - interval '16 minutes' where key = $1",
+        f"tag:{event_node.id}:{test_customer.user_tag_uid}",
+    )
+    await db_connection.execute(
+        "insert into customer_login_attempt (key, attempts, window_start) values ('source:blocked-source', 100, now())"
+    )
+    with pytest.raises(AccessDenied):
+        await customer_service.login_customer(
+            uid=test_customer.user_tag_uid,
+            pin=test_customer.user_tag_pin,
+            node_id=event_node.id,
+            source="blocked-source",
+        )
+    assert await customer_service.login_customer(
+        uid=test_customer.user_tag_uid,
+        pin=test_customer.user_tag_pin,
+        node_id=event_node.id,
+        source="another-source",
+    )
+
+
+@pytest.mark.parametrize("sepa_enabled", [True, False])
+async def test_customer_bank_details_rejected_by_event_policy(
+    customer_service: CustomerService,
+    test_customer: Customer,
+    event_node: Node,
+    db_connection: Connection,
+    mail_service: MailService,
+    sepa_enabled: bool,
+):
+    auth = await customer_service.login_customer(
+        uid=test_customer.user_tag_uid, pin=test_customer.user_tag_pin, node_id=event_node.id
+    )
+    assert event_node.event is not None
+    await db_connection.execute("update event set sepa_enabled = $2 where id = $1", event_node.event.id, sepa_enabled)
+    iban = "FR1420041010050500013M02606" if sepa_enabled else "DE89370400440532013000"
+    with pytest.raises(InvalidArgument, match="country is not allowed" if sepa_enabled else "payout is disabled"):
+        await customer_service.update_customer_info(
+            token=auth.token,
+            customer_bank=CustomerBank(iban=iban, account_name="Test", email="x"),
+            mail_service=mail_service,
+        )

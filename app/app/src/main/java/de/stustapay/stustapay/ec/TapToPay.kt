@@ -16,7 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -35,7 +35,6 @@ class TapToPay @Inject constructor(
     private val sdkGateway: TapToPaySdkGateway,
 ) {
     private val _paymentStatus = MutableStateFlow<SumUpState>(SumUpState.None)
-    val paymentStatus = _paymentStatus.asStateFlow()
 
     private val _status = MutableStateFlow("no status")
     val status = _status.asStateFlow()
@@ -106,6 +105,8 @@ class TapToPay @Inject constructor(
                     }
                     Log.d("TapToPay", "Tap To Pay SDK initialized successfully")
                     true
+                } catch (exc: CancellationException) {
+                    throw exc
                 } catch (exc: Exception) {
                     Log.e("TapToPay", "Failed to initialize Tap To Pay", exc)
                     _status.update { "Tap To Pay initialization failed: ${exc.message}" }
@@ -122,26 +123,17 @@ class TapToPay @Inject constructor(
         }
     }
 
-    suspend fun pay(payment: ECPayment) {
+    suspend fun pay(payment: ECPayment, beforeSdkLaunch: () -> Boolean): SumUpState {
         if (!isInitialized || !sdkGateway.isAvailable) {
-            _paymentStatus.update {
-                SumUpState.Error(
-                    msg = "Tap To Pay SDK not available",
-                    readerFallbackAllowed = true,
-                )
-            }
-            return
+            return SumUpState.Error("Tap To Pay SDK not available", readerFallbackAllowed = true)
         }
 
-        val config = fetchConfig()
-        if (config is SumUpConfigState.Error) {
-            _paymentStatus.update {
-                SumUpState.Error(
-                    msg = "Failed to fetch configuration: ${config.msg}",
-                    readerFallbackAllowed = true,
-                )
-            }
-            return
+        val config = when (val result = fetchConfig()) {
+            is SumUpConfigState.OK -> result.cfg
+            is SumUpConfigState.Error -> return SumUpState.Error(
+                msg = "Failed to fetch configuration: ${result.msg}",
+                readerFallbackAllowed = true,
+            )
         }
 
         val amountInCents = tapToPayAmountCents(payment.amount)
@@ -151,40 +143,27 @@ class TapToPay @Inject constructor(
         _status.update { "Starting Tap To Pay transaction..." }
         customerDisplayManager.updateState(CustomerDisplayState.TapToPayReady)
 
-        try {
-            val paymentFlow = sdkGateway.startPayment(
+        if (!beforeSdkLaunch()) {
+            return SumUpState.Error("Could not persist payment launch state", readerFallbackAllowed = true)
+        }
+
+        return try {
+            val terminalEvent = sdkGateway.startPayment(
                 totalAmount = amountInCents,
                 clientUniqueTransactionId = payment.id,
+                affiliateKey = config.affiliateKey,
+            ).firstOrNull { event ->
+                handlePaymentEvent(event)
+                _paymentStatus.value !is SumUpState.Started
+            }
+            if (terminalEvent != null) _paymentStatus.value else SumUpState.Error(
+                "Tap To Pay closed without a payment result", mayHaveCreatedCharge = true,
             )
-
-            scope.launch {
-                try {
-                    paymentFlow.collect { event ->
-                        handlePaymentEvent(event)
-                    }
-                } catch (exc: CancellationException) {
-                    throw exc
-                } catch (exc: Exception) {
-                    Log.e("TapToPay", "Tap To Pay payment flow failed", exc)
-                    if (_paymentStatus.value !is SumUpState.Success) {
-                        _status.update { "Payment status unknown: ${exc.message}" }
-                        _paymentStatus.update {
-                            SumUpState.Error(
-                                msg = "Tap To Pay payment status unknown: ${exc.message}",
-                                mayHaveCreatedCharge = true,
-                            )
-                        }
-                    }
-                }
-            }
+        } catch (exc: CancellationException) {
+            throw exc
         } catch (exc: Exception) {
-            Log.e("TapToPay", "Failed to start payment", exc)
-            _paymentStatus.update {
-                SumUpState.Error(
-                    msg = "Failed to start payment: ${exc.message}",
-                    readerFallbackAllowed = true,
-                )
-            }
+            Log.e("TapToPay", "Tap To Pay payment flow failed", exc)
+            SumUpState.Error("Tap To Pay payment status unknown: ${exc.message}", mayHaveCreatedCharge = true)
         }
     }
 

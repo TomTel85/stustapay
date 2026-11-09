@@ -62,6 +62,7 @@ src/main/kotlin/de/stustapay/api/models/Order.kt
 src/main/kotlin/de/stustapay/api/models/OrderType.kt
 src/main/kotlin/de/stustapay/api/models/PaymentMethod.kt
 src/main/kotlin/de/stustapay/api/models/PendingLineItem.kt
+src/main/kotlin/de/stustapay/api/models/PendingOrderStatus.kt
 src/main/kotlin/de/stustapay/api/models/PendingPayOut.kt
 src/main/kotlin/de/stustapay/api/models/PendingSale.kt
 src/main/kotlin/de/stustapay/api/models/PendingTicketSale.kt

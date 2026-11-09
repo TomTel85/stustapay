@@ -256,7 +256,7 @@ async def test_sale_deferred_sumup_order_flow(
     await assert_system_account_balance(account_type=AccountType.sumup_entry, expected_balance=sumup_start_balance)
     await assert_system_account_balance(account_type=AccountType.sale_exit, expected_balance=sale_exit_start_balance)
 
-    completed_sale = await order_service.check_pending_sale(token=terminal_token, order_uuid=new_sale.uuid)
+    completed_sale = await order_service.book_sale(token=terminal_token, new_sale=new_sale)
     assert completed_sale is not None
     assert completed_sale.uuid == new_sale.uuid
     assert completed_sale.total_price == pending_sale.total_price
@@ -298,6 +298,7 @@ async def test_direct_book_sale_marks_pending_sumup_sale_booked(
     cashier: Cashier,
     login_supervised_user: LoginSupervisedUser,
 ):
+    order_service.sumup._create_sumup_api = lambda merchant_code, api_key: MockSumUpApi(api_key, merchant_code)  # type: ignore
     await login_supervised_user(user_tag_uid=cashier.user_tag_uid, user_role_id=cashier.cashier_role.id)
     new_sale = NewSale(
         uuid=uuid.uuid4(),
@@ -306,7 +307,8 @@ async def test_direct_book_sale_marks_pending_sumup_sale_booked(
         payment_method=PaymentMethod.sumup,
     )
 
-    await order_service.register_pending_sale(token=terminal_token, new_sale=new_sale)
+    pending = await order_service.register_pending_sale(token=terminal_token, new_sale=new_sale)
+    MockSumUpApi.mock_amount(pending.total_price)
     completed_sale = await order_service.book_sale(token=terminal_token, new_sale=new_sale)
     assert completed_sale.uuid == new_sale.uuid
     assert (

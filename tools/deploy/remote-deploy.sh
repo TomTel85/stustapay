@@ -35,6 +35,13 @@ service_status() {
   done
 }
 
+services_active() {
+  local unit
+  for unit in "${SERVICES[@]}"; do
+    "${SUDO[@]}" -n systemctl is-active "$unit" >/dev/null || return 1
+  done
+}
+
 install_backend() {
   local metadata_dir
   "${SUDO[@]}" -n chown -R "${BACKEND_RUN_USER}:" "$BACKEND_VENV_DIR"
@@ -52,7 +59,7 @@ recover_before_migration() {
   "${GIT[@]}" reset --hard "$PREVIOUS_COMMIT" || recovery_status=1
   install_backend || recovery_status=1
   "${SUDO[@]}" -n systemctl start "${SERVICES[@]}" || recovery_status=1
-  "${SUDO[@]}" -n systemctl is-active "${SERVICES[@]}" >/dev/null || recovery_status=1
+  services_active || recovery_status=1
   if [[ "$recovery_status" -eq 0 ]]; then
     remote_log "Previous backend revision restored and services restarted"
   else
@@ -142,7 +149,7 @@ deploy() {
   "${SUDO[@]}" -n systemctl start "${SERVICES[@]}"
 
   PHASE="health"
-  "${SUDO[@]}" -n systemctl is-active "${SERVICES[@]}" >/dev/null
+  services_active
   trap - ERR
   printf 'DEPLOY_RESULT commit=%s migration=complete services=active\n' "$EXPECTED_COMMIT"
   service_status

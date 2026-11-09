@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
+import androidx.compose.material.AlertDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Key
@@ -17,11 +18,17 @@ import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import de.stustapay.stustapay.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.stustapay.stustapay.ui.common.operator.OperatorInfoCard
@@ -39,11 +46,43 @@ fun ECDebugView(
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val sumUpState by viewModel.sumUpState.collectAsStateWithLifecycle()
+    val ambiguousPaymentId by viewModel.ambiguousPaymentId.collectAsStateWithLifecycle()
+    var confirmRelease by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
 
     val context = LocalActivity.current!!
+
+    LaunchedEffect(Unit) { viewModel.refreshAmbiguousPayment() }
+
+    if (confirmRelease && ambiguousPaymentId != null) {
+        AlertDialog(
+            onDismissRequest = { confirmRelease = false },
+            title = { Text(stringResource(R.string.card_payment_release_title)) },
+            text = {
+                Text(stringResource(R.string.card_payment_release_warning, ambiguousPaymentId!!))
+            },
+            confirmButton = {
+                OperatorPrimaryButton(
+                    text = stringResource(R.string.card_payment_release_confirm),
+                    icon = Icons.Filled.CreditCard,
+                    onClick = {
+                        scope.launch {
+                            if (viewModel.releaseAmbiguousPayment()) confirmRelease = false
+                        }
+                    },
+                )
+            },
+            dismissButton = {
+                OperatorSecondaryButton(
+                    text = stringResource(android.R.string.cancel),
+                    icon = Icons.Filled.PointOfSale,
+                    onClick = { confirmRelease = false },
+                )
+            },
+        )
+    }
 
     OperatorScaffold(
         title = "EC Payment",
@@ -81,6 +120,17 @@ fun ECDebugView(
                         color = OperatorPalette.subtitle,
                     )
                 }
+                if (ambiguousPaymentId != null) {
+                    OperatorInfoCard(
+                        title = stringResource(R.string.card_payment_pending_operator_title),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.card_payment_pending_operator, ambiguousPaymentId!!),
+                            color = OperatorPalette.subtitle,
+                        )
+                    }
+                }
             }
             Column(
                 modifier = Modifier.fillMaxWidth(0.34f),
@@ -106,6 +156,13 @@ fun ECDebugView(
                     icon = Icons.Filled.PointOfSale,
                     onClick = { scope.launch { viewModel.openCardReader(context) } },
                 )
+                if (ambiguousPaymentId != null) {
+                    OperatorSecondaryButton(
+                        text = stringResource(R.string.card_payment_release_button),
+                        icon = Icons.Filled.CreditCard,
+                        onClick = { confirmRelease = true },
+                    )
+                }
             }
         }
     }

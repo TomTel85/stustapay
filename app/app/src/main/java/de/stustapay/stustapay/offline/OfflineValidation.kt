@@ -21,6 +21,9 @@ internal data class OfflineChecked(val pending: PendingSale, val debit: Long, va
 /** Pure validation: no network, floating point money accumulation, or pending refund credit. */
 internal fun validateOffline(snapshot: PreparedOfflineSnapshot, sale: NewSale, history: List<JournalSale>): OfflineChecked {
     require(history.none { it.state == "waiting" }) { "Offline: an earlier sale needs server confirmation" }
+    require(history.none { it.state == "needs_review" && it.tagUid == sale.customerTagUid?.toString() }) {
+        "Offline: this customer has a sale awaiting review"
+    }
     require(sale.paymentMethod == PaymentMethod.tag) { "Offline: only wristband payments are supported" }
     require(sale.usedVouchers == null || sale.usedVouchers == 0.toBigInteger()) { "Offline: vouchers are unavailable" }
     val customer = snapshot.customers.singleOrNull { it.tagUid == sale.customerTagUid }

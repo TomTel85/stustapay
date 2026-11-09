@@ -707,6 +707,54 @@
         ]
       }
     },
+    "/order/card-payment-status/{order_uuid}": {
+      "get": {
+        "tags": [
+          "order"
+        ],
+        "summary": "Get Card Payment Status",
+        "operationId": "get_card_payment_status",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Order Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingOrderStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/order/cancel-pending-topup": {
       "post": {
         "tags": [
@@ -3881,6 +3929,15 @@
           "total_price"
         ],
         "title": "PendingLineItem"
+      },
+      "PendingOrderStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "booked",
+          "cancelled"
+        ],
+        "title": "PendingOrderStatus"
       },
       "PendingPayOut": {
         "properties": {

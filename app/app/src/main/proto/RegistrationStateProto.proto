@@ -15,4 +15,5 @@ message RegistrationStateProto {
   string authToken = 3;
   RegistrationSourceProto source = 4;
   bool managedConfigDisabled = 5;
+  bool logoutPending = 6;
 }

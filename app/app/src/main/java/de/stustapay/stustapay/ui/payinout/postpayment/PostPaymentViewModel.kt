@@ -362,26 +362,22 @@ class PostPaymentViewModel @Inject constructor(
 
         val payment = getECPayment(newTopUp)
 
-        // Register the payment before checkout so the backend can reconcile a completed
-        // SumUp transaction if its callback cannot be matched locally.
-        if (!registerTopUp(topUpTypeCard(), newTopUp)) {
-            return
+        val paymentResult = ecPaymentRepository.pay(context, payment) {
+            if (!registerTopUp(topUpTypeCard(), newTopUp)) return@pay false
+            _status.update { this.context.getString(R.string.topup_status_remove_chip_start_ec) }
+            delay(800)
+            true
         }
-
-        _status.update { this.context.getString(R.string.topup_status_remove_chip_start_ec) }
-
-        // workaround so the sumup activity is not in foreground too quickly.
-        // when it's active, nfc intents are no longer captured by us, apparently,
-        // and then the system nfc handler spawns the default handler (e.g. stustapay) again.
-        // https://stackoverflow.com/questions/60868912
-        delay(800)
-
-        // perform ec transaction
-        when (val paymentResult = ecPaymentRepository.pay(context, payment)) {
+        when (paymentResult) {
+            null -> return
             is ECPaymentResult.Failure -> {
                 if (shouldCancelPendingCardPayment(paymentResult)) {
                     topUpApi.cancelPendingTopUp(newTopUp.uuid)
                     clearDraft()
+                }
+                if (paymentResult.previousPaymentBooked) {
+                    clearDraft()
+                    clearPayOutState()
                 }
                 _status.update {
                     this.context.getString(R.string.topup_status_ec_result, paymentResult.msg)
@@ -422,6 +418,7 @@ class PostPaymentViewModel @Inject constructor(
         _status.update { context.getString(R.string.topup_status_booking, topUpType) }
         when (val response = infallibleRepository.bookTopUp(newTopUp)) {
             is Response.OK -> {
+                if (newTopUp.paymentMethod == PaymentMethod.sumup) ecPaymentRepository.confirmBooking(newTopUp.uuid)
                 clearDraft()
                 clearPayOutState()
                 _topUpCompleted.update { response.data }
@@ -431,6 +428,7 @@ class PostPaymentViewModel @Inject constructor(
             }
 
             is Response.Error.Service.AlreadyProcessed -> {
+                if (newTopUp.paymentMethod == PaymentMethod.sumup) ecPaymentRepository.confirmBooking(newTopUp.uuid)
                 clearDraft()
                 clearPayOutState()
                 _status.update { context.getString(R.string.topup_status_successful, topUpType) }

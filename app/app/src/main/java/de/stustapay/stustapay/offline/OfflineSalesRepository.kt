@@ -116,6 +116,7 @@ class OfflineSalesRepository private constructor(
 
     private val mutex = Mutex()
     private val syncMutex = Mutex()
+    private var recentPreparation: Pair<UUID, Long>? = null
     private var config: TerminalConfig? = null
     private var user: CurrentUser? = null
     private val authorizationGeneration = java.util.concurrent.atomic.AtomicLong()
@@ -202,10 +203,11 @@ class OfflineSalesRepository private constructor(
         scope.launch { try { synchronize() } catch (e: CancellationException) { throw e } catch (_: Exception) { } }
         schedule()
     }
-    private fun schedule() {
+    private fun schedule(afterSale: Boolean = false) {
         if (!backgroundEnabled) return
         WorkManager.getInstance(context).enqueueUniqueWork("sales-journal-sync", ExistingWorkPolicy.KEEP,
             OneTimeWorkRequestBuilder<JournalSyncWorker>()
+                .setInputData(workDataOf("afterSale" to afterSale))
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build())
     }
     suspend fun rememberConfig(value: TerminalConfig) {
@@ -252,7 +254,7 @@ class OfflineSalesRepository private constructor(
         }
         require(!prep.revoked) { "Offline: preparation revoked; online preparation required" }
         val stored = registration()
-        if (stored !is RegistrationState.Registered || prep.registration != registrationIdentity(stored)) {
+        if (stored !is RegistrationState.Registered || stored.logoutPending || prep.registration != registrationIdentity(stored)) {
             authorizationGeneration.incrementAndGet()
             journal.dao.revoke()
             _preparedConfig.value = null
@@ -313,6 +315,8 @@ class OfflineSalesRepository private constructor(
     /** Local validation does not wait for any network or synchronization lock. */
     suspend fun check(sale: NewSale): Response<PendingSale> {
         if (journal.dao.sale(sale.uuid.toString()) == null) storageBlockReason()?.let { return Response.Error.Service.Generic(it) }
+        if (sale.paymentMethod == PaymentMethod.tag && journal.dao.heldTagCount(sale.customerTagUid?.toString(), sale.uuid.toString()) != 0)
+            return Response.Error.Service.Generic("This customer has a sale awaiting review")
         val local = mutex.withLock {
             if (sale.paymentMethod != PaymentMethod.tag || (sale.usedVouchers != null && sale.usedVouchers != 0.toBigInteger())) null
             else try {
@@ -329,10 +333,11 @@ class OfflineSalesRepository private constructor(
         if (local is Response.OK) return local
         return syncMutex.withLock {
             // Online checks must account for everything already accepted on this device.
-            if (sale.paymentMethod == PaymentMethod.tag && (!synchronizeLocked(prepare = false) || journal.hasUnresolved())) {
+            if (sale.paymentMethod == PaymentMethod.tag && (!synchronizeLocked(prepare = false) || journal.hasBlocking())) {
                 return@withLock local ?: Response.Error.Service.Generic("Sales must be reconciled before online validation")
             }
-            val ready = mutex.withLock { sale.paymentMethod != PaymentMethod.tag || !journal.hasUnresolved() }
+            val ready = mutex.withLock { sale.paymentMethod != PaymentMethod.tag ||
+                (!journal.hasBlocking() && journal.dao.heldTagCount(sale.customerTagUid?.toString(), sale.uuid.toString()) == 0) }
             if (!ready) return@withLock Response.Error.Service.Generic("Sales must be reconciled before online validation")
             val expectedContext = mutex.withLock { currentSaleContext() }
             val response = transport.check(sale)
@@ -397,8 +402,8 @@ class OfflineSalesRepository private constructor(
                             checkedSnapshots.remove(sale.uuid)
                             checkedAssignments.remove(sale.uuid)
                             lastOfflineSale.value = sale.uuid
-                            schedule()
-                            if (backgroundEnabled) scope.launch { try { synchronize() } catch (e: CancellationException) { throw e } catch (_: Exception) { } }
+                            schedule(afterSale = true)
+                            if (backgroundEnabled) scope.launch { try { synchronizeAfterSale() } catch (e: CancellationException) { throw e } catch (_: Exception) { } }
                             Response.OK(receipt)
                         }
                     } catch (e: CancellationException) { throw e } catch (e: Exception) {
@@ -424,13 +429,14 @@ class OfflineSalesRepository private constructor(
                 }
                 if (sale.paymentMethod == PaymentMethod.tag && !mutex.withLock { sale.uuid in onlineChecks })
                     return@withLock Response.Error.Service.Generic("Please validate the basket again before online booking")
-                if (sale.paymentMethod == PaymentMethod.tag && (!synchronizeLocked(prepare = false) || journal.hasUnresolved()))
+                if (sale.paymentMethod == PaymentMethod.tag && (!synchronizeLocked(prepare = false) || journal.hasBlocking()))
                     return@withLock Response.Error.Service.Generic("Sales must be reconciled before online booking")
                 val row = mutex.withLock {
                     if (checkedAssignments.containsKey(sale.uuid) && checkedAssignments[sale.uuid] != currentSaleContext())
                         throw SaleAssignmentChanged(context.getString(de.stustapay.stustapay.R.string.sale_offline_assignment_changed))
                     storageBlockReason()?.let { throw JournalStorageUnavailable(it) }
-                    if (sale.paymentMethod == PaymentMethod.tag && journal.hasUnresolved()) null
+                    if (sale.paymentMethod == PaymentMethod.tag && (journal.hasBlocking() ||
+                        journal.dao.heldTagCount(sale.customerTagUid?.toString(), sale.uuid.toString()) != 0)) null
                     else JournalSale(sale.uuid.toString(), journalJson.encodeToString(sale),
                         operatorId = user?.id?.toString(), operatorRole = user?.activeRoleId?.toString(),
                         snapshotId = journal.dao.preparation()?.let { journalJson.decodeFromString<PreparedOfflineSnapshot>(it.payload).id.toString() },
@@ -438,7 +444,7 @@ class OfflineSalesRepository private constructor(
                         tagUid = sale.customerTagUid?.toString(), transferState = "sending", attemptedOnline = true)
                         .also { journal.dao.insert(it); onlineChecks.remove(sale.uuid); checkedAssignments.remove(sale.uuid) }
                 } ?: return@withLock Response.Error.Service.Generic("Sales must be reconciled before online booking")
-                schedule()
+                schedule(afterSale = true)
                 // The persisted waiting row prevents concurrent local spending; network never holds the local mutex.
                 val response = transport.book(sale)
                 trackConnection(response)
@@ -491,12 +497,16 @@ class OfflineSalesRepository private constructor(
         }
     }
 
-    suspend fun synchronize(): Boolean = syncMutex.withLock {
+    suspend fun synchronize(): Boolean = synchronize(reuseRecentPreparation = false)
+    internal suspend fun synchronizeAfterSale(): Boolean = synchronize(reuseRecentPreparation = true)
+
+    private suspend fun synchronize(reuseRecentPreparation: Boolean): Boolean = syncMutex.withLock {
         synchronizing.value = true
-        try { synchronizeLocked() } finally { synchronizing.value = false }
+        try { synchronizeLocked(reuseRecentPreparation = reuseRecentPreparation) } finally { synchronizing.value = false }
     }
 
-    private suspend fun synchronizeLocked(prepare: Boolean = true): Boolean {
+    private suspend fun synchronizeLocked(prepare: Boolean = true, reuseRecentPreparation: Boolean = false): Boolean {
+        if ((registration() as? RegistrationState.Registered)?.logoutPending == true) return false
         mutex.withLock {
             // Retention also applies to online-only events and when an unresolved sale blocks preparation.
             val activeSnapshot = journal.dao.preparation()?.takeUnless { it.revoked }?.let {
@@ -534,24 +544,29 @@ class OfflineSalesRepository private constructor(
                 return false
             }
         }
-        for (candidate in initialRows.filter { it.state == "waiting" && !it.offline }.sortedBy { it.sequence }) {
+        for (candidate in initialRows.filter { it.state in setOf("waiting", "needs_review") && !it.offline }.sortedBy { it.sequence }) {
             val row = mutex.withLock {
-                journal.dao.sale(candidate.uuid)?.takeIf { it.state == "waiting" && !it.offline }
+                journal.dao.sale(candidate.uuid)?.takeIf { it.state in setOf("waiting", "needs_review") && !it.offline }
             } ?: continue
             val sale = journalJson.decodeFromString<NewSale>(row.payload)
             if (!row.offline) {
                 val known = transport.status(row.uuid)
                 trackConnection(known)
-                if (known !is Response.OK) return false
+                if (known !is Response.OK) {
+                    if (row.state == "needs_review") continue
+                    return false
+                }
                 if (known.data.status != "not_found") {
                     applyReply(row.uuid, known.data, requestedOffline = false)
                     continue
                 }
                 val mayRetry = mutex.withLock {
                     val current = journal.dao.sale(row.uuid)
-                    val eligible = current?.state == "waiting" && !current.offline && user != null &&
+                    val eligible = current != null && current.state in setOf("waiting", "needs_review") && !current.offline && user != null &&
                         current.operatorId == user?.id?.toString() && current.operatorRole == user?.activeRoleId?.toString()
-                    if (eligible && current != null) journal.dao.update(current.copy(attemptedOnline = true))
+                    if (eligible && current != null) journal.dao.update(current.copy(state = "waiting", transferState = "sending", attemptedOnline = true))
+                    else if (current?.state == "waiting" && !current.offline && current.operatorId != null &&
+                        user != null && onlineAuthenticated.value) journal.dao.update(current.copy(state = "needs_review", transferState = "needs_owner"))
                     eligible
                 }
                 if (!mayRetry) continue
@@ -564,7 +579,7 @@ class OfflineSalesRepository private constructor(
                 }
             }
         }
-        if (journal.hasUnresolved()) return false
+        if (journal.hasBlocking()) return false
         // No connected response yet is not evidence that online fallback is usable; caller probes server.
         if (initialRows.any { it.state in setOf("waiting", "offline", "clarification") } && connected.value == true) {
             mutex.withLock {
@@ -582,7 +597,9 @@ class OfflineSalesRepository private constructor(
                     val currentPreparation = journal.dao.preparation()
                     val sameAuthorization = authorizationGeneration.get() == generation && user == null &&
                         currentPreparation?.revoked == false && currentPreparation.payload == previous.payload &&
-                        (registration() as? RegistrationState.Registered)?.let(::registrationIdentity) == previous.registration
+                        (registration() as? RegistrationState.Registered)?.let {
+                            !it.logoutPending && registrationIdentity(it) == previous.registration
+                        } == true
                     if (!sameAuthorization) false
                     else if (res is Response.OK && res.data.id == priorUser.id && res.data.activeRoleId == priorUser.activeRoleId) {
                         user = res.data
@@ -604,6 +621,18 @@ class OfflineSalesRepository private constructor(
         val currentUser = user ?: return true
         val currentConfig = config ?: return true
         val reg = registration() as? RegistrationState.Registered ?: return true
+        if (reg.logoutPending) return false
+        if (reuseRecentPreparation && mutex.withLock {
+            try {
+                val (prep, snapshot) = validPreparation(persistClock = false)
+                val savedUser = journalJson.decodeFromString<CurrentUser>(prep.user)
+                val recent = recentPreparation
+                recent != null && recent.first == snapshot.id &&
+                    SystemClock.elapsedRealtime() - recent.second in 0L until 60_000L &&
+                    preparedServerNow(prep, snapshot).plusSeconds(60).isBefore(snapshot.validUntil) &&
+                    savedUser.id == currentUser.id && savedUser.activeRoleId == currentUser.activeRoleId
+            } catch (e: CancellationException) { throw e } catch (_: Exception) { false }
+        }) return true
         val expectedRegistration = registrationIdentity(reg)
         val expectedSequence = mutex.withLock { nextSequence() }
         val expectedAuthorization = authorizationGeneration.get()
@@ -617,8 +646,8 @@ class OfflineSalesRepository private constructor(
                 val now = System.currentTimeMillis()
                 mutex.withLock {
                     // A sale may have been admitted while preparation was travelling over the network.
-                    if (!journal.hasUnresolved() && user?.id == currentUser.id && user?.activeRoleId == currentUser.activeRoleId &&
-                        (registration() as? RegistrationState.Registered)?.let(::registrationIdentity) == expectedRegistration &&
+                    if (!journal.hasBlocking() && user?.id == currentUser.id && user?.activeRoleId == currentUser.activeRoleId &&
+                        (registration() as? RegistrationState.Registered)?.let { !it.logoutPending && registrationIdentity(it) == expectedRegistration } == true &&
                         config == currentConfig && nextSequence() == expectedSequence && authorizationGeneration.get() == expectedAuthorization) {
                         journal.database.withTransaction {
                             journal.dao.prepare(JournalPreparation(payload = journalJson.encodeToString(res.data), registration = registrationIdentity(reg),
@@ -630,6 +659,7 @@ class OfflineSalesRepository private constructor(
                                 res.data.serverTime.minusDays(JOURNAL_RETENTION_DAYS).toString(), JOURNAL_RETAINED_SETTLED)
                         }
                         _preparedConfig.value = catalogConfig(journal.dao.preparation()!!, res.data)
+                        recentPreparation = res.data.id to SystemClock.elapsedRealtime()
                         offline.value = false
                     }
                 }
@@ -676,7 +706,8 @@ interface JournalWorkerEntryPoint { fun offlineSales(): OfflineSalesRepository }
 class JournalSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = try {
         val repo = EntryPointAccessors.fromApplication(applicationContext, JournalWorkerEntryPoint::class.java).offlineSales()
-        if (repo.synchronize()) Result.success() else Result.retry()
+        if (if (inputData.getBoolean("afterSale", false)) repo.synchronizeAfterSale() else repo.synchronize())
+            Result.success() else Result.retry()
     } catch (e: CancellationException) { throw e } catch (_: Exception) { Result.retry() }
 }
 

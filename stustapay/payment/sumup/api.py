@@ -22,8 +22,9 @@ SUMUP_OAUTH_VALIDITY_TOLERANCE = timedelta(minutes=10)
 class SumUpError(ServiceException):
     id = "SumUpError"
 
-    def __init__(self, msg: str):
+    def __init__(self, msg: str, status: int | None = None):
         self.msg = msg
+        self.status = status
 
 
 class _SumUpErrorFormat(BaseModel):
@@ -71,6 +72,7 @@ class SumUpTransaction(BaseModel):
 
 class SumUpTransactionDetail(SumUpTransaction):
     foreign_transaction_id: str
+    tip_amount: float | None = None
 
 
 class SumUpTransactionResp(BaseModel):
@@ -294,7 +296,8 @@ class SumUpApi:
                         except Exception as parse_err:
                             logger.error(f"Failed to parse SumUp error response: {parse_err}")
                             raise SumUpError(
-                                f"SumUp API returned an error with status {response.status}: {resp_text}"
+                                f"SumUp API returned an error with status {response.status}: {resp_text}",
+                                status=response.status,
                             ) from parse_err
                     return await response.json(content_type=None)
             except asyncio.TimeoutError as e:
@@ -411,6 +414,21 @@ class SumUpApi:
             if not isinstance(e, SumUpError):
                 logger.error(f"Unexpected error in find_checkout for order {order_uuid}: {e}")
             raise
+
+    async def find_pos_transaction(self, order_uuid: uuid.UUID) -> SumUpTransactionDetail | None:
+        try:
+            resp = await self._get(
+                f"{SUMUP_API_BASE_URL}/v2.1/merchants/{self.merchant_code}/transactions",
+                query={"foreign_transaction_id": str(order_uuid)},
+            )
+        except SumUpError as exc:
+            if exc.status == 404:
+                return None
+            raise
+        transaction = SumUpTransactionDetail.model_validate(resp)
+        if transaction.foreign_transaction_id != str(order_uuid):
+            raise SumUpError("SumUp returned a transaction for a different order")
+        return transaction
 
     async def get_transaction(self, foreign_transaction_id: str) -> SumUpTransactionDetail:
         resp = await self._get(

@@ -150,24 +150,32 @@ def offline_positions(snapshot: OfflineSnapshot, sale: NewSale) -> tuple[list[Pe
     return positions, positive, negative
 
 
+@dataclass(frozen=True)
+class OfflineBudgetTotals:
+    customer_positive: int = 0
+    customer_negative: int = 0
+    customer_spent: int = 0
+    till_positive: int = 0
+    till_negative: int = 0
+
+
 def check_offline_budget(
-    snapshot: OfflineSnapshot, sale: NewSale, positive: int, negative: int, history: list[tuple[int, int, int]]
+    snapshot: OfflineSnapshot, sale: NewSale, positive: int, negative: int, history: OfflineBudgetTotals
 ) -> None:
-    """History contains (tag UID, gross debit, gross return); credits never replenish budgets."""
+    """Credits never replenish budgets or the customer's estimated balance."""
     rules = snapshot.rules
     customer = next(c for c in snapshot.customers if c.customer_tag_uid == sale.customer_tag_uid)
-    own = [(p, n) for uid, p, n in history if uid == sale.customer_tag_uid]
     checks = (
         (positive, rules.sale_per_transaction_cents),
         (negative, rules.return_per_transaction_cents),
-        (positive + sum(p for p, _ in own), rules.sale_per_customer_cents),
-        (negative + sum(n for _, n in own), rules.return_per_customer_cents),
-        (positive + sum(p for _, p, _ in history), rules.sale_per_till_cents),
-        (negative + sum(n for _, _, n in history), rules.return_per_till_cents),
+        (positive + history.customer_positive, rules.sale_per_customer_cents),
+        (negative + history.customer_negative, rules.return_per_customer_cents),
+        (positive + history.till_positive, rules.sale_per_till_cents),
+        (negative + history.till_negative, rules.return_per_till_cents),
     )
     if any(amount > limit for amount, limit in checks):
         raise InvalidArgument("Offline budget exceeded")
-    available = max(0, customer.balance_cents) - sum(max(0, p - n) for p, n in own)
+    available = max(0, customer.balance_cents) - history.customer_spent
     if max(0, positive - negative) > available:
         raise InvalidArgument("Offline estimated balance exceeded")
 
@@ -430,21 +438,41 @@ class OfflineOrderMixin:
         if booking.recorded_at > datetime.now(timezone.utc) + timedelta(seconds=30):
             raise OfflineRetryRequired("Sale timestamp is in the future; awaiting server clock")
         lines, positive, negative = offline_positions(snapshot, booking.sale)
-        history = []
+        # Older imports and recovered online journals acquire a budget contribution on first use.
         for record in await conn.fetch(
-            "select request from terminal_offline_import where snapshot_id=$1 "
-            "and result->>'status' in ('booked','already_booked')",
+            "select uuid,request from terminal_offline_import where snapshot_id=$1 "
+            "and result->>'status' in ('booked','already_booked') and budget_positive is null",
             snapshot.id,
         ):
             previous = OfflineBooking.model_validate(json_object(record["request"]))
             _, p, n = offline_positions(snapshot, previous.sale)
-            assert previous.sale.customer_tag_uid is not None
-            history.append((previous.sale.customer_tag_uid, p, n))
+            await conn.execute(
+                "update terminal_offline_import set budget_positive=$2,budget_negative=$3 where uuid=$1",
+                record["uuid"],
+                p,
+                n,
+            )
+        totals = await conn.fetchrow(
+            "select coalesce(sum(budget_positive),0) as till_positive, "
+            "coalesce(sum(budget_negative),0) as till_negative, "
+            "coalesce(sum(budget_positive) filter (where request->'sale'->>'customer_tag_uid'=$2),0) as customer_positive, "
+            "coalesce(sum(budget_negative) filter (where request->'sale'->>'customer_tag_uid'=$2),0) as customer_negative, "
+            "coalesce(sum(greatest(0,budget_positive-budget_negative)) "
+            "filter (where request->'sale'->>'customer_tag_uid'=$2),0) as customer_spent "
+            "from terminal_offline_import where snapshot_id=$1 "
+            "and result->>'status' in ('booked','already_booked')",
+            snapshot.id,
+            str(booking.sale.customer_tag_uid),
+        )
+        assert totals is not None
+        history = OfflineBudgetTotals(**{key: int(value) for key, value in totals.items()})
         customer = next(c for c in snapshot.customers if c.customer_tag_uid == booking.sale.customer_tag_uid)
-        await conn.fetchrow("select id from account where id=$1 for update", customer.customer_account_id)
-        balance = await conn.fetchval("select balance from account where id=$1", customer.customer_account_id)
-        if balance is None:
+        account = await conn.fetchrow(
+            "select balance,vouchers from account where id=$1 for update", customer.customer_account_id
+        )
+        if account is None:
             raise InvalidArgument("Customer account no longer exists")
+        balance = account["balance"]
         node = await fetch_node(conn=conn, node_id=json_object(row["till_config"])["node_id"])
         if node is None or node.event_node_id != snapshot.event_node_id:
             raise InvalidArgument("Original event is unavailable or has changed")
@@ -464,6 +492,12 @@ class OfflineOrderMixin:
                 uuid=booking.sale.uuid, status=OfflineBookingStatus.already_booked, sale=completed
             )
             await self._save_offline_result(conn=conn, terminal=terminal, booking=booking, result=result)
+            await conn.execute(
+                "update terminal_offline_import set budget_positive=$2,budget_negative=$3 where uuid=$1",
+                booking.sale.uuid,
+                positive,
+                negative,
+            )
             return result
         check_offline_budget(snapshot, booking.sale, positive, negative, history)
         total_cents = positive - negative
@@ -473,8 +507,8 @@ class OfflineOrderMixin:
             line_items=lines,
             old_balance=float(balance),
             new_balance=float(balance) - total_cents / 100,
-            old_voucher_balance=0,
-            new_voucher_balance=0,
+            old_voucher_balance=account["vouchers"],
+            new_voucher_balance=account["vouchers"],
             customer_account_id=customer.customer_account_id,
             payment_method=PaymentMethod.tag,
         )
@@ -499,6 +533,12 @@ class OfflineOrderMixin:
         )
         result = OfflineBookingResult(uuid=completed.uuid, status=OfflineBookingStatus.booked, sale=completed)
         await self._save_offline_result(conn=conn, terminal=terminal, booking=booking, result=result)
+        await conn.execute(
+            "update terminal_offline_import set budget_positive=$2,budget_negative=$3 where uuid=$1",
+            booking.sale.uuid,
+            positive,
+            negative,
+        )
         return result
 
     async def _recover_offline_order(

@@ -646,4 +646,20 @@
     <string name="sale_journal_dismissed">Manuell geklärt</string>
     <string name="sale_journal_rejected">Abgelehnt</string>
     <string name="sale_offline_assignment_changed">Die Kassen- oder Veranstaltungszuordnung hat sich geändert. Vorbereitung aktualisieren und den Verkauf erneut prüfen.</string>
+    <string name="card_payment_amount_changed">Der Preis hat sich geändert. Prüfe den Betrag erneut, bevor du die Zahlung startest.</string>
+    <string name="card_payment_busy">Eine Kartenzahlung läuft bereits.</string>
+    <string name="card_payment_pending">Kartenzahlung %1$s wartet auf Bestätigung. Prüfe ihren Status vor einer erneuten Abbuchung.</string>
+    <string name="card_payment_previous_booked">Die vorherige Kartenzahlung %1$s wurde gebucht.</string>
+    <string name="card_payment_previous_cancelled">Die vorherige Kartenzahlung wurde abgebrochen. Du kannst eine neue Zahlung starten.</string>
+    <string name="card_payment_storage_failed">Die Zahlungsreferenz konnte nicht gespeichert werden. Die Karte wurde nicht belastet.</string>
+    <string name="card_payment_not_started">Die Kartenzahlung wurde nicht gestartet. Es wurde nichts abgebucht; du kannst es erneut versuchen.</string>
+    <string name="card_payment_prelaunch_retry">Die vorherige Zahlung hat den Kartenanbieter nicht erreicht. Starte erneut, um eine neue Zahlungsreferenz zu verwenden.</string>
+    <string name="card_payment_released_retry">Diese Zahlungsreferenz wurde zur Klärung freigegeben. Verwende vor einer erneuten Abbuchung eine neue Zahlungsreferenz.</string>
+    <string name="card_payment_pending_operator_title">Ungeklärte Kartenzahlung</string>
+    <string name="card_payment_pending_operator">Zahlung %1$s könnte den Anbieter erreicht haben. Prüfe die Anbieteraufzeichnungen, bevor du handelst.</string>
+    <string name="card_payment_release_button">Lokale Sperre aufheben</string>
+    <string name="card_payment_release_title">Diese Zahlungsreferenz freigeben?</string>
+    <string name="card_payment_release_warning">Prüfe zuerst Zahlung %1$s in den Aufzeichnungen des Anbieters. Ein fehlender Eintrag beweist nicht, dass die Karte nicht belastet wurde. Die Freigabe hebt nur die Wiederholungssperre auf diesem Gerät auf; der offene Auftrag bleibt auf dem Server und kann weiterhin abgeglichen werden. Bestätige nur, wenn du das Risiko einer doppelten Abbuchung akzeptierst.</string>
+    <string name="card_payment_release_confirm">Lokale Sperre aufheben</string>
+    <string name="card_payment_released">Lokale Sperre für Zahlung %1$s aufgehoben. Der Serverauftrag bleibt offen; verwende eine neue Zahlungsreferenz.</string>
 </resources>

@@ -9,7 +9,7 @@ from datetime import datetime
 
 import pytest
 from sftkit.database import Connection
-from sftkit.error import InvalidArgument
+from sftkit.error import InvalidArgument, NotFound
 
 from stustapay.core.schema.account import AccountType
 from stustapay.core.schema.order import NewTicketSale, NewTopUp, PaymentMethod, UserTagScan
@@ -25,6 +25,7 @@ from stustapay.core.service.tax_rate import fetch_tax_rate_none
 from stustapay.core.service.tree.service import create_event
 from stustapay.core.service.user_tag import create_user_tags
 from stustapay.payment.sumup.api import SumUpCheckout, SumUpCheckoutStatus
+from stustapay.tests.sumup_mock import pos_transaction_from_checkout
 
 from .conftest import START_BALANCE, Customer, LoginSupervisedUser
 
@@ -423,6 +424,8 @@ async def test_multi_event_sumup_processing_stays_event_scoped(
         "MERCHANT_C": None,
     }
     seen_merchants: list[str] = []
+    lookups_ready = asyncio.Event()
+    lookup_count = 0
 
     class MultiEventSumUpApi:
         def __init__(self, _api_key: str, merchant_code: str):
@@ -445,6 +448,14 @@ async def test_multi_event_sumup_processing_stays_event_scoped(
                 redirect_url="http://localhost/test",
             )
 
+        async def find_pos_transaction(self, order_uuid: uuid.UUID):
+            nonlocal lookup_count
+            lookup_count += 1
+            if lookup_count == 3:
+                lookups_ready.set()
+            await lookups_ready.wait()
+            return pos_transaction_from_checkout(await self.find_checkout(order_uuid))
+
     # pylint: disable=protected-access
     order_service.sumup._create_sumup_api = lambda merchant_code, api_key: MultiEventSumUpApi(api_key, merchant_code)  # type: ignore
 
@@ -453,16 +464,17 @@ async def test_multi_event_sumup_processing_stays_event_scoped(
     event_b_sale_before = await _get_system_balance(db_connection, event_b.node, AccountType.sale_exit)
     event_c_sumup_before = await _get_system_balance(db_connection, event_c.node, AccountType.sumup_entry)
 
-    processed_a, processed_b, processed_c = await asyncio.gather(
-        order_service.check_pending_topup(token=terminal_token, order_uuid=pending_topup_a.uuid),
-        order_service.check_pending_ticket_sale(token=event_b.terminal_token, order_uuid=pending_ticket_b.uuid),
-        order_service.check_pending_topup(token=event_c.terminal_token, order_uuid=pending_topup_c.uuid),
+    await db_connection.execute(
+        "update pending_sumup_order set last_checked = now() where status = 'pending' and uuid != all($1)",
+        list(amount_by_uuid),
     )
-
-    assert processed_a is not None
-    assert processed_a.uuid == pending_topup_a.uuid
-    assert processed_b is None
-    assert processed_c is None
+    await db_connection.execute(
+        "update pending_sumup_order set created_at = now() - interval '1 minute' where uuid = any($1)",
+        list(amount_by_uuid),
+    )
+    assert await asyncio.wait_for(order_service.sumup._process_due_orders(), timeout=5) == 3
+    assert sorted(seen_merchants) == ["MERCHANT_A", "MERCHANT_B", "MERCHANT_C"]
+    assert await order_service.sumup._process_due_orders() == 0
 
     assert await _get_system_balance(db_connection, event_node, AccountType.sumup_entry) == pytest.approx(
         event_a_sumup_before - pending_topup_a.amount
@@ -497,6 +509,11 @@ async def test_multi_event_sumup_processing_stays_event_scoped(
     assert pending_order_a.status.value == "booked"
     assert pending_order_b.status.value == "cancelled"
     assert pending_order_c.status.value == "pending"
+    assert (
+        await order_service.card_payment_status(token=terminal_token, order_uuid=pending_topup_a.uuid)
+    ).value == "booked"
+    with pytest.raises(NotFound):
+        await order_service.card_payment_status(token=event_b.terminal_token, order_uuid=pending_topup_a.uuid)
 
     assert (
         await db_connection.fetchval(
@@ -522,5 +539,3 @@ async def test_multi_event_sumup_processing_stays_event_scoped(
         )
         == 0
     )
-
-    assert set(seen_merchants) == {"MERCHANT_A", "MERCHANT_B", "MERCHANT_C"}

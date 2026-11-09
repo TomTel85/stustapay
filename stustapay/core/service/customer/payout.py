@@ -218,11 +218,22 @@ class PayoutService(Service[Config]):
     @requires_node(event_only=True)
     @requires_user(PAYOUT_RUN_PRIVILEGES)
     async def get_payout_run_csv(self, *, conn: Connection, node: Node, payout_run_id: int) -> str:
+        event_node = await fetch_event_node_for_node(conn=conn, node_id=node.id)
+        assert event_node is not None and event_node.event is not None
+        sepa_config = event_node.event.sepa_config
+        if sepa_config is None:
+            raise InvalidArgument("SEPA payout is disabled for this event")
         csv_data = await conn.fetchval(
             "select csv from payout_run where id = $1 and node_id = $2", payout_run_id, node.id
         )
         if csv_data is None:
             raise NotFound(element_type="payout_run", element_id=payout_run_id)
+        payouts = await get_customer_bank_data(conn=conn, payout_run_id=payout_run_id)
+        if any(
+            p.amount > 0 and p.iban and IBAN(p.iban).country_code not in sepa_config.allowed_country_codes
+            for p in payouts
+        ):
+            raise InvalidArgument("Payout run contains an IBAN country that is not allowed for this event")
         return csv_data
 
     @with_db_transaction
@@ -251,6 +262,8 @@ class PayoutService(Service[Config]):
             payout_run.id,
             payout_run.node_id,
         )
+        if any(IBAN(p.iban).country_code not in sepa_config.allowed_country_codes for p in payouts if p.iban):
+            raise InvalidArgument("Payout run contains an IBAN country that is not allowed for this event")
         currency_identifier = event_node.event.currency_identifier
         sepa_xml = dump_payout_run_as_sepa_xml(
             payouts=payouts,
@@ -278,6 +291,11 @@ class PayoutService(Service[Config]):
         node: Node,
         payout_run_id: int,
     ) -> str:
+        event_node = await fetch_event_node_for_node(conn=conn, node_id=node.id)
+        assert event_node is not None and event_node.event is not None
+        sepa_config = event_node.event.sepa_config
+        if sepa_config is None:
+            raise InvalidArgument("SEPA payout is disabled for this event")
         row = await conn.fetchrow(
             "select id, sepa_xml from payout_run where id = $1 and node_id = $2", payout_run_id, node.id
         )
@@ -286,6 +304,12 @@ class PayoutService(Service[Config]):
         if row["sepa_xml"] is None:
             raise InvalidArgument("SEPA xml has not been generated for this payout run yet")
 
+        payouts = await get_customer_bank_data(conn=conn, payout_run_id=payout_run_id)
+        if any(
+            p.amount > 0 and p.iban and IBAN(p.iban).country_code not in sepa_config.allowed_country_codes
+            for p in payouts
+        ):
+            raise InvalidArgument("Payout run contains an IBAN country that is not allowed for this event")
         return row["sepa_xml"]
 
     @with_db_transaction
@@ -420,11 +444,13 @@ class PayoutService(Service[Config]):
             "       customer_account_id, "
             "       sum(case when donate_all then 0.0 else greatest(0.0, balance - donation) end) over (order by customer_account_id rows between unbounded preceding and current row) as running_total "
             "   from customers_without_payout_run p where p.node_id = $2 and p.payout_export and round(p.balance, 2) > 0 "
+            "   and (p.donate_all or p.donation >= p.balance or upper(left(replace(p.iban, ' ', ''), 2)) = any($3::text[])) "
             "   order by customer_account_id "
             ") as agr "
             "where running_total <= $1",
             max_payout_sum,
             node.event_node_id,
+            event_settings.sepa_allowed_country_codes,
         )
         if number_of_payouts == 0:
             raise InvalidArgument(
@@ -460,6 +486,7 @@ class PayoutService(Service[Config]):
             "               sum(case when donate_all then 0.0 else greatest(0.0, balance - donation) end) over (order by customer_account_id rows between unbounded preceding and current row) as running_total "
             "           from customers_without_payout_run p "
             "           where p.node_id = $3 and p.payout_export and round(p.balance, 2) > 0 "
+            "           and (p.donate_all or p.donation >= p.balance or upper(left(replace(p.iban, ' ', ''), 2)) = any($5::text[])) "
             "           order by customer_account_id "
             "        ) as agr where running_total <= $2 and index <= $4 "
             "    )"
@@ -471,6 +498,7 @@ class PayoutService(Service[Config]):
             max_payout_sum,
             node.event_node_id,
             max_num_payouts,
+            event_settings.sepa_allowed_country_codes,
         )
         payouts = await conn.fetch_many(Payout, "select * from payout_view where payout_run_id = $1", payout_run_id)
         csv_content = dump_payout_run_as_csv(payouts, event_settings.sepa_config, event_settings.currency_identifier)

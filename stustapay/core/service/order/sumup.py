@@ -18,6 +18,7 @@ from stustapay.core.schema.order import (
     CompletedSale,
     CompletedTicketSale,
     CompletedTopUp,
+    OrderType,
     PaymentMethod,
     PendingOrder,
     PendingOrderStatus,
@@ -29,9 +30,9 @@ from stustapay.core.service.auth import AuthService
 from stustapay.core.service.common.decorators import requires_customer
 from stustapay.core.service.customer.common import fetch_shared_topup_link
 from stustapay.core.service.order.pending_order import (
+    claim_pending_orders,
     fetch_order_by_uuid_for_update,
     fetch_pending_online_topup_for_customer,
-    fetch_pending_orders,
     is_shared_topup_order,
     load_pending_sale,
     load_pending_ticket_sale,
@@ -61,10 +62,14 @@ from stustapay.payment.sumup.api import (
 )
 
 SUMUP_CHECKOUT_POLL_INTERVAL = timedelta(seconds=5)
-SUMUP_INITIAL_CHECK_TIMEOUT = timedelta(seconds=20)
 SUMUP_PENDING_ORDER_TIMEOUT = timedelta(minutes=5)  # Time after which pending orders are considered failed
 MAX_PENDING_SHARED_TOPUP_CHECKOUTS_PER_LINK = 50
 GROUP_TOPUP_DISABLED_MESSAGE = "Group top-up is currently disabled"
+PENDING_ORDER_CONCURRENCY = 8
+
+
+class CardPaymentPending(Exception):
+    """The provider has yet to confirm this payment. Retrying the booking is safe."""
 
 
 class CreateCheckout(BaseModel):
@@ -138,6 +143,35 @@ class SumupService(Service[Config]):
         sumup_api, _ = resolved
         return await sumup_api.find_checkout(pending_order.uuid)
 
+    async def _pending_payment_status(self, api: SumUpApi, pending_order: PendingOrder) -> SumUpCheckoutStatus | None:
+        if pending_order.cashier_id is None:
+            checkout = await api.find_checkout(pending_order.uuid)
+            return checkout.status if checkout else None
+
+        transaction = await api.find_pos_transaction(pending_order.uuid)
+        if transaction is None:
+            # A missing POS transaction is not proof that an interrupted checkout failed.
+            return SumUpCheckoutStatus.PENDING
+        if transaction.status in ("CANCELLED", "FAILED"):
+            return SumUpCheckoutStatus.FAILED
+        if transaction.status != "SUCCESSFUL":
+            return SumUpCheckoutStatus.PENDING
+
+        if pending_order.order_type == PendingOrderType.topup:
+            valid_amount = round(transaction.amount * 100) == round(load_pending_topup(pending_order).amount * 100)
+        else:
+            sale = (
+                load_pending_sale(pending_order)
+                if pending_order.order_type == PendingOrderType.sale
+                else load_pending_ticket_sale(pending_order)
+            )
+            valid_amount = round((transaction.amount - (transaction.tip_amount or 0)) * 100) == round(
+                sale.total_price * 100
+            )
+        if transaction.currency != "EUR" or not valid_amount:
+            raise SumUpError(f"Unexpected currency or amount for POS payment {pending_order.uuid}")
+        return SumUpCheckoutStatus.PAID
+
     async def _book_paid_online_topup_for_checkout(
         self, *, conn: Connection, pending_order: PendingOrder
     ) -> SumUpCheckoutStatus:
@@ -193,12 +227,12 @@ class SumupService(Service[Config]):
             booked_at=pending_order.created_at,
         )
         await conn.execute("update pending_sumup_order set status = 'booked' where uuid = $1", pending_order.uuid)
-        return topup
+        return topup.model_copy(update={"booked_at": pending_order.created_at})
 
     async def _process_ticket_sale(
         self, conn: Connection, node: Node, till: Till, pending_order: PendingOrder, ticket_sale: CompletedTicketSale
     ) -> CompletedTicketSale:
-        await make_ticket_sale_bookings(
+        account_id = await make_ticket_sale_bookings(
             conn=conn,
             current_till=till,
             node=node,
@@ -207,7 +241,7 @@ class SumupService(Service[Config]):
             booked_at=pending_order.created_at,
         )
         await conn.execute("update pending_sumup_order set status = 'booked' where uuid = $1", pending_order.uuid)
-        return ticket_sale
+        return ticket_sale.model_copy(update={"customer_account_id": account_id, "booked_at": pending_order.created_at})
 
     async def _process_sale(
         self, conn: Connection, node: Node, till: Till, pending_order: PendingOrder, sale
@@ -235,8 +269,11 @@ class SumupService(Service[Config]):
             api_factory=self._create_sumup_api,
         )
         if resolved is None:
-            return False
+            return pending_order.cashier_id is not None
         sumup_api, _ = resolved
+        if pending_order.cashier_id is not None:
+            transaction = await sumup_api.find_pos_transaction(pending_order.uuid)
+            return transaction is not None and transaction.status not in ("CANCELLED", "FAILED")
         sumup_checkout = await sumup_api.find_checkout(pending_order.uuid)
         return sumup_checkout is not None
 
@@ -283,7 +320,7 @@ class SumupService(Service[Config]):
 
     @with_db_transaction
     async def _apply_pending_checkout(
-        self, *, conn: Connection, pending_order: PendingOrder, checkout: SumUpCheckout | None
+        self, *, conn: Connection, pending_order: PendingOrder, payment_status: SumUpCheckoutStatus | None
     ) -> CompletedSale | CompletedTicketSale | CompletedTopUp | None:
         # Re-read and lock local state after provider I/O; competing workers/terminal checks
         # must serialize the booking, and serialization retries need a fresh transaction.
@@ -298,33 +335,74 @@ class SumupService(Service[Config]):
         if existing_order is not None:
             await conn.execute("update pending_sumup_order set status = 'booked' where uuid = $1", current.uuid)
             return None
-        if checkout is None:
+        if payment_status is None:
             if self._has_pending_order_timed_out(current):
                 await self._mark_pending_order_cancelled(conn=conn, order_uuid=current.uuid)
             return None
-        if checkout.status == SumUpCheckoutStatus.PAID:
+        if payment_status == SumUpCheckoutStatus.PAID:
             return await self._book_paid_pending_order(conn=conn, pending_order=current)
-        if checkout.status == SumUpCheckoutStatus.FAILED:
+        if payment_status == SumUpCheckoutStatus.FAILED:
             await self._mark_pending_order_cancelled(conn=conn, order_uuid=current.uuid)
         return None
 
-    async def process_pending_order(
+    async def settle_terminal_card_order(
         self, conn: Connection, pending_order: PendingOrder
-    ) -> CompletedSale | CompletedTicketSale | CompletedTopUp | None:
-        try:
-            if await conn.fetchval("select exists(select from ordr where uuid = $1)", pending_order.uuid):
-                return await self._apply_pending_checkout(conn=conn, pending_order=pending_order, checkout=None)
-            checkout = await self._fetch_checkout_for_pending_order(conn=conn, pending_order=pending_order)
-            return await self._apply_pending_checkout(conn=conn, pending_order=pending_order, checkout=checkout)
-        except (asyncpg.exceptions.SerializationError, asyncpg.exceptions.DeadlockDetectedError):
-            # The caller owns this transaction and must retry it in full.
-            raise
-        except SumUpError:
-            self.logger.exception("SumUp API error for pending order %s", pending_order.uuid)
-            return None
-        except Exception:
-            self.logger.exception("Error processing pending order %s", pending_order.uuid)
-            return None
+    ) -> CompletedSale | CompletedTicketSale | CompletedTopUp:
+        order = await conn.fetchrow(
+            "select id, booked_at, order_type, payment_method, till_id, customer_account_id, cashier_id "
+            "from ordr where uuid = $1",
+            pending_order.uuid,
+        )
+        if order is None:
+            if pending_order.status != PendingOrderStatus.pending:
+                raise InvalidArgument("Card payment is no longer pending")
+            try:
+                resolved = await create_sumup_api_for_node(
+                    conn=conn,
+                    node_id=pending_order.node_id,
+                    environment=pending_order.sumup_environment,
+                    api_factory=self._create_sumup_api,
+                )
+                payment_status = await self._pending_payment_status(resolved[0], pending_order) if resolved else None
+            except SumUpError as exc:
+                raise CardPaymentPending("SumUp has not confirmed this card payment") from exc
+            if payment_status == SumUpCheckoutStatus.FAILED:
+                raise InvalidArgument("SumUp declined or cancelled this card payment")
+            if payment_status != SumUpCheckoutStatus.PAID:
+                raise CardPaymentPending("SumUp has not confirmed this card payment")
+            result = await self._apply_pending_checkout(
+                conn=conn, pending_order=pending_order, payment_status=payment_status
+            )
+            if result is None:
+                raise CardPaymentPending("Card booking is being reconciled")
+            return result
+
+        expected_type = {
+            PendingOrderType.topup: OrderType.top_up,
+            PendingOrderType.sale: OrderType.sale,
+            PendingOrderType.ticket: OrderType.ticket,
+        }[pending_order.order_type]
+        if (
+            order["order_type"] != expected_type.value
+            or order["payment_method"] != PaymentMethod.sumup.value
+            or order["till_id"] != pending_order.till_id
+        ):
+            raise InvalidArgument("The booked order does not match the registered card payment")
+        if pending_order.order_type == PendingOrderType.topup:
+            return load_pending_topup(pending_order).model_copy(update={"booked_at": order["booked_at"]})
+        if pending_order.order_type == PendingOrderType.ticket:
+            return load_pending_ticket_sale(pending_order).model_copy(
+                update={"booked_at": order["booked_at"], "customer_account_id": order["customer_account_id"]}
+            )
+        settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=pending_order.node_id)
+        return CompletedSale(
+            **load_pending_sale(pending_order).model_dump(),
+            id=order["id"],
+            booked_at=order["booked_at"],
+            till_id=order["till_id"],
+            cashier_id=order["cashier_id"],
+            bon_url=f"{settings.customer_portal_url}/bon/{pending_order.uuid}",
+        )
 
     @with_db_transaction(read_only=True)
     async def _resolve_worker_sumup_access(self, *, conn: Connection, pending_order: PendingOrder):
@@ -357,9 +435,9 @@ class SumupService(Service[Config]):
             self.logger.error("Missing merchant connection for pending order %s", pending_order.uuid)
             return
         api, _ = resolved
-        checkout = await api.find_checkout(pending_order.uuid)
+        payment_status = await self._pending_payment_status(api, pending_order)
         # No database connection is held while talking to the payment provider.
-        await self._apply_pending_checkout(pending_order=pending_order, checkout=checkout)
+        await self._apply_pending_checkout(pending_order=pending_order, payment_status=payment_status)
 
     @with_db_transaction
     @requires_customer
@@ -742,6 +820,18 @@ class SumupService(Service[Config]):
             )
         return sumup_checkout.status
 
+    async def _process_due_orders(self) -> int:
+        async with self.db_pool.acquire() as conn:
+            pending_orders = await claim_pending_orders(conn, limit=PENDING_ORDER_CONCURRENCY)
+
+        results = await asyncio.gather(
+            *(self._process_pending_order_in_worker(order) for order in pending_orders), return_exceptions=True
+        )
+        for order, result in zip(pending_orders, results, strict=True):
+            if isinstance(result, BaseException):
+                self.logger.error("Error processing pending order %s", order.uuid, exc_info=result)
+        return len(pending_orders)
+
     async def run_sumup_pending_order_processing(self):
         sumup_enabled = self.config.core.sumup_enabled
         if not sumup_enabled:
@@ -752,14 +842,8 @@ class SumupService(Service[Config]):
 
         while True:
             try:
-                async with self.db_pool.acquire() as conn:
-                    pending_orders = await fetch_pending_orders(conn=conn)
-                self.logger.info("Found %s pending SumUp orders to process", len(pending_orders))
-                for pending_order in pending_orders:
-                    try:
-                        await self._process_pending_order_in_worker(pending_order)
-                    except Exception:
-                        self.logger.exception("Error processing pending order %s", pending_order.uuid)
+                if await self._process_due_orders() == PENDING_ORDER_CONCURRENCY:
+                    continue
             except asyncpg.exceptions.PostgresError as db_err:
                 self.logger.exception(f"Database error in payment processor: {db_err}")
             except Exception as e:

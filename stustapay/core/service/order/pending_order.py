@@ -77,24 +77,30 @@ async def fetch_order_by_uuid_for_update(conn: Connection, uuid: UUID) -> Pendin
 SUMUP_INITIAL_CHECK_TIMEOUT = timedelta(seconds=20)
 
 
-async def fetch_pending_orders(conn: Connection) -> list[PendingOrder]:
+async def claim_pending_orders(conn: Connection, limit: int) -> list[PendingOrder]:
     return await conn.fetch_many(
         PendingOrder,
-        "select o.* from pending_sumup_order o "
-        "where o.status = 'pending' "
-        "and ((o.last_checked is null and now() > o.created_at + $1) "
-        "   or now() > o.last_checked + make_interval(secs => o.check_interval))",
+        "with due as ("
+        "  select uuid from pending_sumup_order "
+        "  where status = 'pending' "
+        "    and coalesce(last_checked + make_interval(secs => check_interval), created_at + $1::interval) <= now() "
+        "  order by coalesce(last_checked + make_interval(secs => check_interval), created_at + $1::interval), uuid "
+        "  limit $2 for update skip locked"
+        ") update pending_sumup_order o "
+        "set last_checked = now(), check_interval = least(greatest(o.check_interval * 2, 30), 60) "
+        "from due where o.uuid = due.uuid returning o.*",
         SUMUP_INITIAL_CHECK_TIMEOUT,
+        limit,
     )
 
 
 async def save_pending_ticket_sale(
-    conn: Connection, till_id: int, node_id: int, cashier_id: int | None, ticket_sale: CompletedTicketSale
+    conn: Connection, till_id: int, node_id: int, cashier_id: int, ticket_sale: CompletedTicketSale, terminal_id: int
 ):
     await conn.execute(
         "insert into pending_sumup_order "
-        "(uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content, sumup_environment) "
-        "values ($1, $2, $3, $4, 'ticket', 1, $5, ("
+        "(uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content, terminal_id, sumup_environment) "
+        "values ($1, $2, $3, $4, 'ticket', 1, $5, $6, ("
         "  select e.sumup_environment from node n "
         "  join node en on en.id = n.event_node_id "
         "  join event e on e.id = en.event_id "
@@ -105,6 +111,7 @@ async def save_pending_ticket_sale(
         till_id,
         cashier_id,
         ticket_sale.model_dump_json(),
+        terminal_id,
     )
 
 
@@ -116,11 +123,13 @@ def load_pending_ticket_sale(pending_order: PendingOrder) -> CompletedTicketSale
     return ticket_sale
 
 
-async def save_pending_sale(conn: Connection, till_id: int, node_id: int, cashier_id: int | None, sale: PendingSale):
+async def save_pending_sale(
+    conn: Connection, till_id: int, node_id: int, cashier_id: int, sale: PendingSale, terminal_id: int
+):
     await conn.execute(
         "insert into pending_sumup_order "
-        "(uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content, sumup_environment) "
-        "values ($1, $2, $3, $4, 'sale', 1, $5, ("
+        "(uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content, terminal_id, sumup_environment) "
+        "values ($1, $2, $3, $4, 'sale', 1, $5, $6, ("
         "  select e.sumup_environment from node n "
         "  join node en on en.id = n.event_node_id "
         "  join event e on e.id = en.event_id "
@@ -131,6 +140,7 @@ async def save_pending_sale(conn: Connection, till_id: int, node_id: int, cashie
         till_id,
         cashier_id,
         sale.model_dump_json(),
+        terminal_id,
     )
 
 
@@ -386,12 +396,17 @@ async def make_ticket_sale_bookings(
 
 
 async def save_pending_topup(
-    conn: Connection, till_id: int, node_id: int, cashier_id: int | None, topup: CompletedTopUp
+    conn: Connection,
+    till_id: int,
+    node_id: int,
+    cashier_id: int | None,
+    topup: CompletedTopUp,
+    terminal_id: int | None = None,
 ):
     await conn.execute(
         "insert into pending_sumup_order "
-        "(uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content, sumup_environment) "
-        "values ($1, $2, $3, $4, 'topup', 1, $5, ("
+        "(uuid, node_id, till_id, cashier_id, order_type, order_content_version, order_content, terminal_id, sumup_environment) "
+        "values ($1, $2, $3, $4, 'topup', 1, $5, $6, ("
         "  select e.sumup_environment from node n "
         "  join node en on en.id = n.event_node_id "
         "  join event e on e.id = en.event_id "
@@ -402,6 +417,7 @@ async def save_pending_topup(
         till_id,
         cashier_id,
         topup.model_dump_json(),
+        terminal_id,
     )
 
 

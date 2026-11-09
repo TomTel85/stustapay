@@ -63,7 +63,7 @@ verify-web: verify-web-administration verify-web-customerportal
 
 .PHONY: verify-android
 verify-android:
-	cd app && ./gradlew :app:assembleStandardDebug :app:testStandardDebugUnitTest :app:lintStandardDebug
+	cd app && ./gradlew :app:assembleStandardDebug :app:assembleStandardDebugAndroidTest :app:testStandardDebugUnitTest :app:lintStandardDebug
 
 .PHONY: verify-android-tap-to-pay
 verify-android-tap-to-pay:

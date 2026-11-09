@@ -7,6 +7,7 @@ import json
 import logging
 
 from sftkit.http import Server
+from sftkit.http._error import try_again_later_exception_handler
 
 from stustapay import __version__
 from stustapay.core import database
@@ -19,6 +20,7 @@ from stustapay.core.service.account import AccountService
 from stustapay.core.service.auth import AuthService
 from stustapay.core.service.entry import EntryService
 from stustapay.core.service.order import OrderService
+from stustapay.core.service.order.sumup import CardPaymentPending
 from stustapay.core.service.terminal import TerminalService
 from stustapay.core.service.till.till import TillService
 from stustapay.core.service.user import UserService
@@ -44,6 +46,7 @@ def get_server(config: Config):
     ))
 
     # endpoints available in the terminal server.
+    server.api.add_exception_handler(CardPaymentPending, try_again_later_exception_handler)
     server.add_router(base.router)
     server.add_router(order.router)
     server.add_router(auth.router)

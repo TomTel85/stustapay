@@ -4,6 +4,7 @@ import android.content.Context
 import com.sumup.taptopay.TapToPay
 import com.sumup.taptopay.TapToPayApiProvider
 import com.sumup.taptopay.auth.AuthTokenProvider
+import com.sumup.taptopay.payment.domain.model.api.AffiliateModel
 import com.sumup.taptopay.payment.domain.model.api.CheckoutData
 import com.sumup.taptopay.payment.domain.model.api.PaymentEvent
 import dagger.Binds
@@ -50,6 +51,7 @@ class SumUpTapToPaySdkGateway @Inject constructor() : TapToPaySdkGateway {
     override fun startPayment(
         totalAmount: Long,
         clientUniqueTransactionId: String,
+        affiliateKey: String,
     ): Flow<TapToPaySdkEvent> {
         val instance = checkNotNull(tapToPay) { "Tap To Pay SDK has not been initialized" }
         val checkoutData = CheckoutData(
@@ -61,7 +63,7 @@ class SumUpTapToPaySdkGateway @Inject constructor() : TapToPaySdkGateway {
             priceItems = emptyList(),
             products = emptyList(),
             processCardAs = null,
-            affiliateData = null,
+            affiliateData = AffiliateModel(key = affiliateKey, foreignTransactionId = clientUniqueTransactionId),
         )
         return instance.startPayment(checkoutData, false).map(::mapPaymentEvent)
     }

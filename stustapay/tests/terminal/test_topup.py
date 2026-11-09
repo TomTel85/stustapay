@@ -22,6 +22,7 @@ from stustapay.core.service.order.pending_order import (
     fetch_pending_online_topup_for_customer,
     save_pending_topup,
 )
+from stustapay.core.service.order.sumup import CardPaymentPending
 from stustapay.core.service.till.till import TillService
 from stustapay.payment.sumup.api import SumUpOAuthToken
 from stustapay.tests.sumup_mock import MockSumUpApi
@@ -69,6 +70,8 @@ async def test_topup_sumup_order_flow(
     login_supervised_user: LoginSupervisedUser,
     cashier: Cashier,
 ):
+    # pylint: disable=protected-access
+    order_service.sumup._create_sumup_api = lambda merchant_code, api_key: MockSumUpApi(api_key, merchant_code)  # type: ignore
     await login_supervised_user(user_tag_uid=cashier.user_tag_uid, user_role_id=cashier.cashier_role.id)
     new_topup = NewTopUp(
         uuid=uuid.uuid4(),
@@ -83,6 +86,8 @@ async def test_topup_sumup_order_flow(
     assert pending_topup.old_balance == START_BALANCE
     assert pending_topup.amount == 20
     assert pending_topup.new_balance == START_BALANCE + pending_topup.amount
+    MockSumUpApi.mock_amount(pending_topup.amount)
+    await order_service.book_topup(token=terminal_token, new_topup=new_topup, pending=True)
     completed_topup = await order_service.book_topup(token=terminal_token, new_topup=new_topup)
     assert completed_topup is not None
     assert completed_topup.uuid == new_topup.uuid
@@ -119,7 +124,8 @@ async def test_topup_deferred_sumup_order_flow(
     assert pending_topup.old_balance == START_BALANCE
     assert pending_topup.amount == 20
     assert pending_topup.new_balance == START_BALANCE + pending_topup.amount
-    MockSumUpApi.mock_amount(pending_topup.amount)
+    with pytest.raises(InvalidArgument, match="No matching registered card payment"):
+        await order_service.book_topup(token=terminal_token, new_topup=new_topup)
     completed_topup = await order_service.book_topup(token=terminal_token, new_topup=new_topup, pending=True)
     assert completed_topup is not None
     assert completed_topup.uuid == new_topup.uuid
@@ -128,12 +134,26 @@ async def test_topup_deferred_sumup_order_flow(
     assert completed_topup.new_balance == START_BALANCE + completed_topup.amount
     customer_info = await till_service.get_customer(token=terminal_token, customer_tag_uid=customer.tag.uid)
     assert customer_info.balance == START_BALANCE
-    completed_topup = await order_service.check_pending_topup(token=terminal_token, order_uuid=pending_topup.uuid)
+    with pytest.raises(InvalidArgument, match="does not match"):
+        await order_service.book_topup(token=terminal_token, new_topup=new_topup.model_copy(update={"amount": 21}))
+    with pytest.raises(InvalidArgument, match="reserved"):
+        await order_service.book_topup(
+            token=terminal_token, new_topup=new_topup.model_copy(update={"payment_method": PaymentMethod.cash})
+        )
+    MockSumUpApi.mock_amount(19)
+    with pytest.raises(CardPaymentPending):
+        await order_service.book_topup(token=terminal_token, new_topup=new_topup)
+    assert (
+        await till_service.get_customer(token=terminal_token, customer_tag_uid=customer.tag.uid)
+    ).balance == START_BALANCE
+    MockSumUpApi.mock_amount(pending_topup.amount)
+    completed_topup = await order_service.book_topup(token=terminal_token, new_topup=new_topup)
     assert completed_topup is not None
     assert completed_topup.uuid == new_topup.uuid
     assert completed_topup.old_balance == START_BALANCE
     assert completed_topup.amount == 20
     assert completed_topup.new_balance == START_BALANCE + completed_topup.amount
+    assert await order_service.book_topup(token=terminal_token, new_topup=new_topup) == completed_topup
     await assert_system_account_balance(account_type=AccountType.sumup_entry, expected_balance=-20)
     customer_info = await till_service.get_customer(token=terminal_token, customer_tag_uid=customer.tag.uid)
     assert customer_info.balance == completed_topup.new_balance
@@ -359,6 +379,8 @@ async def test_payment_worker_releases_connection_and_books_once(
     assert find_spy.await_count == (2 if mode == "concurrent" else 1)
     if token_spy is not None:
         token_spy.assert_awaited_once()
-    assert await db_connection.fetchval("select status from pending_sumup_order where uuid = $1", topup.uuid) == "booked"
+    assert (
+        await db_connection.fetchval("select status from pending_sumup_order where uuid = $1", topup.uuid) == "booked"
+    )
     assert await db_connection.fetchval("select count(*) from ordr where uuid = $1", topup.uuid) == 1
     assert await db_connection.fetchval("select balance from account where id = $1", customer.account_id) == 120

@@ -14,6 +14,7 @@ import de.stustapay.libssp.model.NfcTag
 import de.stustapay.libssp.net.Response
 import de.stustapay.libssp.util.mapState
 import de.stustapay.stustapay.offline.SaleBookingOutcome
+import de.stustapay.stustapay.offline.confirmedCents
 import de.stustapay.stustapay.offline.pendingSale
 import de.stustapay.stustapay.R
 import de.stustapay.stustapay.ec.ECPayment
@@ -609,40 +610,37 @@ class SaleViewModel @Inject constructor(
                 tag = NfcTag(BigInteger(0), null),
             )
 
-            when (val registerResponse = saleRepository.registerPendingSale(newSale)) {
-                is Response.OK -> {
-                    _status.update { context.getString(R.string.sale_status_order_announced) }
-                }
-
-                is Response.Error.Service -> {
-                    clearAutoBookCountdown()
-                    _status.update { registerResponse.msg() }
-                    _navState.update { SalePage.Error }
-                    return
-                }
-
-                is Response.Error -> {
-                    clearAutoBookCountdown()
-                    _status.update { registerResponse.msg() }
-                    return
+            val paymentResult = ecPaymentRepository.pay(context, payment) {
+                when (val registerResponse = saleRepository.registerPendingSale(newSale)) {
+                    is Response.OK -> {
+                        if (confirmedCents(registerResponse.data.totalPrice) != confirmedCents(sale.totalPrice)) {
+                            clearAutoBookCountdown()
+                            _saleStatus.update { it.afterCardPaymentCancelled(newSale.uuid) }
+                            _status.update { context.getString(R.string.card_payment_amount_changed) }
+                            _navState.update { SalePage.ProductSelect }
+                            saleRepository.cancelPendingSale(newSale.uuid)
+                            return@pay false
+                        }
+                        _status.update { context.getString(R.string.sale_status_starting_ec) }
+                        delay(800)
+                        true
+                    }
+                    is Response.Error -> {
+                        clearAutoBookCountdown()
+                        _status.update { registerResponse.msg() }
+                        if (registerResponse is Response.Error.Service) _navState.update { SalePage.Error }
+                        false
+                    }
                 }
             }
-
-            _status.update { context.getString(R.string.sale_status_starting_ec) }
-
-            // workaround so the sumup activity is not in foreground too quickly.
-            // when it's active, nfc intents are no longer captured by us, apparently,
-            // and then the system nfc handler spawns the default handler (e.g. stustapay) again.
-            // https://stackoverflow.com/questions/60868912
-            delay(800)
-
-            when (val paymentResult = ecPaymentRepository.pay(context, payment)) {
+            when (paymentResult) {
+                null -> return
                 is ECPaymentResult.Failure -> {
-                    if (!paymentResult.mayHaveCreatedCharge) {
-                        if (saleRepository.cancelPendingSale(newSale.uuid) is Response.OK) {
-                            _saleStatus.update { it.afterCardPaymentCancelled(newSale.uuid) }
-                        }
+                    if (paymentResult.retryWithNewId || (!paymentResult.mayHaveCreatedCharge &&
+                        saleRepository.cancelPendingSale(newSale.uuid) is Response.OK)) {
+                        _saleStatus.update { it.afterCardPaymentCancelled(newSale.uuid) }
                     }
+                    if (paymentResult.previousPaymentBooked) clearSale()
                     _status.update { context.getString(R.string.topup_status_ec_result, paymentResult.msg) }
                     return
                 }
@@ -660,6 +658,7 @@ class SaleViewModel @Inject constructor(
 
         when (response) {
             is Response.OK -> {
+                if (newSale.paymentMethod == PaymentMethod.sumup) ecPaymentRepository.confirmBooking(newSale.uuid)
                 // delete the sale draft
                 clearSale()
                 _bookingOutcome.value = response.data

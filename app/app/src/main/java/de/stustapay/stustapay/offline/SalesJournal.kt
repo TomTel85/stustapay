@@ -51,12 +51,16 @@ interface JournalDao {
     @Query("SELECT COUNT(*) FROM sales_journal") fun observeCount(): Flow<Int>
     @Query("SELECT uuid, saleCents - returnCents AS amountCents, recordedAt, state, transferState, message FROM sales_journal ORDER BY sequence DESC LIMIT :limit OFFSET :offset")
     suspend fun page(limit: Int, offset: Int): List<JournalEntrySummary>
-    @Query("SELECT * FROM sales_journal WHERE snapshotId = :snapshotId OR state = 'waiting' ORDER BY sequence")
+    @Query("SELECT * FROM sales_journal WHERE snapshotId = :snapshotId OR state IN ('waiting','needs_review') ORDER BY sequence")
     suspend fun validationHistory(snapshotId: String): List<JournalSale>
-    @Query("SELECT * FROM sales_journal WHERE state IN ('waiting','offline','clarification') ORDER BY sequence")
+    @Query("SELECT * FROM sales_journal WHERE state IN ('waiting','offline','clarification','needs_review') ORDER BY sequence")
     suspend fun unresolved(): List<JournalSale>
-    @Query("SELECT COUNT(*) FROM sales_journal WHERE state IN ('waiting','offline','clarification')")
+    @Query("SELECT COUNT(*) FROM sales_journal WHERE state IN ('waiting','offline','clarification','needs_review')")
     suspend fun unresolvedCount(): Int
+    @Query("SELECT COUNT(*) FROM sales_journal WHERE state IN ('waiting','offline','clarification')")
+    suspend fun blockingCount(): Int
+    @Query("SELECT COUNT(*) FROM sales_journal WHERE state = 'needs_review' AND tagUid = :tagUid AND uuid != :uuid")
+    suspend fun heldTagCount(tagUid: String?, uuid: String): Int
     @Query("SELECT COALESCE(MAX(sequence), 0) FROM sales_journal") suspend fun lastSequence(): Long
     // Keep the highest sequence as a persistent watermark, even if every other old entry expires.
     @Query("""DELETE FROM sales_journal WHERE state IN ('booked','dismissed','rejected','local_rejected')
@@ -71,7 +75,7 @@ interface JournalDao {
     @Query("SELECT * FROM sales_journal WHERE uuid = :uuid") suspend fun sale(uuid: String): JournalSale?
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insert(sale: JournalSale)
     @Update suspend fun update(sale: JournalSale)
-    @Query("SELECT COUNT(*) FROM sales_journal WHERE state IN ('waiting','offline','clarification')") fun pending(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM sales_journal WHERE state IN ('waiting','offline','clarification','needs_review')") fun pending(): Flow<Int>
     @Query("SELECT COUNT(*) FROM sales_journal WHERE legacy = 1 AND operatorId IS NULL AND state = 'waiting'") fun legacyNeedsOwner(): Flow<Int>
     @Query("SELECT * FROM offline_preparation WHERE `key` = 1") suspend fun preparation(): JournalPreparation?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun prepare(preparation: JournalPreparation)
@@ -102,6 +106,7 @@ class SalesJournal internal constructor(val database: JournalDatabase) {
     )
     val dao = database.journal()
     suspend fun hasUnresolved() = dao.unresolvedCount() != 0
+    suspend fun hasBlocking() = dao.blockingCount() != 0
 }
 
 /** Merge a delayed reply without erasing a sale accepted locally in the meantime. */
