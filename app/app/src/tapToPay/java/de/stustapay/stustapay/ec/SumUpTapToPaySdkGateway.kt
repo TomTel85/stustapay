@@ -1,9 +1,12 @@
 package de.stustapay.stustapay.ec
 
 import android.content.Context
+import android.util.Log
 import com.sumup.taptopay.TapToPay
 import com.sumup.taptopay.TapToPayApiProvider
 import com.sumup.taptopay.auth.AuthTokenProvider
+import com.sumup.taptopay.exception.api.PaymentException
+import com.sumup.taptopay.exception.api.TapToPayException
 import com.sumup.taptopay.payment.domain.model.api.AffiliateModel
 import com.sumup.taptopay.payment.domain.model.api.CheckoutData
 import com.sumup.taptopay.payment.domain.model.api.PaymentEvent
@@ -74,11 +77,21 @@ class SumUpTapToPaySdkGateway @Inject constructor() : TapToPaySdkGateway {
         PaymentEvent.CVMRequested -> TapToPaySdkEvent.CvmRequested
         PaymentEvent.CVMPresented -> TapToPaySdkEvent.CvmPresented
         is PaymentEvent.TransactionDone -> TapToPaySdkEvent.TransactionDone(event.paymentOutput.txCode)
-        is PaymentEvent.TransactionFailed -> TapToPaySdkEvent.TransactionFailed(
-            event.tapToPayException?.message
-                ?: event.tapToPayException?.toString()
-                ?: "Transaction failed"
-        )
+        is PaymentEvent.TransactionFailed -> {
+            val exception = event.tapToPayException
+            val cause = exception?.cause
+            val acquiringError = exception as? PaymentException.ErrorAction
+            val acquiringErrorDescription = acquiringError?.acquiringErrorDescription
+                ?.replace('\n', ' ')?.replace('\r', ' ')
+            Log.w(
+                "TapToPay",
+                "SumUp transaction failed: type=${exception?.name}, code=${exception?.code}, " +
+                    "causeType=${cause?.javaClass?.simpleName}, causeCode=${(cause as? TapToPayException)?.code}, " +
+                    "acquiringErrorTextId=${acquiringError?.acquiringErrorTextId}, " +
+                    "acquiringErrorDescription=$acquiringErrorDescription",
+            )
+            TapToPaySdkEvent.TransactionFailed(exception?.message ?: exception?.toString() ?: "Transaction failed")
+        }
         is PaymentEvent.TransactionCanceled -> TapToPaySdkEvent.TransactionCanceled
         is PaymentEvent.PaymentFlowClosedSuccessfully -> TapToPaySdkEvent.PaymentFlowClosedSuccessfully
         is PaymentEvent.TransactionResultUnknown -> TapToPaySdkEvent.TransactionResultUnknown
