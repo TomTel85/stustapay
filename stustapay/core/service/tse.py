@@ -9,6 +9,7 @@ from stustapay.core.schema.tse import NewTse, Tse, TseType, UpdateTse
 from stustapay.core.schema.user import CurrentUser, Privilege
 from stustapay.core.service.auth import AuthService
 from stustapay.core.service.common.decorators import requires_node, requires_user
+from stustapay.tse.fiskaly.config import LIVE_UNAVAILABLE
 
 
 async def list_tses(conn: Connection, node: Node) -> list[Tse]:
@@ -24,6 +25,8 @@ class TseService(Service[Config]):
         if tse_type == TseType.fiskaly:
             if not profile or profile not in self.config.fiskaly.profiles:
                 raise InvalidArgument("Fiskaly requires an existing server credential profile")
+            if self.config.fiskaly.profiles[profile].environment == "LIVE":
+                raise InvalidArgument(LIVE_UNAVAILABLE)
         elif profile is not None:
             raise InvalidArgument("Fiskaly profiles are only supported by Fiskaly TSEs")
 

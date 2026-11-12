@@ -5,6 +5,8 @@ from uuid import UUID
 from cryptography.fernet import Fernet
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
+LIVE_UNAVAILABLE = "Fiskaly LIVE requires signing at the start and end of the fiscal operation"
+
 
 class FiskalyManagementCredentials(BaseModel):
     environment: Literal["TEST", "LIVE"] = "TEST"

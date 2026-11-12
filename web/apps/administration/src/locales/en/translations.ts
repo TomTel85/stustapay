@@ -1151,7 +1151,7 @@ export const translations = {
       "Use the profile name configured on the server. Credentials and TSS/client bindings are managed there.",
     fiskalyOnboarding: {
       title: "Fiskaly customer setup",
-      description: "Choose or create an operator site, then initialize its TSE for this event. TEST and LIVE require separate events; each event can use one environment.",
+      description: "Choose or create an operator site, then initialize its TSE for this event. TEST setup is available. LIVE requires fiscal signing during checkout.",
       loadError: "Fiskaly sites could not be loaded.",
       statusError: "The setup status could not be loaded.",
       step: {
@@ -1178,7 +1178,6 @@ export const translations = {
       vatId: "VAT ID (optional)",
       saveSite: "Save site",
       startTest: "Start TEST setup",
-      startLive: "Start LIVE setup",
       jobs: "Setup status",
       retry: "Retry",
       status: {

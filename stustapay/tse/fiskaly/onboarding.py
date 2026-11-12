@@ -13,7 +13,7 @@ from stustapay.core.config import Config
 from stustapay.core.schema.tse import Tse
 
 from .client import FiskalyClient, FiskalyError, FiskalyHTTPError, FiskalyTransportError
-from .config import FiskalyConfig
+from .config import LIVE_UNAVAILABLE, FiskalyConfig
 from .management import FiskalyManagementClient
 from .secrets import CredentialVault
 from .signing import FiskalySigner
@@ -42,6 +42,8 @@ async def resolve_managed_config(conn: Connection, config: Config, job_id: int) 
     if row is None or not row["credential_ciphertext"] or not row["pin_ciphertext"]:
         raise FiskalyError("Fiskaly managed credentials are not ready")
     environment = row["environment"]
+    if environment == "LIVE":
+        raise FiskalyError(LIVE_UNAVAILABLE)
     provider = management.environments.get(environment)
     if provider is None or provider.group_id != row["group_id"]:
         raise FiskalyError("Fiskaly managed site belongs to a different provider group")
@@ -111,6 +113,8 @@ class FiskalyOnboardingRunner:
         if job is None:
             return
         try:
+            if job["environment"] == "LIVE":
+                raise OnboardingActionRequired(LIVE_UNAVAILABLE)
             management = self.config.fiskaly.management
             credentials = management.environments.get(job["environment"])
             if not management.enabled or credentials is None:

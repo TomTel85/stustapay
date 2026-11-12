@@ -17,7 +17,6 @@ import { useCurrentNode, useCurrentUserHasPrivilege, useCurrentUserHasPrivilegeA
 import { NodeSeenByUser, useNodeTree } from "@/api";
 import {
   CreateFiskalySite,
-  FiskalyEnvironment,
   FiskalyProvisioningJob,
   useCreateFiskalySiteMutation,
   useGetFiskalySiteStatusQuery,
@@ -98,13 +97,13 @@ export const FiskalyOnboarding: React.FC = () => {
     }
   };
 
-  const handleStart = async (environment: FiskalyEnvironment) => {
+  const handleStart = async () => {
     if (!selectedSite || eventNodeId == null) return;
     setActionError(false);
     try {
       await startProvisioning({
         nodeId: currentNode.id,
-        newFiskalyProvisioningJob: { site_id: selectedSite.id, event_node_id: eventNodeId, environment },
+        newFiskalyProvisioningJob: { site_id: selectedSite.id, event_node_id: eventNodeId, environment: "TEST" },
       }).unwrap();
       await refetchJobs();
     } catch {
@@ -174,11 +173,8 @@ export const FiskalyOnboarding: React.FC = () => {
             <Button variant="outlined" onClick={() => setAddingSite((open) => !open)}>
               {addingSite ? t("cancel") : t("tse.fiskalyOnboarding.addSite")}
             </Button>
-            <Button variant="contained" disabled={!selectedSite || eventNodeId == null || busy} onClick={() => void handleStart("TEST")}>
+            <Button variant="contained" disabled={!selectedSite || eventNodeId == null || busy} onClick={() => void handleStart()}>
               {t("tse.fiskalyOnboarding.startTest")}
-            </Button>
-            <Button variant="contained" color="secondary" disabled={!selectedSite || eventNodeId == null || busy} onClick={() => void handleStart("LIVE")}>
-              {t("tse.fiskalyOnboarding.startLive")}
             </Button>
           </Stack>
         )}
@@ -228,7 +224,7 @@ export const FiskalyOnboarding: React.FC = () => {
                     {job.environment} · {t(`tse.fiskalyOnboarding.status.${job.status}`)} · {translateStep(job.step)}
                   </Typography>
                   {job.last_error && <Alert severity="error" sx={{ py: 0 }}>{job.last_error}</Alert>}
-                  {showActions && !jobIsActive(job) && job.status !== "ready" && (
+                  {showActions && !jobIsActive(job) && job.status !== "ready" && job.environment === "TEST" && (
                     <Button disabled={busy} onClick={() => void handleRetry(job.id)}>
                       {t("tse.fiskalyOnboarding.retry")}
                     </Button>

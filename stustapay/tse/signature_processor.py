@@ -12,7 +12,7 @@ from stustapay.core.schema.tse import Tse, TseType
 from ..core.database import get_database
 from .config import get_tse_handler
 from .fiskaly.client import FiskalyError
-from .fiskaly.config import FiskalyConfig
+from .fiskaly.config import LIVE_UNAVAILABLE, FiskalyConfig
 from .fiskaly.onboarding import FiskalyOnboardingRunner, resolve_managed_config
 from .fiskaly.worker import FiskalyWorker
 from .wrapper import TSEWrapper
@@ -111,6 +111,8 @@ class SignatureProcessor:
                             profile = self.config.fiskaly.profiles.get(row.fiskaly_profile or "")
                             if profile is None:
                                 raise FiskalyError("Fiskaly credential profile unavailable")
+                        if profile.environment == "LIVE":
+                            raise FiskalyError(LIVE_UNAVAILABLE)
                         worker = FiskalyWorker(row, profile)
                     except FiskalyError as exc:
                         await conn.execute("update tse set last_error=$2 where id=$1", row.id, str(exc))

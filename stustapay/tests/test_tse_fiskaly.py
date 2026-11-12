@@ -33,6 +33,7 @@ class FiskalyFixture:
         self.unauthorized = False
         self.auth_error = False
         self.error_status = None
+        self.retry_after = None
         self.invalid_json = False
         self.timeout_state = None
         self.transactions = {}
@@ -97,7 +98,8 @@ class FiskalyFixture:
         if self.unauthorized or request.headers.get("Authorization") != f"Bearer {self.token}":
             return web.json_response({"secret": "provider-secret"}, status=401)
         if self.error_status:
-            return web.json_response({"secret": "provider-secret"}, status=self.error_status)
+            headers = {"Retry-After": self.retry_after} if self.retry_after else None
+            return web.json_response({"secret": "provider-secret"}, status=self.error_status, headers=headers)
         if self.invalid_json:
             return web.Response(text="not json", content_type="application/json")
         if path == f"tss/{self.config.tss_id}":
@@ -416,3 +418,19 @@ async def test_invalid_transaction_times_are_rejected(provider, field, value):
         provider.transactions[str(request.transaction_id)][field] = value
         with pytest.raises(FiskalyError):
             await signer.sign(request)
+
+
+async def test_rate_limit_delay_applies_across_client_requests(provider):
+    async with FiskalyClient(provider.config) as client:
+        provider.error_status = 429
+        provider.retry_after = "45"
+        path = f"tss/{provider.config.tss_id}"
+        with pytest.raises(FiskalyHTTPError) as rejected:
+            await client.request("GET", path)
+        assert rejected.value.retry_after == 45
+        provider.error_status = None
+        calls = len(provider.requests)
+        with pytest.raises(FiskalyHTTPError) as paused:
+            await client.request("GET", path)
+        assert 44 < paused.value.retry_after <= 45
+        assert len(provider.requests) == calls

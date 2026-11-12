@@ -1,7 +1,7 @@
 import contextlib
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from dateutil import parser
@@ -188,7 +188,8 @@ class Generator:
         ):
             if row["signature_status"] == "new" or row["signature_status"] == "pending":
                 raise RuntimeError(
-                    "DSFinV-K export requires all signing requests to be settled; open signatures remain"
+                    "DSFinV-K export requires all signing requests to be settled; "
+                    f"open signatures remain (order {row['id']})"
                 )
 
             a = Bonkopf()
@@ -210,10 +211,17 @@ class Generator:
             else:
                 b.TSE_ID = int(row["tse_id"])
                 b.TSE_TANR = int(row["tse_transaction"])
-                a.BON_START = parser.isoparse(row["tse_start"].split(".")[0]).astimezone()  # TSE_start
-                a.BON_ENDE = parser.isoparse(row["tse_end"].split(".")[0]).astimezone()
-                b.TSE_TA_START = parser.isoparse(row["tse_start"].split(".")[0]).astimezone()
-                b.TSE_TA_ENDE = parser.isoparse(row["tse_end"].split(".")[0]).astimezone()
+                start = parser.isoparse(row["tse_start"])
+                end = parser.isoparse(row["tse_end"])
+                # The Diebold adapter stores UTC timestamps without a timezone suffix.
+                if start.tzinfo is None:
+                    start = start.replace(tzinfo=timezone.utc)
+                if end.tzinfo is None:
+                    end = end.replace(tzinfo=timezone.utc)
+                a.BON_START = start.astimezone()
+                a.BON_ENDE = end.astimezone()
+                b.TSE_TA_START = start
+                b.TSE_TA_ENDE = end
                 b.TSE_TA_VORGANGSART = row["transaction_process_type"]
                 b.TSE_TA_SIGZ = int(row["tse_signaturenr"])
                 b.TSE_TA_SIG = row["tse_signature"]

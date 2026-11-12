@@ -435,3 +435,21 @@ async def test_controller_limit_blocks_before_resource_creation(setup, db_connec
         await db_connection.fetchval("select status from fiskaly_provisioning_job where id=$1", job.id)
         == "action_required"
     )
+
+
+async def test_live_provisioning_cannot_start_before_checkout_support(setup, db_connection, global_admin_token):
+    service, cfg, remote, site, job = setup
+    await db_connection.execute("delete from fiskaly_provisioning_job where id=$1", job.id)
+    cfg.fiskaly.management.environments["LIVE"] = cfg.fiskaly.management.environments["TEST"].model_copy(
+        update={"environment": "LIVE"}
+    )
+    with pytest.raises(InvalidArgument, match="start and end of the fiscal operation"):
+        await service.start_provisioning(
+            token=global_admin_token,
+            node_id=job.event_node_id,
+            request=NewFiskalyProvisioningJob(site_id=site.id, event_node_id=job.event_node_id, environment="LIVE"),
+        )
+    assert not remote.creations
+    assert not await db_connection.fetchval(
+        "select exists(select 1 from fiskaly_provisioning_job where event_node_id=$1)", job.event_node_id
+    )

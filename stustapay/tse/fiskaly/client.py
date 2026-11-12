@@ -1,5 +1,7 @@
 import asyncio
 import time
+from datetime import timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import aiohttp
@@ -13,9 +15,24 @@ class FiskalyError(RuntimeError):
     """A sanitized provider error. Never includes response bodies or credentials."""
 
 
+def _retry_delay(value: str | None) -> float:
+    if not value:
+        return 0
+    try:
+        if value.isascii() and value.isdigit():
+            return float(int(value))
+        retry_at = parsedate_to_datetime(value)
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return max(0, retry_at.timestamp() - time.time())
+    except (ValueError, OverflowError, OSError):
+        return 0
+
+
 class FiskalyHTTPError(FiskalyError):
-    def __init__(self, status: int):
+    def __init__(self, status: int, retry_after: float = 0):
         self.status = status
+        self.retry_after = retry_after
         super().__init__(f"Fiskaly returned HTTP {status}")
 
     @property
@@ -43,6 +60,7 @@ class FiskalyClient:
         self._session: aiohttp.ClientSession | None = None
         self._token: str | None = None
         self._expires_at = 0.0
+        self._retry_at = 0.0
         self._auth_lock = asyncio.Lock()
         self._requests = asyncio.Semaphore(config.max_concurrency)
 
@@ -76,6 +94,9 @@ class FiskalyClient:
         headers = {"Authorization": f"Bearer {token}"} if token else {}
         try:
             async with self._requests:
+                retry_after = self._retry_at - time.monotonic()
+                if retry_after > 0:
+                    raise FiskalyHTTPError(429, retry_after)
                 async with self._session.request(
                     method,
                     f"{BASE_URL}/{path}",
@@ -85,7 +106,11 @@ class FiskalyClient:
                     timeout=aiohttp.ClientTimeout(total=request_timeout or self.config.request_timeout),
                 ) as response:
                     if not 200 <= response.status < 300:
-                        raise FiskalyHTTPError(response.status)
+                        retry_after = _retry_delay(response.headers.get("Retry-After"))
+                        if response.status == 429:
+                            retry_after = max(2, retry_after)
+                            self._retry_at = max(self._retry_at, time.monotonic() + retry_after)
+                        raise FiskalyHTTPError(response.status, retry_after)
                     data = await response.json()
         except (aiohttp.ClientError, asyncio.TimeoutError):
             raise FiskalyTransportError("Fiskaly request failed; remote result may be unknown") from None

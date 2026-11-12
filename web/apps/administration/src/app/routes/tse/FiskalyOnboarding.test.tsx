@@ -103,7 +103,7 @@ describe("FiskalyOnboarding", () => {
     const { rerender } = render(<MemoryRouter><FiskalyOnboarding /></MemoryRouter>);
 
     expect(screen.getByRole("button", { name: "tse.fiskalyOnboarding.startTest" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "tse.fiskalyOnboarding.startLive" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "tse.fiskalyOnboarding.startLive" })).toBeNull();
 
     mockUseCurrentUserHasPrivilegeAtNode.mockReturnValue(() => false);
     rerender(<MemoryRouter><FiskalyOnboarding /></MemoryRouter>);
@@ -124,7 +124,7 @@ describe("FiskalyOnboarding", () => {
     expect(screen.queryByRole("button", { name: "tse.fiskalyOnboarding.retry" })).toBeNull();
   });
 
-  it("starts TEST and LIVE as separate explicit requests", async () => {
+  it("starts TEST provisioning", async () => {
     render(<MemoryRouter><FiskalyOnboarding /></MemoryRouter>);
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "tse.fiskalyOnboarding.site" }));
     fireEvent.click(await screen.findByRole("option", { name: /Main venue/ }));
@@ -135,11 +135,6 @@ describe("FiskalyOnboarding", () => {
       newFiskalyProvisioningJob: { site_id: 7, event_node_id: 12, environment: "TEST" },
     }));
 
-    fireEvent.click(screen.getByRole("button", { name: "tse.fiskalyOnboarding.startLive" }));
-    await waitFor(() => expect(mockStart).toHaveBeenLastCalledWith({
-      nodeId: 12,
-      newFiskalyProvisioningJob: { site_id: 7, event_node_id: 12, environment: "LIVE" },
-    }));
   });
 
   it("prefills event operator and address details without parsing the address", async () => {

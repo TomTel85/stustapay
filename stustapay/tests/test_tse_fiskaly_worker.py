@@ -2,6 +2,7 @@
 # Service decorators inject connection/node and expose token/node_id to callers.
 # pylint: disable=unexpected-keyword-arg,missing-kwoa
 import asyncio
+import time
 from uuid import uuid4
 
 import asyncpg
@@ -19,7 +20,7 @@ from stustapay.tests import test_tse_fiskaly as fiskaly_tests
 from stustapay.tse.fiskaly.client import FiskalyClient, FiskalyError, FiskalyHTTPError, FiskalyTransportError
 from stustapay.tse.fiskaly.config import FiskalySettings
 from stustapay.tse.fiskaly.signing import FiskalySigner
-from stustapay.tse.fiskaly.worker import FiskalyWorker
+from stustapay.tse.fiskaly.worker import MAX_SIGNING_ATTEMPTS, FiskalyWorker
 
 provider = fiskaly_tests.provider
 
@@ -323,3 +324,107 @@ async def test_initialized_tss_is_never_recreated_when_remote_resource_disappear
         with pytest.raises(FiskalyHTTPError):
             await worker.configure(db_connection, FiskalySigner(client))
     assert not [request for request in provider.requests if request[0] in {"PUT", "PATCH"}]
+
+
+async def test_capacity_overflow_preserves_signing_without_rechecking_clients(
+    cloud_worker, provider, db_connection, setup_test_db_pool, till_profile, cashier, till
+):
+    worker, _ = cloud_worker
+    worker.config = provider.config.model_copy(
+        update={"clients": {}, "auto_provision_clients": True, "admin_pin": SecretStr("123456")}
+    )
+    provider.clients.clear()
+    provider.master["max_number_registered_clients"] = await db_connection.fetchval(
+        "select count(*) from till where node_id=$1", till.node_id
+    )
+    async with FiskalyClient(worker.config) as client:
+        signer = FiskalySigner(client)
+        await worker.configure(db_connection, signer)
+        extra = await db_connection.fetchval(
+            "insert into till(node_id,name,description,active_profile_id) values($1,$2,'',$3) returning id",
+            till.node_id,
+            f"Over capacity {uuid4()}",
+            till_profile.id,
+        )
+        calls = len(provider.requests)
+        await worker.configure(db_connection, signer, refresh=True)
+        assert len(provider.requests) == calls
+        assert await db_connection.fetchval("select tse_id from till where id=$1", extra) is None
+        assert not await db_connection.fetchval(
+            "select exists(select 1 from fiskaly_client_binding where till_id=$1)", extra
+        )
+        order = await booked(db_connection, cashier, till)
+        await worker.process(setup_test_db_pool, signer, order.id)
+    assert await db_connection.fetchval("select signature_status from tse_signature where id=$1", order.id) == "done"
+    assert str(extra) in await db_connection.fetchval("select last_error from tse where id=$1", worker.tse.id)
+
+
+async def test_retry_exhaustion_parks_original_signature_and_allows_later_work(
+    cloud_worker, provider, db_connection, setup_test_db_pool, cashier, till
+):
+    worker, _ = cloud_worker
+    first = await booked(db_connection, cashier, till)
+    later = await booked(db_connection, cashier, till)
+    async with FiskalyClient(worker.config) as client:
+        signer = FiskalySigner(client)
+        await worker.configure(db_connection, signer)
+        original = await worker.prepare(db_connection, first.id)
+        await db_connection.execute(
+            "update tse_signature set fiskaly_attempts=$2 where id=$1", first.id, MAX_SIGNING_ATTEMPTS - 1
+        )
+        provider.error_status = 403
+        assert await worker.drain(setup_test_db_pool, signer)
+        assert await db_connection.fetchval(
+            "select fiskaly_next_attempt='infinity' from tse_signature where id=$1", first.id
+        )
+        provider.error_status = None
+        assert await worker.drain(setup_test_db_pool, signer)
+        assert not await worker.drain(setup_test_db_pool, signer)
+        assert (
+            await db_connection.fetchval("select signature_status from tse_signature where id=$1", later.id) == "done"
+        )
+
+        await db_connection.execute(
+            "update tse_signature set fiskaly_attempts=0,fiskaly_next_attempt=now() "
+            "where id=$1 and fiskaly_transaction_id=$2 and fiskaly_next_attempt='infinity'",
+            first.id,
+            original.transaction_id,
+        )
+        assert await worker.drain(setup_test_db_pool, signer)
+    recovered = await db_connection.fetchrow("select * from tse_signature where id=$1", first.id)
+    assert recovered["signature_status"] == "done"
+    assert recovered["fiskaly_transaction_id"] == original.transaction_id
+
+
+@pytest.mark.parametrize("stored_format", ["2026-07-01T12:00:00.123Z", "2026-07-01T12:00:00.123"])
+async def test_signed_export_preserves_utc_log_time(
+    cloud_worker,
+    db_connection,
+    setup_test_db_pool,
+    cashier,
+    till,
+    event_node,
+    config,
+    monkeypatch,
+    stored_format,
+):
+    worker, _ = cloud_worker
+    order = await booked(db_connection, cashier, till)
+    async with FiskalyClient(worker.config) as client:
+        signer = FiskalySigner(client)
+        await worker.configure(db_connection, signer)
+        await worker.process(setup_test_db_pool, signer, order.id)
+    await db_connection.execute("update tse_signature set tse_start=$2,tse_end=$2 where id=$1", order.id, stored_format)
+    settings = await fetch_restricted_event_settings_for_node(conn=db_connection, node_id=event_node.id)
+    generator = Generator(config, event_node.id, "unused.zip", "unused.xml", "unused.dtd", False)
+    try:
+        with monkeypatch.context() as local:
+            local.setenv("TZ", "Europe/Berlin")
+            time.tzset()
+            await generator.einzelaufzeichnungsmodul(db_connection, till.z_nr, order.booked_at, till.id, settings)
+    finally:
+        time.tzset()
+    bon = generator.c.records["transactions.csv"][0].data
+    logs = generator.c.records["transactions_tse.csv"][0].data
+    assert bon["BON_START"] == bon["BON_ENDE"] == "2026-07-01T14:00:00"
+    assert logs["TSE_TA_START"] == logs["TSE_TA_ENDE"] == "2026-07-01T12:00:00.123Z"

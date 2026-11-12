@@ -18,6 +18,7 @@ from stustapay.core.schema.tree import Node, ObjectType
 from stustapay.core.schema.user import Privilege
 from stustapay.core.service.auth import AuthService
 from stustapay.core.service.common.decorators import requires_node, requires_root_user, requires_user
+from stustapay.tse.fiskaly.config import LIVE_UNAVAILABLE
 
 
 class FiskalyService(Service[Config]):
@@ -123,6 +124,8 @@ class FiskalyService(Service[Config]):
             if existing.site_id != request.site_id or existing.environment != request.environment:
                 raise InvalidArgument("An event cannot change its provisioned Fiskaly site or environment")
             return existing
+        if request.environment == "LIVE":
+            raise InvalidArgument(LIVE_UNAVAILABLE)
         if await conn.fetchval(
             "select exists(select 1 from tse t join node n on n.id=t.node_id where n.event_node_id=$1)",
             event["id"],
@@ -150,6 +153,8 @@ class FiskalyService(Service[Config]):
             raise NotFound(element_type="fiskaly_provisioning_job", element_id=str(job_id))
         if job.status in {"ready", "running", "queued"}:
             return job
+        if job.environment == "LIVE":
+            raise InvalidArgument(LIVE_UNAVAILABLE)
         if (
             not self.config.fiskaly.management.enabled
             or job.environment not in self.config.fiskaly.management.environments
