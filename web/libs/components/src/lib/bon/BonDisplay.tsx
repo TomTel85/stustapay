@@ -15,7 +15,6 @@ import * as React from "react";
 import { createCurrencyFormatter } from "@stustapay/framework";
 import { useTranslation } from "react-i18next";
 import QRCode from "react-qr-code";
-import LogoSvg from "./stustaculum24_wristband.svg";
 import styles from "./BonDisplay.module.css";
 
 type BonConfig = {
@@ -88,6 +87,7 @@ export interface IBon {
 
 export interface BonProps {
   bon: IBon;
+  bannerImageUrl?: string | null;
 }
 
 const useCurrencyFormatter = (bon: IBon) => {
@@ -290,19 +290,25 @@ const SignatureDetails: React.FC<{ bon: IBon }> = ({ bon: { order } }) => {
   );
 };
 
-export const BonDisplay: React.FC<BonProps> = ({ bon }) => {
+export const BonDisplay: React.FC<BonProps> = ({ bon, bannerImageUrl }) => {
+  const banner = bannerImageUrl?.trim();
+
   return (
-    <>
-      <img src={LogoSvg} width="100%" />
-      <Container>
-        <Stack spacing={3}>
-          <BonHeader bon={bon} />
-          <LineItemTable bon={bon} />
-          <BonTotal bon={bon} />
-          <TaxRateTable bon={bon} />
-          <SignatureDetails bon={bon} />
-        </Stack>
-      </Container>
-    </>
+    <Container sx={{ pt: 2 }}>
+      <Stack spacing={3}>
+        <Box
+          component="img"
+          src={banner || "/favicon.png"}
+          alt={banner ? "" : "TeamFestlichPay"}
+          referrerPolicy="no-referrer"
+          sx={{ alignSelf: "center", maxWidth: "100%", maxHeight: banner ? 180 : 72 }}
+        />
+        <BonHeader bon={bon} />
+        <LineItemTable bon={bon} />
+        <BonTotal bon={bon} />
+        <TaxRateTable bon={bon} />
+        <SignatureDetails bon={bon} />
+      </Stack>
+    </Container>
   );
 };
