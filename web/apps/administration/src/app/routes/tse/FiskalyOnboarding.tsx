@@ -23,6 +23,7 @@ import {
   useListFiskalySitesQuery,
   useRetryFiskalyProvisioningMutation,
   useStartFiskalyProvisioningMutation,
+  useSetFiskalyProvisioningPausedMutation,
 } from "@/api/fiskaly";
 
 const emptySite = (node: NodeSeenByUser): CreateFiskalySite => ({
@@ -53,13 +54,14 @@ export const FiskalyOnboarding: React.FC = () => {
   const [site, setSite] = React.useState<CreateFiskalySite>(() => emptySite(currentNode));
   const [createSite, createSiteState] = useCreateFiskalySiteMutation();
   const [startProvisioning, startState] = useStartFiskalyProvisioningMutation();
+  const [setPaused, pauseState] = useSetFiskalyProvisioningPausedMutation();
   const [retryProvisioning, retryState] = useRetryFiskalyProvisioningMutation();
   const refreshedReadyJobs = React.useRef(new Set<number>());
   const selectedSite = sites.find((candidate) => candidate.id === selectedSiteId);
   const eventNodeId = currentNode.event_node_id ?? (currentNode.event != null ? currentNode.id : null);
   const customerNodes: NodeSeenByUser[] = [];
   const collectCustomerNodes = (node: NodeSeenByUser) => {
-    if (node.id !== 0 && node.event_node_id == null) customerNodes.push(node);
+    if (node.id !== 0 && (node.event_node_id == null || node.id === currentNode.id)) customerNodes.push(node);
     node.children.forEach(collectCustomerNodes);
   };
   collectCustomerNodes(root);
@@ -103,7 +105,12 @@ export const FiskalyOnboarding: React.FC = () => {
     try {
       await startProvisioning({
         nodeId: currentNode.id,
-        newFiskalyProvisioningJob: { site_id: selectedSite.id, event_node_id: eventNodeId, environment: "TEST" },
+        newFiskalyProvisioningJob: {
+          site_id: selectedSite.id,
+          event_node_id: eventNodeId,
+          ...(eventNodeId !== currentNode.id ? { scope_node_id: currentNode.id } : {}),
+          environment: "TEST",
+        },
       }).unwrap();
       await refetchJobs();
     } catch {
@@ -121,6 +128,16 @@ export const FiskalyOnboarding: React.FC = () => {
     }
   };
 
+  const handlePause = async (job: FiskalyProvisioningJob) => {
+    setActionError(false);
+    try {
+      await setPaused({ nodeId: currentNode.id, jobId: job.id, paused: !job.paused }).unwrap();
+      await refetchJobs();
+    } catch {
+      setActionError(true);
+    }
+  };
+
   const changeField = (field: "name" | "operator_name" | "address_line1" | "zip" | "town" | "vat_id") =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
     setSite((current) => ({ ...current, [field]: event.target.value }));
@@ -132,7 +149,7 @@ export const FiskalyOnboarding: React.FC = () => {
     return translated === key ? step : translated;
   };
 
-  const busy = createSiteState.isLoading || startState.isLoading || retryState.isLoading;
+  const busy = createSiteState.isLoading || startState.isLoading || retryState.isLoading || pauseState.isLoading;
   const showActions = canAdminister;
 
   return (
@@ -223,6 +240,12 @@ export const FiskalyOnboarding: React.FC = () => {
                   <Typography sx={{ flex: 1 }}>
                     {job.environment} · {t(`tse.fiskalyOnboarding.status.${job.status}`)} · {translateStep(job.step)}
                   </Typography>
+                  {job.paused && <Typography>{t("tse.fiskalyOnboarding.paused")}</Typography>}
+                  {showActions && job.status === "ready" && (
+                    <Button disabled={busy} onClick={() => void handlePause(job)}>
+                      {t(job.paused ? "tse.fiskalyOnboarding.resume" : "tse.fiskalyOnboarding.pause")}
+                    </Button>
+                  )}
                   {job.last_error && <Alert severity="error" sx={{ py: 0 }}>{job.last_error}</Alert>}
                   {showActions && !jobIsActive(job) && job.status !== "ready" && job.environment === "TEST" && (
                     <Button disabled={busy} onClick={() => void handleRetry(job.id)}>
@@ -230,6 +253,11 @@ export const FiskalyOnboarding: React.FC = () => {
                     </Button>
                   )}
                 </Stack>
+                {(job.month_end_registered_clients ?? 0) > 0 && (
+                  <Alert severity="warning" sx={{ mt: 1 }}>
+                    {t("tse.fiskalyOnboarding.monthEndWarning", { count: job.month_end_registered_clients })}
+                  </Alert>
+                )}
               </Paper>
             ))}
           </Stack>

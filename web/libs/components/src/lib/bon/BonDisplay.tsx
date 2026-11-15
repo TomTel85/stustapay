@@ -74,6 +74,8 @@ type OrderWithTse = {
   tse_time_format?: string | null;
   tse_signature?: string | null;
   tse_public_key?: string | null;
+  tse_serial?: string | null;
+  fiscal_client_serial?: string | null;
   node_id: number;
   tse_qr_code_text: string | null;
 };
@@ -230,10 +232,16 @@ const SignatureDetails: React.FC<{ bon: IBon }> = ({ bon: { order } }) => {
             </TableRow>
             <TableRow>
               <TableCell>{t("tillSerialNumber")}</TableCell>
-              <TableCell>{order.till_id}</TableCell>
+              <TableCell>{order.fiscal_client_serial ?? order.till_id}</TableCell>
             </TableRow>
             {order.signature_status === "done" ? (
               <>
+                {order.tse_serial && (
+                  <TableRow>
+                    <TableCell>{t("tseSerialNumber")}</TableCell>
+                    <TableCell>{order.tse_serial}</TableCell>
+                  </TableRow>
+                )}
                 <TableRow>
                   <TableCell>{t("transactionId")}</TableCell>
                   <TableCell>{order.tse_transaction}</TableCell>
@@ -274,6 +282,9 @@ const SignatureDetails: React.FC<{ bon: IBon }> = ({ bon: { order } }) => {
                   {order.signature_status === "new" || order.signature_status === "pending"
                     ? t("tsePending")
                     : t("tseFailed")}
+                  {order.signature_status === "failure" && order.result_message?.startsWith("TSE unavailable:") && (
+                    <Typography display="block">{t("tseUnavailable")}</Typography>
+                  )}
                 </TableCell>
               </TableRow>
             )}

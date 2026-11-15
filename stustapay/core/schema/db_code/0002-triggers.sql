@@ -434,12 +434,27 @@ begin
     end if;
 
     -- insert a new tse signing request and notify for it
-    insert into tse_signature(
-        id
-    )
-    values (
-        NEW.id
-    );
+    insert into tse_signature(id, signature_status, result_message, fiskaly_site_id)
+    select NEW.id, case when reason is null then 'new' else 'failure' end::tse_signature_status, reason, site_id
+    from (
+        select case
+                   when exists(select 1 from fiskaly_checkout x where x.sale_uuid=NEW.uuid and x.till_id=t.id
+                           and x.tse_id=t.tse_id and x.start_attempted_at is not null and not x.abort_requested)
+                       then null
+                   when not m.active then 'TSE client is not active for this deployment'
+                   when outage.reason is not null then outage.reason
+                   when j.id is not null and (not coalesce(c.registered,false) or t.tse_id is null)
+                       then 'TSE unavailable: no registered client at booking'
+               end as reason, j.site_id
+        from till t
+        left join fiskaly_managed_till m on m.till_id=t.id
+        left join fiskaly_provisioning_job j on j.id=m.job_id
+        left join fiskaly_client_binding b on b.till_id=t.id and b.tse_id=t.tse_id
+        left join fiskaly_client c on c.id=b.client_id
+        left join fiskaly_till_outage outage on outage.till_id=t.id and outage.tse_id=coalesce(t.tse_id,m.tse_id)
+            and outage.ended_at is null
+        where t.id=NEW.till_id
+    ) state;
     perform pg_notify('tse_signature', NEW.id::text);
 
     -- send general notifications, used e.g. for instant UI updates
@@ -462,8 +477,13 @@ execute function new_order_added();
 create or replace function tse_signature_update_trigger_procedure() returns trigger as
 $$
 begin
+    if NEW.fiskaly_site_id is distinct from OLD.fiskaly_site_id then
+        raise exception 'Persisted Fiskaly taxpayer identity is immutable';
+    end if;
     if OLD.fiskaly_transaction_id is not null and
-       (NEW.fiskaly_transaction_id is distinct from OLD.fiskaly_transaction_id or
+       ((OLD.fiskaly_start_attempted and not NEW.fiskaly_start_attempted) or
+        NEW.fiskaly_checkout is distinct from OLD.fiskaly_checkout or
+        NEW.fiskaly_transaction_id is distinct from OLD.fiskaly_transaction_id or
         NEW.fiskaly_client_id is distinct from OLD.fiskaly_client_id or
         NEW.fiskaly_request is distinct from OLD.fiskaly_request or
         NEW.tse_id is distinct from OLD.tse_id) then
@@ -486,12 +506,8 @@ execute function tse_signature_update_trigger_procedure();
 create or replace function tse_signature_finished_trigger_procedure() returns trigger as
 $$
 begin
-    insert into bon(
-        id
-    )
-    values (
-        NEW.id
-    );
+    insert into bon(id) values (NEW.id)
+    on conflict(id) do update set generated_at=null;
     perform pg_notify('bon', json_build_object('bon_id', NEW.id)::text);
 
     return NEW;
@@ -499,7 +515,13 @@ end;
 $$ language plpgsql
     set search_path = "$user", public;
 
-drop trigger if exists tse_signature_finished_trigger on till;
+drop trigger if exists tse_signature_finished_trigger on tse_signature;
+drop trigger if exists tse_signature_outage_receipt_trigger on tse_signature;
+create trigger tse_signature_outage_receipt_trigger
+    after insert on tse_signature
+    for each row when (NEW.signature_status = 'failure')
+execute function tse_signature_finished_trigger_procedure();
+
 create trigger tse_signature_finished_trigger
     after update of signature_status
     on tse_signature

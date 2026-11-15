@@ -1,4 +1,5 @@
 import { Tse, selectTseAll, useListTsesQuery } from "@/api";
+import { FiskalyOnboarding } from "./FiskalyOnboarding";
 import { TseRoutes } from "@/app/routes";
 import { ListLayout } from "@/components";
 import { useCurrentNode, useCurrentUserHasPrivilege, useCurrentUserHasPrivilegeAtNode, useRenderNode } from "@/hooks";
@@ -90,6 +91,7 @@ export const TseList: React.FC = () => {
 
   return (
     <ListLayout title={t("tse.tses")} routes={TseRoutes}>
+      <FiskalyOnboarding />
       <DataGrid
         autoHeight
         rows={tses ?? []}

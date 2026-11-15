@@ -2,7 +2,7 @@ import asyncio
 import time
 from datetime import timezone
 from email.utils import parsedate_to_datetime
-from typing import Any
+from typing import Any, BinaryIO
 
 import aiohttp
 
@@ -88,7 +88,8 @@ class FiskalyClient:
         token: str | None = None,
         payload: dict[str, Any] | None = None,
         request_timeout: float | None = None,
-    ) -> dict[str, Any]:
+        download: BinaryIO | None = None,
+    ) -> Any:
         if self._session is None:
             raise FiskalyError("Fiskaly client is not open")
         headers = {"Authorization": f"Bearer {token}"} if token else {}
@@ -103,7 +104,11 @@ class FiskalyClient:
                     json=payload,
                     headers=headers,
                     allow_redirects=False,
-                    timeout=aiohttp.ClientTimeout(total=request_timeout or self.config.request_timeout),
+                    timeout=aiohttp.ClientTimeout(
+                        total=None if download is not None else request_timeout or self.config.request_timeout,
+                        sock_connect=self.config.request_timeout,
+                        sock_read=30 if download is not None else None,
+                    ),
                 ) as response:
                     if not 200 <= response.status < 300:
                         retry_after = _retry_delay(response.headers.get("Retry-After"))
@@ -111,6 +116,10 @@ class FiskalyClient:
                             retry_after = max(2, retry_after)
                             self._retry_at = max(self._retry_at, time.monotonic() + retry_after)
                         raise FiskalyHTTPError(response.status, retry_after)
+                    if download is not None:
+                        async for chunk in response.content.iter_chunked(64 * 1024):
+                            download.write(chunk)
+                        return None
                     data = await response.json()
         except (aiohttp.ClientError, asyncio.TimeoutError):
             raise FiskalyTransportError("Fiskaly request failed; remote result may be unknown") from None
@@ -170,3 +179,15 @@ class FiskalyClient:
                 raise
         token = await self._authenticate(rejected_token=token)
         return await self._send(method, path, token=token, payload=payload, request_timeout=request_timeout)
+
+    async def download_export(self, tss_id: str, export_id: str, destination: BinaryIO) -> None:
+        path = f"tss/{tss_id}/export/{export_id}/file"
+        token = await self._authenticate()
+        try:
+            await self._send("GET", path, token=token, download=destination)
+            return
+        except FiskalyHTTPError as exc:
+            if exc.status != 401:
+                raise
+        token = await self._authenticate(rejected_token=token)
+        await self._send("GET", path, token=token, download=destination)

@@ -48,6 +48,12 @@ ORDERTYPE_TO_KUNDETYP = {
 }
 
 
+def _split_tse_certificate(certificate: str) -> list[str]:
+    if len(certificate) > 5000:
+        raise ValueError(f"TSE certificate is too long: {len(certificate)} characters (maximum 5000)")
+    return [certificate[start : start + 1000] for start in range(0, len(certificate), 1000)]
+
+
 class BNU:
     Brutto = Decimal(0)
     Netto = Decimal(0)
@@ -55,8 +61,21 @@ class BNU:
 
 
 class Generator:
-    def __init__(self, config: Config, event_node_id: int, filename: str, xml: str, dtd: str, simulate: bool):
+    def __init__(
+        self,
+        config: Config,
+        event_node_id: int,
+        filename: str,
+        xml: str,
+        dtd: str,
+        simulate: bool,
+        *,
+        taxpayer_id: int | None = None,
+        till_id: int | None = None,
+    ):
         self.node_id = event_node_id
+        self.taxpayer_id = taxpayer_id
+        self.till_id = till_id
         self.config = config
         self.filename = filename
         self.xml = xml  # path to index.xml file
@@ -76,31 +95,55 @@ class Generator:
             es.push_async_callback(db_pool.close)
             conn: Connection = await es.enter_async_context(db_pool.acquire())
             node = await fetch_node(conn=conn, node_id=self.node_id)
-            assert node is not None
-            event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=self.node_id)
+            if node is None:
+                raise ValueError("Unknown DSFinV-K export node")
 
-            # extract address information
-            bon_addr = event_settings.bon_address
-            if "\n" in bon_addr:
-                self.Street = bon_addr.split("\n")[0]
-                self.PLZ = bon_addr.split("\n")[1].split(" ")[0]
-                self.City = bon_addr.split("\n")[1].split(" ")[1]
-            else:
-                self.Street = bon_addr.split(" ")[0] + " " + bon_addr.split(" ")[1]
-                self.PLZ = bon_addr.split(" ")[2]
-                self.City = bon_addr.split(" ")[3]
-
-            # iteriere über alle Kassen Z_KASSE_ID (= KASSE_SERIENNR bei uns)
-            # alle Kassen mit einer order (und damit auch mit einer TSE und die deshalb ans Finanzamt gemeldet wurden)
-            for row in await conn.fetch(
-                "select distinct o.till_id "
-                "from ordr o "
-                "   join till t on o.till_id = t.id "
-                "   join node n on t.node_id = n.id "
-                "where n.id = $1 or $1 = any(n.parent_ids) "
-                "order by o.till_id",
+            rows = await conn.fetch(
+                "select distinct t.id as till_id,n.event_node_id,s.id as site_id,s.operator_name,"
+                "s.address_line1,s.zip,s.town,s.vat_id "
+                "from till t join node n on n.id=t.node_id join ordr o on o.till_id=t.id "
+                "join tse_signature sig on sig.id=o.id left join fiskaly_site s on s.id=sig.fiskaly_site_id "
+                "where (n.id=$1 or $1=any(n.parent_ids)) "
+                "and ($2::bigint is null or t.id=$2) "
+                "order by t.id",
                 node.id,
-            ):
+                self.till_id,
+            )
+            if len({row["till_id"] for row in rows}) != len(rows):
+                raise ValueError(
+                    "A till contains records from multiple fiscal owners; reconcile its history before export"
+                )
+            taxpayers = {row["site_id"] for row in rows}
+            if self.taxpayer_id is None and len(taxpayers) > 1:
+                raise ValueError("The export spans multiple fiscal owners; select a taxpayer or till")
+            if self.taxpayer_id is not None:
+                rows = [row for row in rows if row["site_id"] == self.taxpayer_id]
+                if not rows:
+                    raise ValueError("No transactions for this taxpayer in the requested scope")
+            if self.till_id is not None and not rows:
+                raise ValueError("No transactions for this till in the requested scope")
+
+            for row in rows:
+                event_node_id = row["event_node_id"]
+                if event_node_id is None:
+                    raise ValueError(f"Till {row['till_id']} is not assigned to an event")
+                event_settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=event_node_id)
+                event_node = await fetch_node(conn=conn, node_id=event_node_id)
+                assert event_node is not None
+                till_settings = event_settings
+                if row["site_id"] is not None:
+                    self.Street, self.PLZ, self.City = row["address_line1"], row["zip"], row["town"]
+                    till_settings = event_settings.model_copy(
+                        update={"bon_issuer": row["operator_name"], "ust_id": row["vat_id"] or ""}
+                    )
+                else:
+                    address = event_settings.bon_address
+                    if "\n" in address:
+                        self.Street, postal_address = address.split("\n", 1)
+                    else:
+                        self.Street, postcode, city = address.rsplit(maxsplit=2)
+                        postal_address = f"{postcode} {city}"
+                    self.PLZ, self.City = postal_address.split(maxsplit=1)
                 Z_KASSE_ID: int = row["till_id"]
 
                 # iteriere über Kassenabschlüsse Z_NR dieser Kassen
@@ -117,14 +160,14 @@ class Generator:
 
                     # sammle Einzelaufzeichnungsmodul
                     await self.einzelaufzeichnungsmodul(
-                        conn, Z_NR, Z_ERSTELLUNG, Z_KASSE_ID, event_settings=event_settings
+                        conn, Z_NR, Z_ERSTELLUNG, Z_KASSE_ID, event_settings=till_settings
                     )
                     # sammle Stammdatenmodul
                     await self.stammdatenmodul(
-                        conn, Z_NR, Z_ERSTELLUNG, Z_KASSE_ID, node=node, event_settings=event_settings
+                        conn, Z_NR, Z_ERSTELLUNG, Z_KASSE_ID, node=event_node, event_settings=till_settings
                     )
                     # sammle Kassenabschlussmodul
-                    await self.kassenabschlussmodul(conn, Z_NR, Z_ERSTELLUNG, Z_KASSE_ID, event_settings=event_settings)
+                    await self.kassenabschlussmodul(conn, Z_NR, Z_ERSTELLUNG, Z_KASSE_ID, event_settings=till_settings)
 
             self.finalize()  # schreibe die Datei
             LOGGER.info(f"Duration: {time.monotonic() - self.starttime:.3f}s")
@@ -154,6 +197,7 @@ class Generator:
                 ordr.id,
                 ordr.payment_method,
                 ordr.cash_register_id,
+                ordr.booked_at,
                 ordr.cancels_order,
                 tse_signature.tse_start,
                 tse_signature.tse_end,
@@ -207,7 +251,8 @@ class Generator:
             b.BON_ID = row["id"]
 
             if row["signature_status"] == "failure":
-                b.TSE_TA_FEHLER = f"TSE Fehler: {row['result_message']}"  # TODO Fehlerbehandlung
+                b.TSE_TA_FEHLER = f"TSE Fehler: {row['result_message']}"
+                a.BON_START = a.BON_ENDE = row["booked_at"].astimezone()
             else:
                 b.TSE_ID = int(row["tse_id"])
                 b.TSE_TANR = int(row["tse_transaction"])
@@ -447,7 +492,19 @@ class Generator:
         a.Z_NR = Z_NR
         a.KASSE_BRAND = "TeamFestlichPay"
         a.KASSE_MODELL = "v0"  # TODO version?
-        a.KASSE_SERIENNR = str(Z_KASSE_ID)
+        history_tse_id = await conn.fetchval(
+            "select tse_id from till_tse_history where till_id=$1 and what='register' and z_nr<=$2 "
+            "order by z_nr desc, date desc limit 1",
+            str(Z_KASSE_ID),
+            Z_NR,
+        )
+        fiscal_serial = await conn.fetchval(
+            "select c.serial from fiskaly_client_binding b join fiskaly_client c on c.id=b.client_id "
+            "where b.till_id=$1 and b.tse_id=$2",
+            Z_KASSE_ID,
+            history_tse_id,
+        )
+        a.KASSE_SERIENNR = fiscal_serial or str(Z_KASSE_ID)
         a.KASSE_SW_BRAND = "TeamFestlichPay Enterprise Payment Solutions Festival Edition Pro"
         a.KASSE_SW_VERSION = "v0"  # TODO version?
         a.KASSE_BASISWAEH_CODE = event_settings.currency_identifier
@@ -471,130 +528,37 @@ class Generator:
         ### \vat.csv ###
 
         ### tse.csv ###
-        a = Stamm_TSE()
-        a.Z_KASSE_ID = Z_KASSE_ID
-        a.Z_ERSTELLUNG = Z_ERSTELLUNG
-        a.Z_NR = Z_NR
-
-        # Prüfe, ob diese Kasse verschiedene TSEs hatte, wenn nicht, dann müssen wir nichts weiter tun. Das sollte der Normalfall sein:
-        till_history = await conn.fetch(
-            "select what, tse_id, z_nr, date from till_tse_history where till_id = $1 order by z_nr", str(Z_KASSE_ID)
+        signed_tse_rows = await conn.fetch(
+            "select distinct s.tse_id from tse_signature s join ordr o on o.id=s.id "
+            "where o.till_id=$1 and o.z_nr=$2 and s.signature_status='done' order by s.tse_id",
+            Z_KASSE_ID,
+            Z_NR,
         )
-        tses = list()
-        for entry in till_history:
-            if entry["what"] == "register":
-                tses.append(entry["tse_id"])
-        if len(tses) == 1:
-            # Fall, dass wir nur eine TSE für diese Kasse haben: Einfach
+        tse_ids = [row["tse_id"] for row in signed_tse_rows]
+        if not tse_ids and history_tse_id is not None:
+            tse_ids.append(history_tse_id)
+        for tse_id in tse_ids:
             row = await conn.fetchrow(
-                "select tse.id, tse.serial, tse.hashalgo, tse.time_format, tse.process_data_encoding, tse.public_key, tse.certificate "
-                "from till join tse on till.tse_id = tse.id where till.id = $1",
-                Z_KASSE_ID,
+                "select id,serial,hashalgo,time_format,process_data_encoding,public_key,certificate from tse where id=$1",
+                tse_id,
             )
+            assert row is not None
+            self.add_tse_master_data(Z_KASSE_ID, Z_ERSTELLUNG, Z_NR, row)
 
-            # oh gott, es gibt noch einen Fall: eine Kasse wird von der defekten TSE geschoben, aber hat noch keine Buchung gemacht und somit noch keine neue TSE erhalten -> das Feld tse_id in till ist Null
-            # damit schlägt natürlich der join fehl und es kommt None zurück.
-            if row is None:
-                # jetze müssen wir in der history nachschauen, auf welcher TSE diese Kasse registriert war, kann natürlich auch wieder mehrere geben, ahrg
-                # dazu kopieren wir jetzt einfach den code von unten
-                kassenschlussgrenzen = await conn.fetch(
-                    "select z_nr from till_tse_history where till_id = $1 and what = 'register' order by z_nr",
-                    str(Z_KASSE_ID),
-                )
-                aeltereschluesse = list()
-
-                for schluss in kassenschlussgrenzen:
-                    # ist der Kassenschluss bei dem die Kasse auf die TSE registriert wurde älter und damit kleiner gleich als der aktuel abgefragte Z_NR?
-                    if Z_NR >= schluss["z_nr"]:
-                        aeltereschluesse.append(schluss["z_nr"])
-                # nimm jetzt den größten weil ältesten Kassenschluss in der Liste und hole die TSE
-                aeltereschluesse.sort(reverse=True)
-                aktuelle_tse_id = await conn.fetchval(
-                    "select tse_id from till_tse_history where till_id = $1 and what = 'register' and z_nr = $2",
-                    str(Z_KASSE_ID),
-                    aeltereschluesse[0],
-                )
-                print(
-                    f"Kasse {Z_KASSE_ID} hat beim Abschluss {Z_NR} die TSE: {aktuelle_tse_id} und wurde bisher noch nicht auf eine neue TSE registriert"
-                )
-
-                # und jetzt die stammdaten dieser TSE
-                row = await conn.fetchrow(
-                    "select tse.id, tse.serial, tse.hashalgo, tse.time_format, tse.process_data_encoding, "
-                    "   tse.public_key, tse.certificate "
-                    "from tse where id = $1",
-                    aktuelle_tse_id,
-                )
-
-        elif len(tses) == 0:
-            # An unsigned operation without any TSE assignment still belongs in
-            # the export; there is no TSE master record to fabricate for this till.
-            return
-        else:
-            print(f"KASSE {Z_KASSE_ID} wurde bei mehreren TSEs registriert, nämlich bei {tses}")
-            # Fall, dass bei dieser Kasse die TSE gewechselt wurde: Kompliziert :(
-            # Erstens: Herausfinden, welche TSE für diesen Kassenschluss zuständig war:
-            # ich habe mehrere Einträge, davon muss ich den mit dem kleinsten z_nr nehmen und vergleichen, ob der größer gleich dem aktuellen z_nr ist.
-            kassenschlussgrenzen = await conn.fetch(
-                "select z_nr from till_tse_history where till_id = $1 and what = 'register' order by z_nr",
-                str(Z_KASSE_ID),
-            )
-            aeltereschluesse = list()
-
-            for schluss in kassenschlussgrenzen:
-                # ist der Kassenschluss bei dem die Kasse auf die TSE registriert wurde älter und damit kleiner gleich als der aktuel abgefragte Z_NR?
-                if Z_NR >= schluss["z_nr"]:
-                    aeltereschluesse.append(schluss["z_nr"])
-            # nimm jetzt den größten weil ältesten Kassenschluss in der Liste und hole die TSE
-            aeltereschluesse.sort(reverse=True)
-            aktuelle_tse_id = await conn.fetchval(
-                "select tse_id from till_tse_history where till_id = $1 and what = 'register' and z_nr = $2",
-                str(Z_KASSE_ID),
-                aeltereschluesse[0],
-            )
-            print(f"Kasse {Z_KASSE_ID} hat beim Abschluss {Z_NR} die TSE: {aktuelle_tse_id}")
-
-            # und jetzt die stammdaten dieser TSE
-            row = await conn.fetchrow(
-                "select tse.id, tse.serial, tse.hashalgo, tse.time_format, tse.process_data_encoding, "
-                "   tse.public_key, tse.certificate "
-                "from tse where id = $1",
-                aktuelle_tse_id,
-            )
-
-        # LOGGER.info(row)
-        # LOGGER.info(f'Z_KASSE_ID: {Z_KASSE_ID}, Z_NR: {Z_NR}')
+    def add_tse_master_data(self, till_id: int, closing_time: datetime, closing_number: int, row):
+        a = Stamm_TSE()
+        a.Z_KASSE_ID = till_id
+        a.Z_ERSTELLUNG = closing_time
+        a.Z_NR = closing_number
         a.TSE_ID = int(row["id"])
         a.TSE_SERIAL = row["serial"]
         a.TSE_SIG_ALGO = row["hashalgo"]
         a.TSE_ZEITFORMAT = row["time_format"]
         a.TSE_PD_ENCODING = row["process_data_encoding"]
         a.TSE_PUBLIC_KEY = row["public_key"]
-        if len(row["certificate"]) < 1001:
-            a.TSE_ZERTIFIKAT_I = row["certificate"]
-        elif 1000 < len(row["certificate"]) < 2001:
-            a.TSE_ZERTIFIKAT_I = row["certificate"][0:1000]
-            a.TSE_ZERTIFIKAT_II = row["certificate"][1001:]
-        elif 2001 < len(row["certificate"]) < 3001:
-            a.TSE_ZERTIFIKAT_I = row["certificate"][0:1000]
-            a.TSE_ZERTIFIKAT_II = row["certificate"][1000:2001]
-            a.TSE_ZERTIFIKAT_III = row["certificate"][2000:3001]
-        elif 3001 < len(row["certificate"]) < 4001:
-            a.TSE_ZERTIFIKAT_I = row["certificate"][0:1000]
-            a.TSE_ZERTIFIKAT_II = row["certificate"][1000:2001]
-            a.TSE_ZERTIFIKAT_III = row["certificate"][2000:3001]
-            a.TSE_ZERTIFIKAT_IV = row["certificate"][3000:4001]
-        elif 4001 < len(row["certificate"]) < 5001:
-            a.TSE_ZERTIFIKAT_I = row["certificate"][0:1000]
-            a.TSE_ZERTIFIKAT_II = row["certificate"][1000:2001]
-            a.TSE_ZERTIFIKAT_III = row["certificate"][2000:3001]
-            a.TSE_ZERTIFIKAT_IV = row["certificate"][3000:4001]
-            a.TSE_ZERTIFIKAT_V = row["certificate"][4000:5001]
-        else:
-            LOGGER.error(
-                f"Zertifikat zu lang. Länge: {len(row['tse_certificate'])} Zeichen. Maximal unterstützt: 5000 Zeichen"
-            )
-            raise NotImplementedError
+        certificate_fields = ("I", "II", "III", "IV", "V")
+        for suffix, part in zip(certificate_fields, _split_tse_certificate(row["certificate"])):
+            setattr(a, f"TSE_ZERTIFIKAT_{suffix}", part)
 
         self.c.add(a)
         ### \tse.csv ###

@@ -155,7 +155,7 @@ async def cancel_pending_sale(
     token: CurrentAuthToken,
     order_service: ContextOrderService,
 ) -> None:
-    await order_service.cancel_pending_order(token=token, order_uuid=payload.order_uuid)
+    await order_service.cancel_pending_order(token=token, order_uuid=payload.order_uuid, allow_checkout=True)
 
 
 @router.post("/check-ticket-scan", summary="check if a ticket sale is valid", response_model=TicketScanResult)

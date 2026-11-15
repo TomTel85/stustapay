@@ -177,7 +177,7 @@ fun SaleSelection(
                         offlineMode = offline,
                         onAbort = {
                             scope.launch {
-                                viewModel.clearSale()
+                                viewModel.clearSale(abandoned = true)
                             }
                         },
                         onSubmitSsp = {
@@ -248,7 +248,7 @@ fun SaleSelection(
                             offlineMode = offline,
                             onAbort = {
                                 scope.launch {
-                                    viewModel.clearSale()
+                                    viewModel.clearSale(abandoned = true)
                                 }
                             },
                             onSubmitSsp = {

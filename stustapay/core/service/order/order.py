@@ -639,7 +639,21 @@ class OrderService(OfflineOrderMixin, Service[Config]):
 
     @with_db_transaction(read_only=False)
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
-    async def cancel_pending_order(self, *, conn: Connection, current_till: Till, order_uuid: UUID) -> None:
+    async def cancel_pending_order(
+        self,
+        *,
+        conn: Connection,
+        current_till: Till,
+        current_terminal: CurrentTerminal,
+        order_uuid: UUID,
+        allow_checkout: bool = False,
+    ) -> None:
+        await conn.execute("select pg_advisory_xact_lock(hashtextextended($1,0))", str(order_uuid))
+        if allow_checkout and not await conn.fetchval(
+            "select exists(select 1 from pending_sumup_order where uuid=$1)", order_uuid
+        ):
+            await self._abort_fiskaly_checkout(conn, current_terminal.id, current_till.id, order_uuid)
+            return
         pending_order = await fetch_pending_order(conn=conn, uuid=order_uuid)
         if pending_order.till_id != current_till.id:
             raise InvalidArgument("Cannot cancel an order for a different till")
@@ -656,6 +670,21 @@ class OrderService(OfflineOrderMixin, Service[Config]):
             "update pending_sumup_order set status = 'cancelled' where uuid = $1 and status = 'pending'",
             pending_order.uuid,
         )
+
+        if allow_checkout:
+            await self._abort_fiskaly_checkout(conn, current_terminal.id, current_till.id, order_uuid)
+
+    @staticmethod
+    async def _abort_fiskaly_checkout(conn: Connection, terminal_id: int, till_id: int, order_uuid: UUID):
+        await conn.execute(
+            "update fiskaly_checkout set abort_requested=true,next_attempt=now() "
+            "where sale_uuid=$1 and terminal_id=$2 and till_id=$3 and not finished "
+            "and not exists(select 1 from ordr where uuid=$1)",
+            order_uuid,
+            terminal_id,
+            till_id,
+        )
+        await conn.execute("select pg_notify('tse_signature',$1)", str(order_uuid))
 
     async def _check_sale(
         self,
@@ -781,9 +810,11 @@ class OrderService(OfflineOrderMixin, Service[Config]):
 
         return order
 
-    @with_db_transaction(read_only=True)
+    @with_db_transaction
     @requires_terminal(user_privileges=[Privilege.can_book_orders])
-    async def check_sale(self, *, conn: Connection, current_till: Till, node: Node, new_sale: NewSale) -> PendingSale:
+    async def check_sale(
+        self, *, conn: Connection, current_till: Till, current_terminal: CurrentTerminal, node: Node, new_sale: NewSale
+    ) -> PendingSale:
         """
         prepare the given order: checks all requirements.
         To finish the order, book_order is used.
@@ -807,6 +838,22 @@ class OrderService(OfflineOrderMixin, Service[Config]):
         pending_sale = await self._check_sale(
             conn=conn, event_settings=event_settings, node=node, till=current_till, new_sale=internal_new_sale
         )
+        if current_till.tse_id is not None:
+            await conn.execute(
+                "insert into fiskaly_checkout(sale_uuid,till_id,terminal_id,tse_id,client_id,transaction_id) "
+                "select $1,$2,$3,b.tse_id,b.client_id,gen_random_uuid() from fiskaly_client_binding b "
+                "join tse t on t.id=b.tse_id join fiskaly_client c on c.id=b.client_id "
+                "where b.till_id=$2 and b.tse_id=$4 and b.registered and t.status='active' "
+                "and (t.fiskaly_job_id is null or (c.registered and exists("
+                "select 1 from fiskaly_managed_till m where m.till_id=b.till_id and m.tse_id=b.tse_id and m.active))) "
+                "and not exists(select 1 from ordr where uuid=$1) "
+                "on conflict(sale_uuid) do nothing",
+                new_sale.uuid,
+                current_till.id,
+                current_terminal.id,
+                current_till.tse_id,
+            )
+            await conn.execute("select pg_notify('tse_signature',$1)", str(new_sale.uuid))
         return PendingSale(
             uuid=pending_sale.uuid,
             old_balance=pending_sale.old_balance,

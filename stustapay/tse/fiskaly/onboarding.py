@@ -28,7 +28,9 @@ def credential_scope(site_id: int, environment: str) -> str:
     return f"fiskaly:site:{site_id}:{environment}"
 
 
-async def resolve_managed_config(conn: Connection, config: Config, job_id: int) -> FiskalyConfig:
+async def resolve_managed_config(
+    conn: Connection, config: Config, job_id: int, *, archive: bool = False
+) -> FiskalyConfig:
     management = config.fiskaly.management
     if not management.enabled or management.secret_key is None:
         raise FiskalyError("Fiskaly management configuration is unavailable")
@@ -42,15 +44,17 @@ async def resolve_managed_config(conn: Connection, config: Config, job_id: int) 
     if row is None or not row["credential_ciphertext"] or not row["pin_ciphertext"]:
         raise FiskalyError("Fiskaly managed credentials are not ready")
     environment = row["environment"]
-    if environment == "LIVE":
+    if environment == "LIVE" and not archive:
         raise FiskalyError(LIVE_UNAVAILABLE)
     provider = management.environments.get(environment)
     if provider is None or provider.group_id != row["group_id"]:
         raise FiskalyError("Fiskaly managed site belongs to a different provider group")
     allowed = await conn.fetchval(
-        "select exists(select 1 from node where id=$1 and not read_only and $2=any(parent_ids || id))",
-        row["event_node_id"],
+        "select exists(select 1 from node n join node c on c.id=$2 where n.id=$1 "
+        "and ($3 or not c.read_only) and c.id=any(n.parent_ids || n.id))",
+        row["scope_node_id"],
         row["customer_node_id"],
+        archive,
     )
     if not allowed:
         raise FiskalyError("Fiskaly managed event no longer belongs to its customer")
@@ -120,21 +124,31 @@ class FiskalyOnboardingRunner:
             if not management.enabled or credentials is None:
                 raise OnboardingActionRequired("Fiskaly management environment is not configured")
             valid = await conn.fetchval(
-                "select exists(select 1 from node n join fiskaly_site s on s.id=$2 "
-                "join node c on c.id=s.customer_node_id where n.id=$1 and n.event_node_id=n.id "
-                "and not n.read_only and not c.read_only and s.customer_node_id=any(n.parent_ids || n.id))",
+                "select exists(select 1 from fiskaly_site s "
+                "join node c on c.id=s.customer_node_id join node scope on scope.id=$3 "
+                "join node n on n.id=scope.event_node_id where s.id=$2 and n.id=$1 and n.event_node_id=n.id "
+                "and not scope.read_only and not n.read_only and not c.read_only "
+                "and c.id=any(scope.parent_ids || scope.id))",
                 job["event_node_id"],
                 job["site_id"],
+                job["scope_node_id"],
             )
             if not valid:
                 raise OnboardingActionRequired("Fiskaly onboarding event is read-only or outside its customer scope")
             active_count = await conn.fetchval(
-                "select count(*) from fiskaly_provisioning_job j join tse t on t.id=j.tse_id "
-                "join node n on n.id=j.event_node_id where j.status='ready' and not n.read_only "
-                "and t.status<>'disabled' and j.id<>$1",
-                job_id,
+                "select count(distinct j.tse_id) from fiskaly_provisioning_job j join tse t on t.id=j.tse_id "
+                "where j.status='ready' and t.status<>'disabled' "
+                "and (j.site_id<>$1 or j.environment<>$2)",
+                job["site_id"],
+                job["environment"],
             )
-            if active_count >= management.max_active_tses:
+            already_has_tse = await conn.fetchval(
+                "select exists(select 1 from fiskaly_provisioning_job j join tse t on t.id=j.tse_id "
+                "where j.site_id=$1 and j.environment=$2 and j.status='ready' and t.status<>'disabled')",
+                job["site_id"],
+                job["environment"],
+            )
+            if not already_has_tse and active_count >= management.max_active_tses:
                 raise OnboardingActionRequired("Fiskaly controller active-TSE capacity reached")
             async with FiskalyManagementClient(credentials) as client:
                 await self.step(conn, job_id, "organization")
@@ -150,10 +164,21 @@ class FiskalyOnboardingRunner:
                 await self.ensure_credentials(conn, job, client, organization_id)
             await self.step(conn, job_id, "tse")
             await self.ensure_tse(conn, job)
-            cloud = await resolve_managed_config(conn, self.config, job_id)
-            tse = await conn.fetch_one(Tse, "select * from tse where fiskaly_job_id=$1", job_id)
+            tse = await conn.fetch_one(
+                Tse, "select t.* from tse t join fiskaly_provisioning_job j on j.tse_id=t.id where j.id=$1", job_id
+            )
+            assert tse.fiskaly_job_id is not None
+            cloud = await resolve_managed_config(conn, self.config, tse.fiskaly_job_id)
             lock = f"stustapay:fiskaly:{tse.id}"
             if not await conn.fetchval("select pg_try_advisory_lock(hashtextextended($1,0))", lock):
+                if tse.fiskaly_job_id != job_id:
+                    await self.step(conn, job_id, "tse_and_clients")
+                    await conn.execute(
+                        "update fiskaly_provisioning_job set status='retry_wait', "
+                        "next_attempt_at=now()+interval '30 seconds' where id=$1",
+                        job_id,
+                    )
+                    return
                 raise FiskalyTransportError("Fiskaly TSE is currently owned by another controller")
             try:
                 worker = FiskalyWorker(tse, cloud)
@@ -162,6 +187,12 @@ class FiskalyOnboardingRunner:
                 async with FiskalyClient(cloud) as sign_client:
                     await self.step(conn, job_id, "tse_and_clients")
                     await worker.configure(conn, FiskalySigner(sign_client))
+                    if await conn.fetchval(
+                        "select exists(select 1 from fiskaly_managed_till m join till t on t.id=m.till_id "
+                        "where m.job_id=$1 and m.active and t.tse_id is distinct from m.tse_id)",
+                        job_id,
+                    ):
+                        raise OnboardingActionRequired("Some tills in this deployment have no registered client")
             finally:
                 await conn.execute("select pg_advisory_unlock(hashtextextended($1,0))", lock)
             await conn.execute(
@@ -366,13 +397,26 @@ class FiskalyOnboardingRunner:
             assert current is not None
             if current["tse_id"] is not None:
                 return
+            previous = await conn.fetch(
+                "select distinct j.tse_id from fiskaly_provisioning_job j "
+                "join tse t on t.id=j.tse_id where j.site_id=$1 and j.environment=$2 and t.status<>'disabled'",
+                job["site_id"],
+                job["environment"],
+            )
+            if len(previous) > 1:
+                raise OnboardingActionRequired("Multiple TSEs already exist for this taxpayer; reconcile them first")
+            if previous:
+                await conn.execute(
+                    "update fiskaly_provisioning_job set tse_id=$2 where id=$1", job["id"], previous[0]["tse_id"]
+                )
+                return
             # Persist the PIN and TSS identity before any TSS operation.
             ciphertext = self.vault.encrypt(f"fiskaly:job:{job['id']}:pin", {"admin_pin": secrets.token_urlsafe(24)})
             tse_id = await conn.fetchval(
                 "insert into tse(node_id,name,serial,ws_url,ws_timeout,password,type,status,fiskaly_job_id,"
                 "fiskaly_tss_id) values($1,$2,'','',5,'','fiskaly','new',$3,$4) returning id",
-                job["event_node_id"],
-                f"Fiskaly {job['environment']} Event {job['event_node_id']}",
+                await conn.fetchval("select customer_node_id from fiskaly_site where id=$1", job["site_id"]),
+                f"Fiskaly {job['environment']} · {job['site_id']}",
                 job["id"],
                 uuid4(),
             )

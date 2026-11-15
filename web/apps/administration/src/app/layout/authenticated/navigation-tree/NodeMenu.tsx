@@ -155,7 +155,6 @@ export const nodeMenuEntryDefinitions: NodeMenuItem[] = [
     label: i18n.t("tse.tses"),
     icon: ShieldIcon,
     requiresEvent: true,
-    requiresOneOfObjectType: ["tse"],
     requiredPrivileges: ["node_administration"],
   },
 ];

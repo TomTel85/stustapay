@@ -13,7 +13,15 @@ from stustapay.tse.fiskaly.config import LIVE_UNAVAILABLE
 
 
 async def list_tses(conn: Connection, node: Node) -> list[Tse]:
-    return await conn.fetch_many(Tse, "select * from tse where node_id = any($1) order by name", node.ids_to_event_node)
+    return await conn.fetch_many(
+        Tse,
+        "select t.* from tse t where (t.fiskaly_job_id is null and t.node_id=any($1)) or exists("
+        "select 1 from fiskaly_provisioning_job j join node n on n.id=j.scope_node_id where j.tse_id=t.id "
+        "and (n.id=any($2) or $3=any(n.parent_ids || n.id))) order by t.name",
+        node.ids_to_event_node,
+        node.ids_to_root,
+        node.id,
+    )
 
 
 class TseService(Service[Config]):
@@ -58,8 +66,11 @@ class TseService(Service[Config]):
                 f"fiskaly:event:{node.event_node_id}",
             )
         if await conn.fetchval(
-            "select exists(select 1 from fiskaly_provisioning_job where event_node_id=$1)",
+            "select exists(select 1 from fiskaly_provisioning_job j join node n on n.id=j.scope_node_id "
+            "where j.event_node_id=$1 and (n.id=any($2) or $3=any(n.parent_ids)))",
             node.event_node_id,
+            node.ids_to_event_node,
+            node.id,
         ):
             raise InvalidArgument("This event is managed by automatic Fiskaly onboarding")
         tse_id = await conn.fetchval(

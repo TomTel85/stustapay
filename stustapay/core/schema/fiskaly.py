@@ -33,6 +33,7 @@ class FiskalySite(NewFiskalySite):
 class NewFiskalyProvisioningJob(BaseModel):
     site_id: int
     event_node_id: int
+    scope_node_id: int | None = None
     environment: Literal["TEST", "LIVE"] = "TEST"
 
 
@@ -43,3 +44,5 @@ class FiskalyProvisioningJob(NewFiskalyProvisioningJob):
     last_error: str | None = None
     tse_id: int | None = None
     attempts: int
+    paused: bool = False
+    month_end_registered_clients: int = 0

@@ -522,6 +522,14 @@ class OfflineOrderMixin:
             buttons=booking.sale.buttons,
             z_nr=json_object(row["till_config"])["z_nr"],
         )
+        # A transaction captured offline cannot acquire a historical cloud signature on import.
+        await conn.execute(
+            "update tse_signature s set signature_status='failure',result_message='TSE unavailable: sale was recorded offline' "
+            "where s.id=$1 and s.signature_status='new' and (s.fiskaly_site_id is not null or exists("
+            "select 1 from till t join tse on tse.id=t.tse_id where t.id=$2 and tse.type='fiskaly'))",
+            completed.id,
+            snapshot.till_id,
+        )
         settings = await fetch_restricted_event_settings_for_node(conn=conn, node_id=node.id)
         completed.bon_url = settings.customer_portal_url + "/bon/" + str(completed.uuid)
         await conn.execute(

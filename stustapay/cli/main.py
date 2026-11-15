@@ -73,6 +73,8 @@ def dsfinvk_export(
     dtd_file: Annotated[Path, typer.Option(help="*.dtd file to include")] = Path(
         "./stustapay/dsfinvk/assets/gdpdu-01-09-2004.dtd"
     ),
+    taxpayer_id: Annotated[int | None, typer.Option(help="Fiskaly taxpayer ID within the export scope")] = None,
+    till_id: Annotated[int | None, typer.Option(help="Restrict the export to one StuStaPay till")] = None,
     dry_run: bool = False,
 ):
     """Export all data required by dsfinvk to the given zip file."""
@@ -83,6 +85,8 @@ def dsfinvk_export(
         dtd=str(dtd_file),
         simulate=dry_run,
         event_node_id=node_id,
+        taxpayer_id=taxpayer_id,
+        till_id=till_id,
     )
     asyncio.run(generator.run())
 

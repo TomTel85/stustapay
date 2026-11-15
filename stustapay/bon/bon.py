@@ -41,13 +41,16 @@ class OrderWithTse(Order):
     tse_time_format: Optional[str] = None
     tse_signature: Optional[str] = None
     tse_public_key: Optional[str] = None
+    tse_serial: Optional[str] = None
+    fiscal_client_serial: Optional[str] = None
     node_id: int
 
     @computed_field  # type: ignore[misc]
     @property
     def tse_qr_code_text(self) -> Optional[str]:
+        serial = self.fiscal_client_serial or self.till_id
         qr_fields = (
-            self.till_id,
+            serial,
             self.transaction_process_type,
             self.transaction_process_data,
             self.tse_transaction,
@@ -63,7 +66,7 @@ class OrderWithTse(Order):
             return None
 
         return (
-            f"V0;{self.till_id};{self.transaction_process_type};{self.transaction_process_data};"
+            f"V0;{serial};{self.transaction_process_type};{self.transaction_process_data};"
             f"{self.tse_transaction};{self.tse_signaturenr};{self.tse_start};{self.tse_end};{self.tse_hashalgo};"
             f"{self.tse_time_format};{self.tse_signature};{self.tse_public_key}"
         )
@@ -87,11 +90,16 @@ async def fetch_order(*, conn: Connection, order_id: int) -> Optional[OrderWithT
         "   tse.hashalgo as tse_hashalgo, "
         "   tse.time_format as tse_time_format, "
         "   tse.public_key as tse_public_key, "
+        "   tse.serial as tse_serial, "
+        "   c.serial as fiscal_client_serial, "
         "   t.node_id as node_id "
         "from order_value o "
         "join tse_signature sig on sig.id = o.id "
         "join till t on o.till_id = t.id "
         "left join tse on tse.id = sig.tse_id "
+        "left join fiskaly_client c on c.id=coalesce(sig.fiskaly_client_id, "
+        "    (select b.client_id from fiskaly_client_binding b where b.till_id=t.id "
+        "      and b.tse_id=coalesce(sig.tse_id, t.tse_id) and sig.fiskaly_site_id is not null)) "
         "where o.id = $1",
         order_id,
     )
@@ -240,8 +248,16 @@ async def generate_bon_json(db_pool: asyncpg.Pool, order_id: int) -> BonJson | N
             return None
 
         event = await fetch_restricted_event_settings_for_node(conn=conn, node_id=order.node_id)
+        seller = await conn.fetchrow(
+            "select s.operator_name,s.address_line1,s.zip,s.town,s.vat_id from tse_signature sig "
+            "join fiskaly_site s on s.id=sig.fiskaly_site_id where sig.id=$1",
+            order.id,
+        )
         config = BonConfig(
-            ust_id=event.ust_id, address=event.bon_address, issuer=event.bon_issuer, title=event.bon_title
+            ust_id=(seller["vat_id"] or "") if seller else event.ust_id,
+            address=f"{seller['address_line1']}\n{seller['zip']} {seller['town']}" if seller else event.bon_address,
+            issuer=seller["operator_name"] if seller else event.bon_issuer,
+            title=event.bon_title,
         )
 
         aggregations = await conn.fetch_many(

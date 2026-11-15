@@ -1134,7 +1134,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
       "Verwende den auf dem Server konfigurierten Profilnamen. Zugangsdaten und TSS-/Client-Zuordnungen werden dort verwaltet.",
     fiskalyOnboarding: {
       title: "Fiskaly-Kundeneinrichtung",
-      description: "Wähle eine Betriebsstätte oder lege sie an und richte anschließend die TSE für diese Veranstaltung ein. Die TEST-Einrichtung ist verfügbar. LIVE erfordert die fiskalische Signierung während des Kassenvorgangs.",
+      description: "Wähle eine Betriebsstätte für die TEST-Einrichtung. Registriert werden nur Kassen mit zugeordnetem Terminal. Eine spätere Terminal-Zuordnung startet die Registrierung automatisch.",
       loadError: "Fiskaly-Betriebsstätten konnten nicht geladen werden.",
       statusError: "Der Einrichtungsstatus konnte nicht geladen werden.",
       step: {
@@ -1160,6 +1160,10 @@ export const translations: NestedPartialAsStrings<Translations> = {
       countryCode: "Ländercode (ISO 3166-1 alpha-3)",
       vatId: "Umsatzsteuer-ID (optional)",
       saveSite: "Betriebsstätte speichern",
+      paused: "Pausiert",
+      pause: "Kassen pausieren",
+      resume: "Kassen reaktivieren",
+      monthEndWarning: "Monatswechsel: Für dieses beendete Event sind noch Kassen registriert ({{count}}). Prüfe die Abmeldung und mögliche Zusatzkosten im fiskaly HUB.",
       startTest: "TEST-Einrichtung starten",
       jobs: "Einrichtungsstatus",
       retry: "Erneut versuchen",

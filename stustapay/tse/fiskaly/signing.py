@@ -12,6 +12,10 @@ from stustapay.tse.handler import TSEMasterData, TSESignature, TSESignatureReque
 from .client import FiskalyClient, FiskalyError, FiskalyHTTPError
 
 
+class FiskalyTransactionMissing(FiskalyError):
+    """No remote transaction exists for the persisted fiscal identifier."""
+
+
 @dataclass(frozen=True)
 class FiskalySigningRequest:
     """Identity and payload that the worker must persist before remote I/O.
@@ -129,24 +133,69 @@ class FiskalySigner:
         ):
             raise FiskalyError("Fiskaly client does not match the configured till binding")
 
-    def _validate_transaction(self, data: dict[str, Any], request: FiskalySigningRequest):
+    async def begin_sale(self, transaction_id: UUID, client_id: UUID, serial: str):
+        path = f"{self._tss_path}/tx/{transaction_id}"
+        data = await self.client.request(
+            "PUT",
+            f"{path}?tx_revision=1",
+            payload={
+                "state": "ACTIVE",
+                "client_id": str(client_id),
+                "metadata": {"stustapay_checkout": str(transaction_id)},
+            },
+        )
+        self._validate_checkout(data, transaction_id, client_id, serial)
+        if data.get("state") != "ACTIVE" or data.get("latest_revision") != 1:
+            raise FiskalyError("Fiskaly returned an unexpected checkout start state")
+
+    def _validate_checkout(self, data: dict[str, Any], transaction_id: UUID, client_id: UUID, serial: str):
+        self._validate_identity(data, transaction_id, client_id, serial)
+        metadata = data.get("metadata")
+        if not isinstance(metadata, dict) or metadata.get("stustapay_checkout") != str(transaction_id):
+            raise FiskalyError("Fiskaly transaction does not match the persisted checkout")
+
+    async def abort_sale(self, transaction_id: UUID, client_id: UUID, serial: str):
+        path = f"{self._tss_path}/tx/{transaction_id}"
+        data = await self.client.request("GET", path)
+        self._validate_checkout(data, transaction_id, client_id, serial)
+        if data.get("state") == "CANCELLED":
+            return self._signature(data)
+        if data.get("state") != "ACTIVE" or data.get("latest_revision") != 1:
+            raise FiskalyError("Fiskaly transaction cannot be aborted in its current state")
+        data = await self.client.request(
+            "PUT",
+            f"{path}?tx_revision=2",
+            payload={
+                "state": "CANCELLED",
+                "client_id": str(client_id),
+                "schema": {
+                    "standard_v1": {
+                        "receipt": {
+                            "receipt_type": "CANCELLATION",
+                            "amounts_per_vat_rate": [],
+                            "amounts_per_payment_type": [],
+                        }
+                    }
+                },
+            },
+        )
+        self._validate_checkout(data, transaction_id, client_id, serial)
+        if data.get("state") != "CANCELLED":
+            raise FiskalyError("Fiskaly did not abort the checkout")
+        return self._signature(data)
+
+    def _validate_identity(self, data: dict[str, Any], transaction_id: UUID, client_id: UUID, serial: str):
         self._environment(data)
-        assert self._master_data is not None
+        if self._master_data is None:
+            raise FiskalyError("Fiskaly signer must be initialized before validating a transaction")
         if (
-            data.get("_id") != str(request.transaction_id)
+            data.get("_id") != str(transaction_id)
             or data.get("tss_id") != str(self.client.config.tss_id)
-            or data.get("client_id") != str(request.client_id)
-            or data.get("client_serial_number") != request.request.till_id
+            or data.get("client_id") != str(client_id)
+            or data.get("client_serial_number") != serial
             or data.get("tss_serial_number") != self._master_data.tse_serial
         ):
             raise FiskalyError("Fiskaly transaction does not match the persisted identity")
-        if data.get("state") not in {"ACTIVE", "FINISHED"}:
-            raise FiskalyError("Fiskaly transaction cannot be finished in its current state")
-        metadata = data.get("metadata")
-        if not isinstance(metadata, dict) or metadata.get("stustapay_payload_sha256") != request.fingerprint:
-            raise FiskalyError("Fiskaly transaction does not match the persisted signing payload fingerprint")
-        if data.get("state") == "FINISHED" and data.get("schema") != request.schema:
-            raise FiskalyError("Fiskaly transaction does not match the persisted signing payload")
 
     def _signature(self, data: dict[str, Any]) -> TSESignature:
         assert self._master_data is not None
@@ -176,7 +225,24 @@ class FiskalySigner:
             tse_signature=encoded_signature,
         )
 
-    async def sign(self, request: FiskalySigningRequest) -> TSESignature:
+    def _validate_transaction(self, data: dict[str, Any], request: FiskalySigningRequest, *, checkout: bool):
+        if checkout:
+            self._validate_checkout(data, request.transaction_id, request.client_id, request.request.till_id)
+        else:
+            self._validate_identity(data, request.transaction_id, request.client_id, request.request.till_id)
+        if data.get("state") not in {"ACTIVE", "FINISHED"}:
+            raise FiskalyError("Fiskaly transaction cannot be finished in its current state")
+        metadata = data.get("metadata")
+        if (not checkout or data.get("state") == "FINISHED") and (
+            not isinstance(metadata, dict) or metadata.get("stustapay_payload_sha256") != request.fingerprint
+        ):
+            raise FiskalyError("Fiskaly transaction does not match the persisted signing payload fingerprint")
+        if data.get("state") == "FINISHED" and data.get("schema") != request.schema:
+            raise FiskalyError("Fiskaly transaction does not match the persisted signing payload")
+
+    async def sign(
+        self, request: FiskalySigningRequest, *, allow_start: bool = True, checkout: bool = False
+    ) -> TSESignature:
         if self._master_data is None:
             raise FiskalyError("Fiskaly signer must be initialized before signing")
         if request.transaction_id in self._in_progress:
@@ -184,19 +250,21 @@ class FiskalySigner:
         self._in_progress.add(request.transaction_id)
         try:
             async with self._concurrency:
-                return await self._sign(request)
+                return await self._sign(request, allow_start=allow_start and not checkout, checkout=checkout)
         finally:
             self._in_progress.remove(request.transaction_id)
 
-    async def _sign(self, request: FiskalySigningRequest) -> TSESignature:
+    async def _sign(self, request: FiskalySigningRequest, *, allow_start: bool, checkout: bool) -> TSESignature:
         path = f"{self._tss_path}/tx/{request.transaction_id}"
         try:
             data = await self.client.request("GET", path)
         except FiskalyHTTPError as exc:
             if exc.status != 404:
                 raise
-            # Only a definitive absence permits a new start. Reuse UUID and revision
-            # after unknown outcomes; never allocate another transaction here.
+            if not allow_start:
+                raise FiskalyTransactionMissing(
+                    "Fiskaly transaction is absent during recovery; reconciliation required"
+                ) from None
             data = await self.client.request(
                 "PUT",
                 f"{path}?tx_revision=1",
@@ -206,19 +274,18 @@ class FiskalySigner:
                     "metadata": {"stustapay_payload_sha256": request.fingerprint},
                 },
             )
-        self._validate_transaction(data, request)
+        self._validate_transaction(data, request, checkout=checkout)
         if data["state"] == "FINISHED":
             return self._signature(data)
         # This signer performs exactly start + finish; unexpected updates require
         # explicit operator/worker reconciliation rather than guessing a revision.
         if data.get("latest_revision") != 1 or data.get("revision") != 1:
             raise FiskalyError("Fiskaly transaction has an unexpected active revision")
-        data = await self.client.request(
-            "PUT",
-            f"{path}?tx_revision=2",
-            payload={"state": "FINISHED", "client_id": str(request.client_id), "schema": request.schema},
-        )
-        self._validate_transaction(data, request)
+        payload = {"state": "FINISHED", "client_id": str(request.client_id), "schema": request.schema}
+        if checkout:
+            payload["metadata"] = {"stustapay_payload_sha256": request.fingerprint}
+        data = await self.client.request("PUT", f"{path}?tx_revision=2", payload=payload)
+        self._validate_transaction(data, request, checkout=checkout)
         if data["state"] != "FINISHED":
             raise FiskalyError("Fiskaly did not finish the transaction")
         return self._signature(data)

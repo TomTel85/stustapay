@@ -14467,6 +14467,71 @@
           }
         }
       }
+    },
+    "/fiskaly/provisioning/{job_id}/paused": {
+      "patch": {
+        "tags": [
+          "fiskaly"
+        ],
+        "summary": "Set Fiskaly Provisioning Paused",
+        "operationId": "set_fiskaly_provisioning_paused",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "node_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          },
+          {
+            "name": "paused",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "boolean",
+              "title": "Paused"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FiskalyProvisioningJob"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -16844,6 +16909,17 @@
             "type": "integer",
             "title": "Event Node Id"
           },
+          "scope_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Node Id"
+          },
           "environment": {
             "type": "string",
             "enum": [
@@ -16898,6 +16974,16 @@
           "attempts": {
             "type": "integer",
             "title": "Attempts"
+          },
+          "paused": {
+            "type": "boolean",
+            "title": "Paused",
+            "default": false
+          },
+          "month_end_registered_clients": {
+            "type": "integer",
+            "title": "Month End Registered Clients",
+            "default": 0
           }
         },
         "type": "object",
@@ -18519,6 +18605,17 @@
           "event_node_id": {
             "type": "integer",
             "title": "Event Node Id"
+          },
+          "scope_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Node Id"
           },
           "environment": {
             "type": "string",
@@ -20825,6 +20922,28 @@
               }
             ],
             "title": "Tse Public Key"
+          },
+          "tse_serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tse Serial"
+          },
+          "fiscal_client_serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiscal Client Serial"
           },
           "node_id": {
             "type": "integer",

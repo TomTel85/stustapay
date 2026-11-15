@@ -2138,6 +2138,28 @@
             ],
             "title": "Tse Public Key"
           },
+          "tse_serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tse Serial"
+          },
+          "fiscal_client_serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiscal Client Serial"
+          },
           "node_id": {
             "type": "integer",
             "title": "Node Id"

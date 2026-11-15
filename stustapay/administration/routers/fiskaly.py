@@ -40,3 +40,10 @@ async def start_provisioning(
 @router.post("/provisioning/{job_id}/retry", response_model=FiskalyProvisioningJob, status_code=202)
 async def retry_provisioning(token: CurrentAuthToken, service: ContextFiskalyService, node_id: int, job_id: int):
     return await service.retry_provisioning(token=token, node_id=node_id, job_id=job_id)
+
+
+@router.patch("/provisioning/{job_id}/paused", response_model=FiskalyProvisioningJob)
+async def set_fiskaly_provisioning_paused(
+    token: CurrentAuthToken, service: ContextFiskalyService, node_id: int, job_id: int, paused: bool
+):
+    return await service.set_paused(token=token, node_id=node_id, job_id=job_id, paused=paused)

@@ -58,6 +58,55 @@ async def booked(conn, cashier, till):
     )
 
 
+@pytest.mark.parametrize("outcome", ["finish", "abort", "booked_too_soon"])
+async def test_checkout_reuses_the_prebooking_transaction(
+    cloud_worker, db_connection, provider, setup_test_db_pool, terminal, cashier, till, outcome
+):
+    worker, _ = cloud_worker
+    sale_id, transaction_id = uuid4(), uuid4()
+    async with FiskalyClient(worker.config) as client:
+        signer = FiskalySigner(client)
+        await worker.configure(db_connection, signer)
+        await db_connection.execute(
+            "insert into fiskaly_checkout(sale_uuid,till_id,terminal_id,tse_id,client_id,transaction_id) "
+            "values($1,$2,$3,$4,$5,$6)",
+            sale_id,
+            till.id,
+            terminal.id,
+            worker.tse.id,
+            provider.binding,
+            transaction_id,
+        )
+        if outcome != "booked_too_soon":
+            await worker.advance_checkouts(db_connection, signer)
+            assert provider.transactions[str(transaction_id)]["state"] == "ACTIVE"
+        if outcome == "abort":
+            await db_connection.execute("update fiskaly_checkout set abort_requested=true where sale_uuid=$1", sale_id)
+            await worker.advance_checkouts(db_connection, signer)
+            assert provider.transactions[str(transaction_id)]["state"] == "CANCELLED"
+        else:
+            order = await book_order(
+                conn=db_connection,
+                uuid=sale_id,
+                order_type=OrderType.sale,
+                payment_method=PaymentMethod.tag,
+                cashier_id=cashier.id,
+                till_id=till.id,
+                line_items=[],
+                bookings={},
+            )
+            await worker.advance_checkouts(db_connection, signer)
+            await worker.process(setup_test_db_pool, signer, order.id)
+            signature = await db_connection.fetchrow("select * from tse_signature where id=$1", order.id)
+            if outcome == "finish":
+                assert signature["signature_status"] == "done"
+                assert signature["fiskaly_transaction_id"] == transaction_id
+                assert provider.transactions[str(transaction_id)]["state"] == "FINISHED"
+            else:
+                assert signature["signature_status"] == "failure"
+                assert not provider.transactions
+
+
 @pytest.mark.parametrize("state", ["ACTIVE", "FINISHED"])
 async def test_db_worker_restart_recovers_same_persisted_transaction(
     cloud_worker, provider, db_connection, setup_test_db_pool, cashier, till, state
@@ -89,6 +138,53 @@ async def test_db_worker_restart_recovers_same_persisted_transaction(
     assert recovered["fiskaly_last_error"] is None
     assert len(provider.transactions) == 1
     assert await db_connection.fetchval("select count(*) from bon where id=$1", order.id) == 1
+
+
+async def test_orders_booked_during_outage_get_receipts_and_are_never_signed(
+    cloud_worker, db_connection, provider, cashier, till
+):
+    worker, _ = cloud_worker
+    async with FiskalyClient(worker.config) as client:
+        signer = FiskalySigner(client)
+        await worker.configure(db_connection, signer)
+        await worker.record_outage(db_connection, "TSE unavailable: test provider unavailable")
+        outage_order = await booked(db_connection, cashier, till)
+        await worker.recover_outage(db_connection, signer)
+    assert (
+        await db_connection.fetchval(
+            "select result_message from tse_signature where id=$1 and signature_status='failure'", outage_order.id
+        )
+        == "TSE unavailable: test provider unavailable"
+    )
+    assert await db_connection.fetchval("select exists(select 1 from bon where id=$1)", outage_order.id)
+    assert await db_connection.fetchval(
+        "select ended_at>=started_at from fiskaly_till_outage where till_id=$1", till.id
+    )
+    assert not provider.transactions
+    normal_order = await booked(db_connection, cashier, till)
+    assert (
+        await db_connection.fetchval("select signature_status from tse_signature where id=$1", normal_order.id) == "new"
+    )
+
+
+async def test_requeuing_does_not_allow_a_second_start_after_failure(
+    cloud_worker, db_connection, setup_test_db_pool, provider, cashier, till
+):
+    worker, _ = cloud_worker
+    order = await booked(db_connection, cashier, till)
+    async with FiskalyClient(worker.config) as client:
+        signer = FiskalySigner(client)
+        await worker.configure(db_connection, signer)
+        provider.error_status = 503
+        await worker.process(setup_test_db_pool, signer, order.id)
+        provider.error_status = None
+        await worker.recover_outage(db_connection, signer)
+        await db_connection.execute(
+            "update tse_signature set fiskaly_attempts=0,fiskaly_next_attempt=now() where id=$1", order.id
+        )
+        await worker.process(setup_test_db_pool, signer, order.id)
+    assert not provider.transactions
+    assert await db_connection.fetchval("select fiskaly_start_attempted from tse_signature where id=$1", order.id)
 
 
 async def test_prepared_payload_cannot_change_in_database(cloud_worker, provider, db_connection, cashier, till):
@@ -369,6 +465,7 @@ async def test_retry_exhaustion_parks_original_signature_and_allows_later_work(
         signer = FiskalySigner(client)
         await worker.configure(db_connection, signer)
         original = await worker.prepare(db_connection, first.id)
+        await signer.sign(original)
         await db_connection.execute(
             "update tse_signature set fiskaly_attempts=$2 where id=$1", first.id, MAX_SIGNING_ATTEMPTS - 1
         )

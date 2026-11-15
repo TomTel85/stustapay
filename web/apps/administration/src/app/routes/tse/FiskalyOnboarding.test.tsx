@@ -15,6 +15,7 @@ const mockUseCreateFiskalySiteMutation = jest.fn();
 const mockUseStartFiskalyProvisioningMutation = jest.fn();
 const mockUseRetryFiskalyProvisioningMutation = jest.fn();
 const mockRefetchTses = jest.fn();
+const mockSetPaused = jest.fn();
 
 jest.mock("@/hooks", () => ({
   useCurrentNode: () => ({ currentNode: mockCurrentNode }),
@@ -31,6 +32,7 @@ jest.mock("@/api/fiskaly", () => ({
   useListFiskalySitesQuery: (...args: unknown[]) => mockUseListFiskalySitesQuery(...args),
   useGetFiskalySiteStatusQuery: (...args: unknown[]) => mockUseGetFiskalySiteStatusQuery(...args),
   useCreateFiskalySiteMutation: (...args: unknown[]) => mockUseCreateFiskalySiteMutation(...args),
+  useSetFiskalyProvisioningPausedMutation: () => [mockSetPaused, { isLoading: false }],
   useStartFiskalyProvisioningMutation: (...args: unknown[]) => mockUseStartFiskalyProvisioningMutation(...args),
   useRetryFiskalyProvisioningMutation: (...args: unknown[]) => mockUseRetryFiskalyProvisioningMutation(...args),
 }));
@@ -124,6 +126,16 @@ describe("FiskalyOnboarding", () => {
     expect(screen.queryByRole("button", { name: "tse.fiskalyOnboarding.retry" })).toBeNull();
   });
 
+  it("warns when an ended deployment still has registered clients near month-end", () => {
+    mockUseGetFiskalySiteStatusQuery.mockReturnValue({
+      data: [{ ...readyJob, month_end_registered_clients: 2 }],
+      refetch: mockRefetchJobs,
+    });
+    render(<MemoryRouter><FiskalyOnboarding /></MemoryRouter>);
+
+    expect(screen.getByRole("alert").textContent).toContain("tse.fiskalyOnboarding.monthEndWarning");
+  });
+
   it("starts TEST provisioning", async () => {
     render(<MemoryRouter><FiskalyOnboarding /></MemoryRouter>);
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "tse.fiskalyOnboarding.site" }));
@@ -135,6 +147,16 @@ describe("FiskalyOnboarding", () => {
       newFiskalyProvisioningJob: { site_id: 7, event_node_id: 12, environment: "TEST" },
     }));
 
+  });
+
+  it("pauses a ready deployment using its existing setup ID", async () => {
+    mockSetPaused.mockReturnValue({ unwrap: async () => readyJob });
+    mockUseGetFiskalySiteStatusQuery.mockReturnValue({ data: [readyJob], refetch: mockRefetchJobs });
+    render(<MemoryRouter><FiskalyOnboarding /></MemoryRouter>);
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "tse.fiskalyOnboarding.site" }));
+    fireEvent.click(await screen.findByRole("option", { name: /Main venue/ }));
+    fireEvent.click(screen.getByRole("button", { name: "tse.fiskalyOnboarding.pause" }));
+    await waitFor(() => expect(mockSetPaused).toHaveBeenCalledWith({ nodeId: 12, jobId: readyJob.id, paused: true }));
   });
 
   it("prefills event operator and address details without parsing the address", async () => {

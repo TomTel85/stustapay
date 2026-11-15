@@ -15,6 +15,7 @@ export const common_en = {
   cashier: "Cashier",
   tillSerialNumber: "Serialnumber Till",
   transactionId: "Transaction ID",
+  tseSerialNumber: "TSE serial number",
   tseSignatureCounter: "Signature Counter",
   tseSignature: "Signature",
   tseStartTime: "Start Time",
@@ -24,5 +25,6 @@ export const common_en = {
   tseTimeFormat: "Time Format",
   tse: "TSE",
   tsePending: "pending",
+  tseUnavailable: "TSE unavailable",
   tseFailed: "failed",
 };

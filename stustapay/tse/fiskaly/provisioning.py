@@ -188,7 +188,7 @@ class FiskalyProvisioner:
                 raise FiskalyAdminAuthenticationError("Fiskaly administrator authentication failed") from None
             raise
 
-    async def ensure_client(self, client_id: UUID, till_serial: str) -> dict[str, Any]:
+    async def ensure_client(self, client_id: UUID, till_serial: str, *, reactivate: bool = False) -> dict[str, Any]:
         """Ensure one till binding exists with its preassigned client UUID."""
         if self.config.tss_id is None:
             raise FiskalyError("Fiskaly TSS ID is not configured")
@@ -214,11 +214,31 @@ class FiskalyProvisioner:
                         "Fiskaly client creation conflicted but the client could not be recovered"
                     ) from None
 
+        self.verify_client_identity(result, client_id, till_serial)
+        if result.get("state") == "DEREGISTERED" and reactivate:
+            return await self.update_client_state(path, client_id, till_serial, "REGISTERED")
+        if result.get("state") != "REGISTERED":
+            raise FiskalyError("Fiskaly client is not registered")
+        return result
+
+    def verify_client_identity(self, result: dict[str, Any], client_id: UUID, till_serial: str):
         self._verify(result, identity=str(client_id), path="client")
         if result.get("tss_id") != str(self.config.tss_id):
             raise FiskalyError("Fiskaly client belongs to a different TSS")
         if result.get("serial_number") != till_serial:
             raise FiskalyError("Fiskaly client serial number does not match the till")
-        if result.get("state") != "REGISTERED":
-            raise FiskalyError("Fiskaly client is not registered")
+
+    async def set_client_state(self, client_id: UUID, serial: str, *, registered: bool):
+        path = f"{self.tss_path}/client/{client_id}"
+        desired = "REGISTERED" if registered else "DEREGISTERED"
+        result = await self.client.request("GET", path)
+        self.verify_client_identity(result, client_id, serial)
+        if result.get("state") != desired:
+            await self.update_client_state(path, client_id, serial, desired)
+
+    async def update_client_state(self, path: str, client_id: UUID, serial: str, state: str) -> dict[str, Any]:
+        result = await self.client.request("PATCH", path, payload={"state": state})
+        self.verify_client_identity(result, client_id, serial)
+        if result.get("state") != state:
+            raise FiskalyError("Fiskaly did not apply the requested client state")
         return result

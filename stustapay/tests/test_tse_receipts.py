@@ -38,6 +38,12 @@ def test_done_receipt_has_tse_qr_code_text():
     )
 
 
+def test_fiskaly_receipt_qr_uses_the_persisted_client_serial():
+    order = _done_order_with_tse().model_copy(update={"fiscal_client_serial": "1004"})
+    assert order.tse_qr_code_text is not None
+    assert order.tse_qr_code_text.startswith("V0;1004;")
+
+
 @pytest.mark.parametrize("status", ["new", "pending", "failure"])
 def test_unsigned_receipt_has_no_tse_qr_code_text(status: str):
     order = _done_order_with_tse().model_copy(update={"signature_status": status})

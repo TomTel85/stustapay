@@ -2235,6 +2235,20 @@ const injectedRtkApi = api
         }),
         invalidatesTags: ["fiskaly"],
       }),
+      setFiskalyProvisioningPaused: build.mutation<
+        SetFiskalyProvisioningPausedApiResponse,
+        SetFiskalyProvisioningPausedApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/fiskaly/provisioning/${queryArg.jobId}/paused`,
+          method: "PATCH",
+          params: {
+            node_id: queryArg.nodeId,
+            paused: queryArg.paused,
+          },
+        }),
+        invalidatesTags: ["fiskaly"],
+      }),
     }),
     overrideExisting: false,
   });
@@ -3432,6 +3446,12 @@ export type RetryProvisioningApiArg = {
   jobId: number;
   nodeId: number;
 };
+export type SetFiskalyProvisioningPausedApiResponse = /** status 200 Successful Response */ FiskalyProvisioningJob;
+export type SetFiskalyProvisioningPausedApiArg = {
+  jobId: number;
+  nodeId: number;
+  paused: boolean;
+};
 export type ProductRestriction = "under_16" | "under_18";
 export type ProductType = "discount" | "topup" | "payout" | "money_transfer" | "imbalance" | "user_defined" | "ticket";
 export type Product = {
@@ -4219,6 +4239,8 @@ export type OrderWithTse = {
   tse_time_format?: string | null;
   tse_signature?: string | null;
   tse_public_key?: string | null;
+  tse_serial?: string | null;
+  fiscal_client_serial?: string | null;
   node_id: number;
 };
 export type OrderWithTseRead = {
@@ -4251,6 +4273,8 @@ export type OrderWithTseRead = {
   tse_time_format?: string | null;
   tse_signature?: string | null;
   tse_public_key?: string | null;
+  tse_serial?: string | null;
+  fiscal_client_serial?: string | null;
   node_id: number;
   customer_tag_uid_hex: string | null;
   tse_qr_code_text: string | null;
@@ -5458,6 +5482,7 @@ export type NewFiskalySite = {
 export type FiskalyProvisioningJob = {
   site_id: number;
   event_node_id: number;
+  scope_node_id?: number | null;
   environment?: "TEST" | "LIVE";
   id: number;
   status: "queued" | "running" | "ready" | "retry_wait" | "action_required" | "failed";
@@ -5465,10 +5490,13 @@ export type FiskalyProvisioningJob = {
   last_error?: string | null;
   tse_id?: number | null;
   attempts: number;
+  paused?: boolean;
+  month_end_registered_clients?: number;
 };
 export type NewFiskalyProvisioningJob = {
   site_id: number;
   event_node_id: number;
+  scope_node_id?: number | null;
   environment?: "TEST" | "LIVE";
 };
 export const {
@@ -5805,4 +5833,5 @@ export const {
   useLazySiteStatusQuery,
   useStartProvisioningMutation,
   useRetryProvisioningMutation,
+  useSetFiskalyProvisioningPausedMutation,
 } = injectedRtkApi;

@@ -14,5 +14,6 @@ export {
   useCreateSiteMutation as useCreateFiskalySiteMutation,
   useSiteStatusQuery as useGetFiskalySiteStatusQuery,
   useStartProvisioningMutation as useStartFiskalyProvisioningMutation,
+  useSetFiskalyProvisioningPausedMutation,
   useRetryProvisioningMutation as useRetryFiskalyProvisioningMutation,
 } from "./api";

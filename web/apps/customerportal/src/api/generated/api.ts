@@ -484,6 +484,8 @@ export type OrderWithTse = {
   tse_time_format?: string | null;
   tse_signature?: string | null;
   tse_public_key?: string | null;
+  tse_serial?: string | null;
+  fiscal_client_serial?: string | null;
   node_id: number;
 };
 export type OrderWithTseRead = {
@@ -516,6 +518,8 @@ export type OrderWithTseRead = {
   tse_time_format?: string | null;
   tse_signature?: string | null;
   tse_public_key?: string | null;
+  tse_serial?: string | null;
+  fiscal_client_serial?: string | null;
   node_id: number;
   customer_tag_uid_hex: string | null;
   tse_qr_code_text: string | null;

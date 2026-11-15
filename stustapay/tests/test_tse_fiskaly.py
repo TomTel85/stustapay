@@ -11,6 +11,7 @@ import pytest
 from aiohttp import web
 from pydantic import SecretStr, ValidationError
 
+from stustapay.cli.tse import run_fiskaly_smoke
 from stustapay.tse.fiskaly.client import FiskalyClient, FiskalyError, FiskalyHTTPError, FiskalyTransportError
 from stustapay.tse.fiskaly.config import FiskalyConfig
 from stustapay.tse.fiskaly.signing import FiskalySigner, FiskalySigningRequest
@@ -114,6 +115,10 @@ class FiskalyFixture:
             return web.json_response({})
         if "/client/" in path:
             client_id = path.rsplit("/", 1)[1]
+            if request.method == "PATCH" and self.admin_authenticated and client_id in self.clients:
+                assert isinstance(payload, dict)
+                self.clients[client_id]["state"] = payload["state"]
+                return web.json_response(self.clients[client_id])
             if request.method == "PUT":
                 assert isinstance(payload, dict)
                 if not self.admin_authenticated:
@@ -174,6 +179,8 @@ class FiskalyFixture:
                         },
                     }
                 )
+            if revision > 1 and "metadata" in payload:
+                data["metadata"] = {**data["metadata"], **payload["metadata"]}
             data.update({"state": payload["state"], "revision": revision, "latest_revision": revision})
             self.transactions[tx_id] = data
             if self.timeout_state == payload["state"]:
@@ -235,11 +242,31 @@ async def test_lost_response_recovers_same_identity_after_client_restart(provide
     async with FiskalyClient(config) as client:
         signer = FiskalySigner(client)
         await signer.initialize()
-        await signer.sign(request)
+        await signer.sign(request, allow_start=False)
     assert len(provider.transactions) == 1
     writes = [entry for entry in provider.requests if entry[0] == "PUT"]
     assert len(writes) == 2
     assert provider.transactions[str(request.transaction_id)]["state"] == "FINISHED"
+
+
+async def test_recovery_does_not_start_absent_transaction(provider):
+    request = provider.signing_request()
+    async with FiskalyClient(provider.config) as client:
+        signer = FiskalySigner(client)
+        await signer.initialize()
+        with pytest.raises(FiskalyError, match="absent during recovery"):
+            await signer.sign(request, allow_start=False)
+    assert not [entry for entry in provider.requests if entry[0] == "PUT"]
+
+
+async def test_recovery_returns_existing_finished_transaction(provider):
+    request = provider.signing_request()
+    async with FiskalyClient(provider.config) as client:
+        signer = FiskalySigner(client)
+        await signer.initialize()
+        expected = await signer.sign(request)
+        assert await signer.sign(request, allow_start=False) == expected
+    assert len([entry for entry in provider.requests if entry[0] == "PUT"]) == 2
 
 
 async def test_100_tills_use_bounded_parallelism(provider):
@@ -434,3 +461,18 @@ async def test_rate_limit_delay_applies_across_client_requests(provider):
             await client.request("GET", path)
         assert 44 < paused.value.retry_after <= 45
         assert len(provider.requests) == calls
+
+
+@pytest.mark.parametrize("abort", [False, True])
+async def test_smoke_validates_environment_and_recovers_same_transaction(provider, abort):
+    profile = provider.config.model_copy(update={"clients": {"42": provider.binding}, "organization_id": uuid4()})
+    provider.config = profile
+    transaction_id = uuid4()
+    with pytest.raises(FiskalyError, match="requires a TEST profile"):
+        await run_fiskaly_smoke(profile.model_copy(update={"environment": "LIVE"}), "42", transaction_id, recover=False)
+    assert not provider.requests
+    _, signed = await run_fiskaly_smoke(profile, "42", transaction_id, recover=False, abort=abort)
+    _, recovered = await run_fiskaly_smoke(profile, "42", transaction_id, recover=True, abort=abort)
+    assert recovered == signed
+    assert len(provider.transactions) == 1
+    assert provider.transactions[str(transaction_id)]["state"] == ("CANCELLED" if abort else "FINISHED")

@@ -85,7 +85,7 @@ class SignatureProcessor:
                 Tse,
                 "select t.* from tse t join node n on t.node_id=n.id "
                 "left join fiskaly_provisioning_job j on j.id=t.fiskaly_job_id "
-                "where not n.read_only and t.status<>'disabled' "
+                "where (not n.read_only or t.fiskaly_job_id is not null) and t.status<>'disabled' "
                 "and (t.fiskaly_job_id is null or j.status='ready') order by t.id",
             )
             active = {row.id for row in rows}
@@ -151,7 +151,8 @@ class SignatureProcessor:
                     where
                         tse_signature.signature_status='new' and
                         till.tse_id is Null and not(till.id = any($1::bigint[]))
-                        and not exists(select 1 from fiskaly_provisioning_job fj where fj.event_node_id=n.event_node_id)
+                        and not exists(select 1 from fiskaly_provisioning_job fj
+                            where fj.scope_node_id=any(n.parents_until_event_node || n.id))
                         and not exists(select 1 from tse cloud where cloud.type='fiskaly'
                             and cloud.fiskaly_profile=any($2::text[])
                             and cloud.node_id=any(n.parents_until_event_node || n.id))

@@ -293,8 +293,14 @@ class SaleViewModel @Inject constructor(
         _navState.update { SalePage.ProductSelect }
     }
 
-    suspend fun clearSale(success: Boolean = false) {
+    suspend fun clearSale(success: Boolean = false, abandoned: Boolean = false) {
         clearAutoBookCountdown()
+        if (abandoned) {
+            val saleId = _saleStatus.value.checkedSale?.uuid
+            if (saleId != null && !isLocallyChecked(saleId)) {
+                viewModelScope.launch { saleRepository.cancelPendingSale(saleId) }
+            }
+        }
         _saleStatus.update { SaleStatus() }
         scanTarget.update { ScanTarget.None }
         _navState.update { SalePage.ProductSelect }
