@@ -52,18 +52,22 @@ const SelectNode: React.FC<{
       <Typography component="h1" variant="h5">
         {t("auth.selectNode")}
       </Typography>
-      <List sx={{ width: "100%" }}>
+      <List
+        component="div"
+        aria-label={t("auth.selectNode")}
+        disablePadding
+        sx={{ width: "100%", border: 1, borderColor: "divider", borderRadius: 1, overflow: "hidden" }}
+      >
         {availableNodes.map((node, index) => (
           <ListItemButton
             key={node.node_id}
             disabled={busy}
             onClick={() => onSelect(node.node_id)}
             sx={{
-              borderTop: index === 0 ? 1 : 0,
-              borderRight: 1,
-              borderLeft: 1,
-              borderBottom: 1,
+              minHeight: 64,
+              borderTop: index === 0 ? 0 : 1,
               borderColor: "divider",
+              overflowWrap: "anywhere",
             }}
           >
             <ListItemText primary={node.name} secondary={node.description} />
@@ -141,25 +145,29 @@ export const Login: React.FC = () => {
         sx={{
           display: "grid",
           gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-          maxWidth: 1040,
+          maxWidth: { xs: 560, md: 1040 },
           mx: "auto",
           overflow: "hidden",
-          borderRadius: 3,
+          borderRadius: "16px",
+          position: "relative",
         }}
       >
+        {busy && <LinearProgress aria-label={t("auth.login")} sx={{ position: "absolute", inset: "0 0 auto" }} />}
         <Stack
           sx={{ display: { xs: "none", md: "flex" }, bgcolor: "#101827", color: "#ffffff", p: 5, minHeight: 560 }}
           justifyContent="space-between"
           spacing={5}
         >
           <Stack direction="row" alignItems="center" spacing={2}>
-            <Box component="img" src={logoSrc} alt="" width={56} height={56} />
-            <Typography variant="h6">{t("TeamFestlichPay")}</Typography>
+            <Box component="img" src={logoSrc} alt="" width={48} height={48} sx={{ flexShrink: 0 }} />
+            <Box>
+              <Typography variant="h6">{t("TeamFestlichPay")}</Typography>
+              <Typography variant="body2" sx={{ color: "#b6c5d8" }}>
+                {t("portal.administration")}
+              </Typography>
+            </Box>
           </Stack>
           <Box>
-            <Typography variant="overline" sx={{ color: "#27cbbb", display: "block", mb: 2 }}>
-              {t("portal.administration")}
-            </Typography>
             <Typography
               variant="h3"
               component="p"
@@ -171,7 +179,7 @@ export const Login: React.FC = () => {
               {t("portal.loginDescription")}
             </Typography>
           </Box>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+          <Stack direction="row" useFlexGap spacing={1} sx={{ flexWrap: "wrap" }}>
             {["sales", "teams", "terminals"].map((key) => (
               <Chip
                 key={key}
@@ -182,12 +190,17 @@ export const Login: React.FC = () => {
             ))}
           </Stack>
         </Stack>
-        <Stack sx={{ p: { xs: 3, sm: 5 }, py: { xs: 4, md: 7 }, minWidth: 0 }} justifyContent="center" spacing={3}>
+        <Stack
+          aria-busy={busy}
+          sx={{ p: { xs: 3, sm: 5 }, py: { xs: 4, md: 7 }, minWidth: 0, width: "100%", maxWidth: 480, mx: "auto" }}
+          justifyContent="center"
+          spacing={3}
+        >
           <Avatar
             sx={{
               backgroundColor: "primary.main",
               color: "primary.contrastText",
-              borderRadius: 2,
+              borderRadius: "12px",
               width: 48,
               height: 48,
             }}
@@ -233,6 +246,7 @@ export const Login: React.FC = () => {
                     <Stack spacing={2}>
                       <input type="hidden" name="remember" value="true" />
                       <FormTextField
+                        id="login-username"
                         variant="outlined"
                         autoFocus
                         type="text"
@@ -243,6 +257,7 @@ export const Login: React.FC = () => {
                       />
 
                       <FormTextField
+                        id="login-password"
                         variant="outlined"
                         type="password"
                         name="password"
@@ -255,6 +270,7 @@ export const Login: React.FC = () => {
                         <>
                           <Alert severity="info">{t("auth.mfa.loginHint")}</Alert>
                           <FormTextField
+                            id="login-mfa-code"
                             autoFocus
                             variant="outlined"
                             name="mfa_code"
@@ -264,7 +280,6 @@ export const Login: React.FC = () => {
                           />
                         </>
                       )}
-                      {formik.isSubmitting && <LinearProgress />}
                       <Button
                         type="submit"
                         fullWidth

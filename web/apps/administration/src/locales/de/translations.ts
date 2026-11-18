@@ -5,7 +5,7 @@ type NestedPartialAsStrings<T extends object> = {
 };
 
 export const translations: NestedPartialAsStrings<Translations> = {
-  TeamFestlichPay: "TeamFestlichPay",
+  TeamFestlichPay: "teamfestlichPay",
   portal: {
     administration: "Administration",
     workspace: "Arbeitsbereich",
@@ -85,10 +85,10 @@ export const translations: NestedPartialAsStrings<Translations> = {
     delete: "Löschen",
   },
   errorPage: {
-    brand: "TeamFestlichPay",
+    brand: "teamfestlichPay",
     maintenance: "Wartung",
     currentlyUnavailable:
-      "Die TeamFestlichPay Administration ist aktuell nicht verfügbar. Bitte versuche es später erneut.",
+      "Die teamfestlichPay Administration ist aktuell nicht verfügbar. Bitte versuche es später erneut.",
   },
   nodes: {
     overview: "Übersicht",

@@ -1,5 +1,5 @@
 export const translations = {
-  TeamFestlichPay: "TeamFestlichPay",
+  TeamFestlichPay: "teamfestlichPay",
   portal: {
     administration: "Administration",
     workspace: "Workspace",
@@ -80,9 +80,9 @@ export const translations = {
     delete: "Delete",
   },
   errorPage: {
-    brand: "TeamFestlichPay",
+    brand: "teamfestlichPay",
     maintenance: "Maintenance in progress",
-    currentlyUnavailable: "The TeamFestlichPay administration is currently unavailable. Please try again later.",
+    currentlyUnavailable: "The teamfestlichPay administration is currently unavailable. Please try again later.",
   },
   nodes: {
     overview: "Overview",

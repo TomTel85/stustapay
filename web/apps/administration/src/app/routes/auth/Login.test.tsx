@@ -87,6 +87,29 @@ describe("Login", () => {
     expect((screen.getByLabelText("auth.username") as HTMLInputElement).value).toBe("");
     expect(screen.queryByText(/invitation-hint:/)).toBeNull();
   });
+
+  test("announces pending sign-in and prevents duplicate submissions", async () => {
+    let finishLogin!: (value: object) => void;
+    mockLogin.mockReturnValue({
+      unwrap: () => new Promise((resolve) => (finishLogin = resolve)),
+    });
+    render(
+      <MemoryRouter initialEntries={["/login"]}>
+        <Login />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText("auth.username"), { target: { value: "admin" } });
+    fireEvent.change(screen.getByLabelText("auth.password"), { target: { value: "test-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "auth.login" }));
+    expect(await screen.findByRole("progressbar", { name: "auth.login" })).toBeTruthy();
+    expect((screen.getByRole("button", { name: "auth.login" }) as HTMLButtonElement).disabled).toBe(true);
+
+    finishLogin({});
+    await waitFor(() => expect(screen.queryByRole("progressbar")).toBeNull());
+    expect((screen.getByRole("button", { name: "auth.login" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   test("requests a second factor without dropping the password and submits the code", async () => {
     mockLogin.mockReturnValue({
       unwrap: () => Promise.resolve({ success: null, available_nodes: null, mfa_required: true }),
