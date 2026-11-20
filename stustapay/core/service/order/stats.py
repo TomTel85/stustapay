@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from time import perf_counter
 from typing import Optional
 
@@ -9,7 +9,7 @@ from sftkit.database import Connection
 from sftkit.error import InvalidArgument
 from sftkit.service import Service, with_db_transaction
 
-from stustapay.bon.report_time import ReportDayMode
+from stustapay.bon.report_time import ReportDayMode, selected_date_ranges
 from stustapay.core.config import Config
 from stustapay.core.schema.product import Product
 from stustapay.core.schema.tree import Node, PublicEventSettings
@@ -194,40 +194,23 @@ USER_DEFINED_REVENUE_SCOPE_SQL = (
 
 
 def get_selected_date_ranges(
-    query: TimeseriesStatsQuery, event: Optional[PublicEventSettings]
+    query: TimeseriesStatsQuery, daily_end_time: time | None
 ) -> list[tuple[datetime, datetime]]:
-    if not query.selected_dates:
-        return []
+    dates = []
+    for value in query.selected_dates or []:
+        for part in value.split(","):
+            if date_text := part.strip():
+                try:
+                    dates.append(datetime.fromisoformat(date_text).date().isoformat())
+                except ValueError as exc:
+                    raise InvalidArgument(f"Invalid selected date: {date_text}") from exc
 
-    ranges: list[tuple[datetime, datetime]] = []
-    seen_dates: set[str] = set()
-    normalized_dates: list[str] = []
-    for selected_date_value in query.selected_dates:
-        normalized_dates.extend(part.strip() for part in selected_date_value.split(",") if part.strip())
-
-    for selected_date in sorted(normalized_dates):
-        if selected_date in seen_dates:
-            continue
-        seen_dates.add(selected_date)
-
-        try:
-            base_date = datetime.fromisoformat(selected_date).replace(tzinfo=timezone.utc)
-        except ValueError as exc:
-            raise InvalidArgument(f"Invalid selected date: {selected_date}") from exc
-        if event is not None and event.daily_end_time is not None:
-            start_time = base_date.replace(
-                hour=event.daily_end_time.hour,
-                minute=event.daily_end_time.minute,
-                second=event.daily_end_time.second,
-                microsecond=0,
-            )
-        else:
-            start_time = base_date.replace(hour=0, minute=0, second=0, microsecond=0)
-
-        end_time = start_time + timedelta(days=1) - timedelta(milliseconds=1)
-        ranges.append((start_time, end_time))
-
-    return ranges
+    ranges = selected_date_ranges(
+        dates,
+        day_mode=ReportDayMode.EVENT_DAY if daily_end_time is not None else ReportDayMode.CALENDAR_DAY,
+        daily_end_time=daily_end_time,
+    )
+    return [(start, end - timedelta(microseconds=1)) for start, end in ranges]
 
 
 def build_selected_date_condition(
@@ -254,7 +237,7 @@ def get_event_time_bounds(query: TimeseriesStatsQuery, event: PublicEventSetting
     if query.from_time is not None and query.to_time is not None and query.from_time > query.to_time:
         raise InvalidArgument("Stats start time must be before end time")
 
-    selected_date_ranges = get_selected_date_ranges(query, event)
+    selected_date_ranges = get_selected_date_ranges(query, event.daily_end_time)
     if selected_date_ranges:
         return selected_date_ranges[0][0], selected_date_ranges[-1][1]
 
@@ -825,7 +808,7 @@ class OrderStatsService(Service[Config]):
         scope_node = await self._resolve_scope_node(conn=conn, node=node, subnode_id=query.subnode_id)
         event = await fetch_event_for_node(conn=conn, node=scope_node)
         from_time, to_time = get_event_time_bounds(query, event)
-        selected_date_ranges = get_selected_date_ranges(query, event)
+        selected_date_ranges = get_selected_date_ranges(query, event.daily_end_time)
 
         hourly_stats = await get_hourly_entry_stats(
             conn=conn,
@@ -853,7 +836,7 @@ class OrderStatsService(Service[Config]):
         scope_node = await self._resolve_scope_node(conn=conn, node=node, subnode_id=query.subnode_id)
         event = await fetch_event_for_node(conn=conn, node=scope_node)
         from_time, to_time = get_event_time_bounds(query, event)
-        selected_date_ranges = get_selected_date_ranges(query, event)
+        selected_date_ranges = get_selected_date_ranges(query, event.daily_end_time)
 
         hourly_stats = await get_hourly_top_up_stats(
             conn=conn,
@@ -881,7 +864,7 @@ class OrderStatsService(Service[Config]):
         scope_node = await self._resolve_scope_node(conn=conn, node=node, subnode_id=query.subnode_id)
         event = await fetch_event_for_node(conn=conn, node=scope_node)
         from_time, to_time = get_event_time_bounds(query, event)
-        selected_date_ranges = get_selected_date_ranges(query, event)
+        selected_date_ranges = get_selected_date_ranges(query, event.daily_end_time)
 
         hourly_stats = await get_hourly_pay_out_stats(
             conn=conn,
@@ -943,7 +926,7 @@ class OrderStatsService(Service[Config]):
         scope_node = await self._resolve_scope_node(conn=conn, node=node, subnode_id=query.subnode_id)
         event = await fetch_event_for_node(conn=conn, node=scope_node)
         from_time, to_time = get_event_time_bounds(query, event)
-        selected_date_ranges = get_selected_date_ranges(query, event)
+        selected_date_ranges = get_selected_date_ranges(query, event.daily_end_time)
         hourly_product_stats, product_overall_stats, hourly_deposit_stats, deposit_overall_stats = (
             await get_product_breakdown_stats(
                 conn=conn,
@@ -981,7 +964,7 @@ class OrderStatsService(Service[Config]):
         scope_node = await self._resolve_scope_node(conn=conn, node=node, subnode_id=query.subnode_id)
         event = await fetch_event_for_node(conn=conn, node=scope_node)
         from_time, to_time = get_event_time_bounds(query, event)
-        selected_date_ranges = get_selected_date_ranges(query, event)
+        selected_date_ranges = get_selected_date_ranges(query, event.daily_end_time)
         hourly_stats = await get_hourly_sales_stats(
             conn=conn,
             node=scope_node,
@@ -1008,9 +991,15 @@ class OrderStatsService(Service[Config]):
         scope_node = await self._resolve_scope_node(conn=conn, node=node, subnode_id=query.subnode_id)
         event = await fetch_event_for_node(conn=conn, node=scope_node)
         from_time, to_time = get_event_time_bounds(query, event)
-        selected_date_ranges = get_selected_date_ranges(query, event)
+        selected_date_ranges = get_selected_date_ranges(query, event.daily_end_time)
         selected_date_filter, selected_date_params = build_selected_date_condition(
             field_name="o.booked_at",
+            start_param_index=6,
+            selected_date_ranges=selected_date_ranges,
+        )
+
+        payout_date_filter, _ = build_selected_date_condition(
+            field_name="t.booked_at",
             start_param_index=6,
             selected_date_ranges=selected_date_ranges,
         )
@@ -1063,6 +1052,7 @@ class OrderStatsService(Service[Config]):
                 "    JOIN account source_account ON t.source_account = source_account.id "
                 "    JOIN account target_account ON t.target_account = target_account.id "
                 "    WHERE t.booked_at >= $1 AND t.booked_at <= $2 "
+                f"      {payout_date_filter} "
                 "      AND source_account.type = 'private' "
                 "      AND source_account.node_id = ANY($5) "
                 "      AND source_account.balance = 0 "
@@ -1123,7 +1113,7 @@ class OrderStatsService(Service[Config]):
         scope_node = await self._resolve_scope_node(conn=conn, node=node, subnode_id=query.subnode_id)
         event = await fetch_event_for_node(conn=conn, node=scope_node)
         from_time, to_time = get_event_time_bounds(query, event)
-        selected_date_ranges = get_selected_date_ranges(query, event)
+        selected_date_ranges = get_selected_date_ranges(query, event.daily_end_time)
         selected_date_filter, selected_date_params = build_selected_date_condition(
             field_name="o.booked_at",
             start_param_index=5,
@@ -1192,7 +1182,7 @@ class OrderStatsService(Service[Config]):
         scope_node = await self._resolve_scope_node(conn=conn, node=node, subnode_id=query.subnode_id)
         event = await fetch_event_for_node(conn=conn, node=scope_node)
         from_time, to_time = get_event_time_bounds(query, event)
-        selected_date_ranges = get_selected_date_ranges(query, event)
+        selected_date_ranges = get_selected_date_ranges(query, event.daily_end_time)
         selected_date_filter, selected_date_params = build_selected_date_condition(
             field_name="o.booked_at",
             start_param_index=5,

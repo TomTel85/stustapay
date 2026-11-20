@@ -13,11 +13,24 @@ from stustapay.core.schema.tree import Node
 from stustapay.core.service.account import get_system_account_for_node
 from stustapay.core.service.order import OrderService
 from stustapay.core.service.order.booking import BookingIdentifier, NewLineItem, book_order
-from stustapay.core.service.order.stats import TimeseriesStatsQuery, get_daily_stats, get_hourly_sales_stats
+from stustapay.core.service.order.stats import (
+    TimeseriesStatsQuery,
+    get_daily_stats,
+    get_hourly_sales_stats,
+    get_selected_date_ranges,
+)
 from stustapay.core.service.product import ProductService
 from stustapay.core.service.tree.common import fetch_event_for_node
 
 from .conftest import Cashier, CreateRandomUserTag
+
+
+def test_selected_event_day_ranges_use_local_cutoffs_across_daylight_saving():
+    query = TimeseriesStatsQuery(from_time=None, to_time=None, selected_dates=["2026-03-28", "2026-03-30"])
+    assert get_selected_date_ranges(query, time(6)) == [
+        (datetime(2026, 3, 28, 5, tzinfo=UTC), datetime(2026, 3, 29, 3, 59, 59, 999999, tzinfo=UTC)),
+        (datetime(2026, 3, 30, 4, tzinfo=UTC), datetime(2026, 3, 31, 3, 59, 59, 999999, tzinfo=UTC)),
+    ]
 
 
 async def _create_customer_account(

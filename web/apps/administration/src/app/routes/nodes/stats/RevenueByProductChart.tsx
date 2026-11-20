@@ -66,16 +66,6 @@ export const RevenueByProductChart: React.FC<RevenueByProductChartProps> = ({
     handleMenuClose();
   };
 
-  // Create a map of product_name to product_id for bar click handling
-  const productNameToIdMap = React.useMemo(() => {
-    if (!data) return new Map<string, number>();
-    const map = new Map<string, number>();
-    [...(data.product_overall_stats || []), ...(data.deposit_overall_stats || [])].forEach((product) => {
-      map.set(product.product_name, product.product_id);
-    });
-    return map;
-  }, [data]);
-
   // Filter and sort the data
   const chartData: BarChartData[] = React.useMemo(() => {
     if (!data) return [];
@@ -84,7 +74,8 @@ export const RevenueByProductChart: React.FC<RevenueByProductChartProps> = ({
     const allProducts = [...(data.product_overall_stats || []), ...(data.deposit_overall_stats || [])];
 
     // Apply sorting
-    const sorted = [...allProducts];
+    const sorted =
+      productId === undefined ? allProducts : allProducts.filter((product) => product.product_id === productId);
     switch (sortOption) {
       case "revenue-desc":
         sorted.sort((a, b) => Math.abs(b.revenue) - Math.abs(a.revenue));
@@ -101,11 +92,12 @@ export const RevenueByProductChart: React.FC<RevenueByProductChartProps> = ({
     }
 
     return sorted.map((product) => ({
-      id: product.product_name,
+      id: String(product.product_id),
+      category: product.product_name,
       value: product.revenue,
       label: formatCurrency(product.revenue),
     }));
-  }, [data, sortOption, formatCurrency]);
+  }, [data, sortOption, formatCurrency, productId]);
 
   const chartHeight = React.useMemo(() => {
     if (isSmallMobile) {
@@ -117,17 +109,7 @@ export const RevenueByProductChart: React.FC<RevenueByProductChartProps> = ({
     return 300;
   }, [chartData.length, isMobile, isSmallMobile]);
 
-  const handleBarClick = React.useCallback(
-    (barData: BarChartData) => {
-      if (onProductClick) {
-        const clickedProductId = productNameToIdMap.get(barData.id);
-        if (clickedProductId !== undefined) {
-          onProductClick(clickedProductId);
-        }
-      }
-    },
-    [onProductClick, productNameToIdMap]
-  );
+  const handleBarClick = (barData: BarChartData) => onProductClick?.(Number(barData.id));
 
   // Get filtered product name for badge
   const filteredProductName = React.useMemo(() => {
@@ -147,7 +129,8 @@ export const RevenueByProductChart: React.FC<RevenueByProductChartProps> = ({
         sx={{
           backgroundColor: (theme) =>
             theme.palette.mode === "dark" ? "rgba(26, 27, 30, 0.8)" : "rgba(255, 255, 255, 0.9)",
-          border: (theme) => `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
+          border: (theme) =>
+            `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
           boxShadow: "none",
         }}
       >
@@ -164,7 +147,8 @@ export const RevenueByProductChart: React.FC<RevenueByProductChartProps> = ({
         sx={{
           backgroundColor: (theme) =>
             theme.palette.mode === "dark" ? "rgba(26, 27, 30, 0.8)" : "rgba(255, 255, 255, 0.9)",
-          border: (theme) => `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
+          border: (theme) =>
+            `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
           boxShadow: "none",
         }}
       >
@@ -183,7 +167,8 @@ export const RevenueByProductChart: React.FC<RevenueByProductChartProps> = ({
         sx={{
           backgroundColor: (theme) =>
             theme.palette.mode === "dark" ? "rgba(26, 27, 30, 0.8)" : "rgba(255, 255, 255, 0.9)",
-          border: (theme) => `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
+          border: (theme) =>
+            `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
           boxShadow: "none",
         }}
       >
@@ -201,7 +186,8 @@ export const RevenueByProductChart: React.FC<RevenueByProductChartProps> = ({
       sx={{
         backgroundColor: (theme) =>
           theme.palette.mode === "dark" ? "rgba(26, 27, 30, 0.8)" : "rgba(255, 255, 255, 0.9)",
-        border: (theme) => `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
+        border: (theme) =>
+          `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
         boxShadow: "none",
       }}
     >
@@ -224,6 +210,7 @@ export const RevenueByProductChart: React.FC<RevenueByProductChartProps> = ({
             )}
             <IconButton
               size="small"
+              aria-label={t("overview.sortBy")}
               onClick={handleMenuOpen}
               sx={{
                 color: "text.secondary",
@@ -252,25 +239,41 @@ export const RevenueByProductChart: React.FC<RevenueByProductChartProps> = ({
               </MenuItem>
               <MenuItem onClick={() => handleSortChange("revenue-desc")}>
                 <ListItemIcon>
-                  {sortOption === "revenue-desc" ? <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} /> : <TrendingUpIcon fontSize="small" />}
+                  {sortOption === "revenue-desc" ? (
+                    <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} />
+                  ) : (
+                    <TrendingUpIcon fontSize="small" />
+                  )}
                 </ListItemIcon>
                 <ListItemText>{t("overview.revenueDescending")}</ListItemText>
               </MenuItem>
               <MenuItem onClick={() => handleSortChange("revenue-asc")}>
                 <ListItemIcon>
-                  {sortOption === "revenue-asc" ? <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} /> : <TrendingUpIcon fontSize="small" />}
+                  {sortOption === "revenue-asc" ? (
+                    <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} />
+                  ) : (
+                    <TrendingUpIcon fontSize="small" />
+                  )}
                 </ListItemIcon>
                 <ListItemText>{t("overview.revenueAscending")}</ListItemText>
               </MenuItem>
               <MenuItem onClick={() => handleSortChange("name-asc")}>
                 <ListItemIcon>
-                  {sortOption === "name-asc" ? <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} /> : <SortByAlphaIcon fontSize="small" />}
+                  {sortOption === "name-asc" ? (
+                    <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} />
+                  ) : (
+                    <SortByAlphaIcon fontSize="small" />
+                  )}
                 </ListItemIcon>
                 <ListItemText>{t("overview.nameAscending")}</ListItemText>
               </MenuItem>
               <MenuItem onClick={() => handleSortChange("name-desc")}>
                 <ListItemIcon>
-                  {sortOption === "name-desc" ? <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} /> : <SortByAlphaIcon fontSize="small" />}
+                  {sortOption === "name-desc" ? (
+                    <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} />
+                  ) : (
+                    <SortByAlphaIcon fontSize="small" />
+                  )}
                 </ListItemIcon>
                 <ListItemText>{t("overview.nameDescending")}</ListItemText>
               </MenuItem>

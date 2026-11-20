@@ -1,5 +1,5 @@
 import * as React from "react";
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { TextDecoder, TextEncoder } from "util";
 import { DateTime } from "luxon";
 
@@ -7,6 +7,8 @@ import { DateTime } from "luxon";
   TextEncoder;
 (globalThis as typeof globalThis & { TextEncoder: typeof TextEncoder; TextDecoder: typeof TextDecoder }).TextDecoder =
   TextDecoder;
+
+const mockCurrencyFormatter = (amount: number) => `EUR ${amount}`;
 
 const mockUseCurrentUserHasPrivilege = jest.fn();
 const mockDispatch = jest.fn();
@@ -52,6 +54,7 @@ jest.mock("@/hooks", () => ({
       children: [],
     },
   }),
+  useCurrencyFormatter: () => mockCurrencyFormatter,
   useCurrentUserHasPrivilege: (...args: unknown[]) => mockUseCurrentUserHasPrivilege(...args),
 }));
 
@@ -80,12 +83,6 @@ jest.mock("@/api", () => ({
   useGetPaymentMethodStatsQuery: (...args: unknown[]) => mockUseGetPaymentMethodStatsQuery(...args),
   useGetProductStatsQuery: (...args: unknown[]) => mockUseGetProductStatsQuery(...args),
   useGetRevenueByCounterQuery: (...args: unknown[]) => mockUseGetRevenueByCounterQuery(...args),
-}));
-
-jest.mock("./DashboardKPIs", () => ({
-  DashboardKPIs: (props: { enabled?: boolean }) => (
-    <div data-testid="kpis">{props.enabled ? "enabled" : "disabled"}</div>
-  ),
 }));
 
 jest.mock("./RevenueByCounterChart", () => ({
@@ -125,6 +122,7 @@ jest.mock("./RevenuePredictionChart", () => ({
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
+    i18n: { language: "en" },
   }),
 }));
 
@@ -132,8 +130,8 @@ const { MemoryRouter } = require("react-router-dom");
 const { NodeStats } = require("./NodeStats");
 
 describe("NodeStats", () => {
-  const expectedFromTimestamp = DateTime.fromISO("2026-01-03T06:00:00", { zone: "local" }).toISO();
-  const expectedToTimestamp = DateTime.fromISO("2026-01-04T05:59:59.999", { zone: "local" }).toISO();
+  const expectedFromTimestamp = DateTime.fromISO("2026-01-03T06:00:00", { zone: "Europe/Berlin" }).toISO();
+  const expectedToTimestamp = DateTime.fromISO("2026-01-04T05:59:59.999", { zone: "Europe/Berlin" }).toISO();
 
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date("2026-01-03T12:00:00.000Z"));
@@ -169,14 +167,14 @@ describe("NodeStats", () => {
       return privilege === "view_node_stats" || privilege === "can_book_orders";
     });
 
-    mockUseGetAvailableDatesQuery.mockReturnValue({ data: [] });
-    mockUseListTillsQuery.mockReturnValue({ data: { ids: [], entities: {} } });
-    mockUseListProductsQuery.mockReturnValue({ data: { ids: [], entities: {} } });
-    mockUseGetRevenuePredictionQuery.mockReturnValue({ data: undefined, isLoading: false });
-    mockUseGetDashboardOverviewQuery.mockReturnValue({ data: undefined, isLoading: false });
-    mockUseGetPaymentMethodStatsQuery.mockReturnValue({ data: undefined, isLoading: false });
-    mockUseGetProductStatsQuery.mockReturnValue({ data: undefined, isLoading: false });
-    mockUseGetRevenueByCounterQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockUseGetAvailableDatesQuery.mockReturnValue({ currentData: [] });
+    mockUseListTillsQuery.mockReturnValue({ currentData: { ids: [], entities: {} } });
+    mockUseListProductsQuery.mockReturnValue({ currentData: { ids: [], entities: {} } });
+    mockUseGetRevenuePredictionQuery.mockReturnValue({ isFetching: false, isError: false });
+    mockUseGetDashboardOverviewQuery.mockReturnValue({ isFetching: false, isError: false });
+    mockUseGetPaymentMethodStatsQuery.mockReturnValue({ isFetching: false, isError: false });
+    mockUseGetProductStatsQuery.mockReturnValue({ isFetching: false, isError: false });
+    mockUseGetRevenueByCounterQuery.mockReturnValue({ isFetching: false, isError: false });
   });
 
   afterEach(() => {
@@ -210,7 +208,7 @@ describe("NodeStats", () => {
       expect.objectContaining({ skip: true })
     );
     expect(screen.getByTestId("orders-table").textContent).toContain("disabled");
-    expect(screen.getByLabelText("overview.filterDate").textContent).toContain("overview.today");
+    expect(screen.getByRole("combobox", { name: "overview.reportingPeriod" }).textContent).toContain("overview.today");
   });
 
   test("fetches only the expanded sections and shares one top-level product/counter query", () => {
@@ -236,7 +234,7 @@ describe("NodeStats", () => {
 
     expect(mockUseGetAvailableDatesQuery).toHaveBeenCalledWith(
       expect.any(Object),
-      expect.objectContaining({ skip: false })
+      expect.objectContaining({ skip: true })
     );
     expect(mockUseGetDashboardOverviewQuery).toHaveBeenCalledTimes(1);
     expect(mockUseGetPaymentMethodStatsQuery).toHaveBeenCalledTimes(1);
@@ -253,12 +251,105 @@ describe("NodeStats", () => {
       expect.any(Object),
       expect.objectContaining({ skip: false, pollingInterval: 30000, skipPollingIfUnfocused: true })
     );
-    expect(screen.getByTestId("kpis").textContent).toContain("enabled");
+
     expect(screen.getByTestId("product-chart").textContent).toContain("enabled");
     expect(screen.getByTestId("counter-chart").textContent).toContain("enabled");
     expect(screen.getByTestId("counter-table").textContent).toContain("enabled");
     expect(screen.getByTestId("quantities-table").textContent).toContain("enabled");
     expect(screen.getByTestId("orders-table").textContent).toContain("disabled");
+  });
+
+  test("advances an open dashboard to the next business day at the configured cutoff", () => {
+    jest.setSystemTime(DateTime.fromISO("2026-01-04T05:59:59.500", { zone: "Europe/Berlin" }).toJSDate());
+    render(
+      <MemoryRouter initialEntries={["/node/5/stats"]}>
+        <NodeStats />
+      </MemoryRouter>
+    );
+
+    expect(mockUseGetDashboardOverviewQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ fromTimestamp: expectedFromTimestamp }),
+      expect.any(Object)
+    );
+    act(() => jest.advanceTimersByTime(500));
+    expect(mockUseGetDashboardOverviewQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        fromTimestamp: DateTime.fromISO("2026-01-04T06:00:00", { zone: "Europe/Berlin" }).toISO(),
+      }),
+      expect.any(Object)
+    );
+  });
+
+  test("does not show broader totals for a product with no sales", () => {
+    mockUiState.statsExpandedSections.kpis = true;
+    mockUseGetDashboardOverviewQuery.mockReturnValue({
+      currentData: {
+        total_revenue: 100,
+        guests_with_orders: 10,
+        total_guest_credit: 500,
+        guests_with_credit: 10,
+        guests_paid_out: 0,
+        online_donation: 0,
+        online_for_payout: 0,
+      },
+    });
+    mockUseGetProductStatsQuery.mockReturnValue({
+      currentData: { product_overall_stats: [], deposit_overall_stats: [] },
+    });
+    mockUseListProductsQuery.mockReturnValue({
+      currentData: { ids: [6], entities: { 6: { id: 6, name: "Unsold tea" } } },
+    });
+    render(
+      <MemoryRouter initialEntries={["/node/5/stats"]}>
+        <NodeStats />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("EUR 100")).toBeTruthy();
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "overview.filterProduct" }));
+    fireEvent.click(screen.getByRole("option", { name: "Unsold tea" }));
+    expect(screen.queryByText("EUR 100")).toBeNull();
+    expect(screen.getByText("overview.noProductSales")).toBeTruthy();
+  });
+
+  test("distinguishes a failed refresh from missing results for a new scope", () => {
+    mockUiState.statsExpandedSections.kpis = true;
+    const refetch = jest.fn();
+    const overview = {
+      total_revenue: 100,
+      guests_with_orders: 10,
+      total_guest_credit: 500,
+      guests_with_credit: 10,
+      guests_paid_out: 0,
+      online_donation: 0,
+      online_for_payout: 0,
+    };
+    mockUseGetDashboardOverviewQuery.mockReturnValue({
+      data: overview,
+      isError: true,
+      refetch,
+    });
+    const app = () => (
+      <MemoryRouter initialEntries={["/node/5/stats"]}>
+        <NodeStats />
+      </MemoryRouter>
+    );
+    const { rerender } = render(app());
+    expect(screen.getByText("overview.statsLoadFailed")).toBeTruthy();
+    expect(screen.queryByText("EUR 100")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "overview.retryStats" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+
+    mockUseGetDashboardOverviewQuery.mockReturnValue({
+      currentData: overview,
+      isError: true,
+      refetch,
+      fulfilledTimeStamp: 100,
+    });
+    rerender(app());
+    expect(screen.getByText("overview.statsStale")).toBeTruthy();
+    expect(screen.getByText("overview.lastUpdated")).toBeTruthy();
+    expect(screen.getByText("EUR 100")).toBeTruthy();
   });
 
   test("shows the orders section for stats viewers with can_book_orders", () => {

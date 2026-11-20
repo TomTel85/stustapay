@@ -26,6 +26,7 @@ import { useTranslation } from "react-i18next";
 import { TableFilterBar, ColumnFilterConfig } from "@/components/tables/TableFilterBar";
 import { SortableTableHeader } from "@/components/tables/SortableTableHeader";
 import { useFilterableTable } from "@/hooks/useFilterableTable";
+import { StatsQueryState } from "./StatsQueryState";
 import { statsQueryOptions } from "./queryOptions";
 
 export type OrdersTableProps = {
@@ -84,19 +85,17 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
       }),
     [currentNode.id, fromTimestamp, selectedDates, subnodeId, tillId, toTimestamp]
   );
-  const [currentOffset, setCurrentOffset] = React.useState(0);
+  const [storedOffset, setCurrentOffset] = React.useState(0);
   const [pendingAppendOffset, setPendingAppendOffset] = React.useState<number | null>(null);
   const [loadedOrders, setLoadedOrders] = React.useState<Order[] | undefined>(undefined);
   const [hasMoreOrders, setHasMoreOrders] = React.useState(false);
-  const previousQueryKeyRef = React.useRef(queryKey);
+  const [loadedScope, setLoadedScope] = React.useState(queryKey);
   const lastIntegratedPageKeyRef = React.useRef<string | null>(null);
 
-  const { data: tills } = useListTillsQuery({ nodeId: effectiveNodeId }, statsQueryOptions(pollingIntervalMs));
-  const {
-    data: ordersData,
-    isLoading,
-    fulfilledTimeStamp,
-  } = useListOrdersFilteredQuery(
+  const isCurrentScope = loadedScope === queryKey;
+  const currentOffset = isCurrentScope ? storedOffset : 0;
+  const { currentData: tills } = useListTillsQuery({ nodeId: effectiveNodeId }, statsQueryOptions(pollingIntervalMs));
+  const ordersQuery = useListOrdersFilteredQuery(
     {
       nodeId: currentNode.id,
       fromTimestamp: fromTimestamp?.toISO() ?? undefined,
@@ -113,6 +112,8 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
     }
   );
 
+  const { currentData: ordersData, fulfilledTimeStamp } = ordersQuery;
+
   const currentPageOrders = React.useMemo(() => {
     if (!ordersData) {
       return undefined;
@@ -122,17 +123,17 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   }, [ordersData]);
 
   React.useEffect(() => {
-    if (previousQueryKeyRef.current === queryKey) {
+    if (isCurrentScope) {
       return;
     }
 
-    previousQueryKeyRef.current = queryKey;
+    setLoadedScope(queryKey);
     lastIntegratedPageKeyRef.current = null;
     setCurrentOffset(0);
     setPendingAppendOffset(null);
     setLoadedOrders(undefined);
     setHasMoreOrders(false);
-  }, [queryKey]);
+  }, [isCurrentScope, queryKey]);
 
   React.useEffect(() => {
     if (!currentPageOrders) {
@@ -170,7 +171,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
     setHasMoreOrders(false);
   }, [currentOffset, currentPageOrders, fulfilledTimeStamp, pendingAppendOffset, queryKey]);
 
-  const orders = loadedOrders;
+  const orders = isCurrentScope ? loadedOrders : undefined;
 
   const tableRowsData = React.useMemo((): TableRowData[] => {
     if (!orders) {
@@ -295,7 +296,9 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
     return null;
   }
 
-  if (isLoading && !orders) {
+  if (ordersQuery.isError && !orders) return <StatsQueryState query={ordersQuery} />;
+
+  if (ordersQuery.isFetching && !orders) {
     return (
       <Card
         sx={{
@@ -307,31 +310,15 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
         }}
       >
         <CardContent sx={{ p: { xs: 1, sm: 1.5, md: 2 }, "&:last-child": { pb: { xs: 1, sm: 1.5, md: 2 } } }}>
-          <Skeleton variant="rounded" height={isSmallMobile ? 250 : isMobile ? 300 : 400} />
+          <StatsQueryState query={ordersQuery}>
+            <Skeleton variant="rounded" height={isSmallMobile ? 250 : isMobile ? 300 : 400} />
+          </StatsQueryState>
         </CardContent>
       </Card>
     );
   }
 
-  if (!orders) {
-    return (
-      <Card
-        sx={{
-          backgroundColor: (themeOverride) =>
-            themeOverride.palette.mode === "dark" ? "rgba(26, 27, 30, 0.8)" : "rgba(255, 255, 255, 0.9)",
-          border: (themeOverride) =>
-            `1px solid ${themeOverride.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
-          boxShadow: "none",
-        }}
-      >
-        <CardContent sx={{ p: { xs: 1.5, sm: 2 }, "&:last-child": { pb: { xs: 1.5, sm: 2 } } }}>
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" } }}>
-            {t("overview.noDataAvailable")}
-          </Typography>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (!orders) return null;
 
   if (orders.length === 0) {
     return (
@@ -345,9 +332,11 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
         }}
       >
         <CardContent sx={{ p: { xs: 1.5, sm: 2 }, "&:last-child": { pb: { xs: 1.5, sm: 2 } } }}>
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" } }}>
-            {t("overview.noOrdersFound")}
-          </Typography>
+          <StatsQueryState query={ordersQuery} showLastUpdated>
+            <Typography variant="body2" color="text.secondary">
+              {t("overview.noOrdersFound")}
+            </Typography>
+          </StatsQueryState>
         </CardContent>
       </Card>
     );
@@ -365,6 +354,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
     >
       <CardContent sx={{ p: { xs: 1, sm: 1.5, md: 2 }, "&:last-child": { pb: { xs: 1, sm: 1.5, md: 2 } } }}>
         <Stack spacing={2}>
+          <StatsQueryState query={{ ...ordersQuery, currentData: orders }} showLastUpdated />
           <TableFilterBar
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}

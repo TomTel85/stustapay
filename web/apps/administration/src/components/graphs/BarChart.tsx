@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 export type BarChartData = {
   id: string;
   value: number;
+  category?: string;
   label?: string;
 };
 
@@ -45,15 +46,17 @@ export const BarChart: React.FC<BarChartProps> = ({
     [i18n.language]
   );
 
+  const categories = React.useMemo(() => new Map(data.map((bar) => [bar.id, bar.category ?? bar.id])), [data]);
+
   const truncateLabel = React.useCallback(
     (value: string | number) => {
-      const label = String(value);
+      const label = categories.get(String(value)) ?? String(value);
       if (label.length <= maxCategoryLabelLength) {
         return label;
       }
       return `${label.slice(0, maxCategoryLabelLength - 1)}…`;
     },
-    [maxCategoryLabelLength]
+    [categories, maxCategoryLabelLength]
   );
 
   const formatValueAxisLabel = React.useCallback(
@@ -212,7 +215,7 @@ export const BarChart: React.FC<BarChartProps> = ({
           format: horizontal
             ? (value) => formatValueAxisLabel(value)
             : (value) => truncateLabel(value),
-          tickValues: horizontal && isMobile ? 4 : undefined,
+          tickValues: horizontal && isMobile ? 2 : undefined,
         }}
         axisLeft={{
           tickSize: 0,
@@ -252,7 +255,7 @@ export const BarChart: React.FC<BarChartProps> = ({
             }}
           >
             <strong style={{ color: "#73BF69", fontSize: isSmallMobile ? "11px" : isMobile ? "12px" : "13px" }}>
-              {indexValue}
+              {categories.get(String(indexValue)) ?? indexValue}
             </strong>
             <div style={{ marginTop: "4px", fontWeight: 500, fontSize: isSmallMobile ? "10px" : isMobile ? "11px" : "12px" }}>
               {useCurrency ? formatCurrency(value) : value}

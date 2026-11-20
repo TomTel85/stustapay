@@ -24,8 +24,6 @@ import {
   Select,
   MenuItem,
   Button,
-  IconButton,
-  Tooltip,
   Accordion,
   AccordionSummary,
   AccordionDetails,
@@ -47,13 +45,14 @@ import {
   setStatsSectionExpanded,
 } from "@/store";
 import { Refresh as RefreshIcon, ExpandMore as ExpandMoreIcon, AutoGraph as AutoGraphIcon } from "@mui/icons-material";
-import { DashboardKPIs } from "./DashboardKPIs";
+import { DashboardKPIs, ForecastMetrics, PaymentMethodTotals } from "./DashboardKPIs";
 import { RevenueByCounterChart } from "./RevenueByCounterChart";
 import { RevenueByProductChart } from "./RevenueByProductChart";
 import { RevenueByCounterTable } from "./RevenueByCounterTable";
 import { QuantitiesByProductTable } from "./QuantitiesByProductTable";
 import { OrdersTable } from "./OrdersTable";
 import { RevenuePredictionChart } from "./RevenuePredictionChart";
+import { StatsQueryState } from "./StatsQueryState";
 import { statsQueryOptions } from "./queryOptions";
 
 type SectionKey =
@@ -66,10 +65,12 @@ type SectionKey =
   | "counterTable"
   | "orders";
 
+const eventTimeZone = "Europe/Berlin";
+
 type DatePreset = "all" | "today" | "yesterday" | "last7" | "custom";
 
 export const NodeStats: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const canViewNodeStats = useCurrentUserHasPrivilege(Privilege.view_node_stats);
   const canAdminNode = useCurrentUserHasPrivilege(Privilege.node_administration);
   const canViewOrders = useCurrentUserHasPrivilege(OrderRoutes.privilege);
@@ -82,7 +83,8 @@ export const NodeStats: React.FC = () => {
   const [selectedTillId, setSelectedTillId] = React.useState<number | undefined>(undefined);
   const [selectedProductId, setSelectedProductId] = React.useState<number | undefined>(undefined);
   const [isPredictionEnabled, setIsPredictionEnabled] = React.useState(false);
-  const [showAdvancedFilters, setShowAdvancedFilters] = React.useState(false);
+  const [isCustomDatePickerOpen, setIsCustomDatePickerOpen] = React.useState(false);
+  const ordersSummaryRef = React.useRef<HTMLButtonElement>(null);
   const pollingIntervalMs = useAppSelector(selectStatsPollingInterval);
   const expandedSections = useAppSelector(selectStatsExpandedSections) as Record<SectionKey, boolean>;
   const predictionPollingIntervalMs = pollingIntervalMs > 0 ? Math.max(pollingIntervalMs, 300000) : 0;
@@ -129,44 +131,34 @@ export const NodeStats: React.FC = () => {
     }
   }, [selectedSubnodeId, subnodeOptions]);
 
-  const isCustomDateSelection = datePreset === "custom";
-  const shouldLoadAvailableDates = isFiltersExpanded || isCustomDateSelection;
-  const isProductDataEnabled = isProductChartExpanded || isQuantityTableExpanded || isKpisExpanded;
-  const isCounterDataEnabled = isCounterChartExpanded || isCounterTableExpanded;
-  const isOverviewDataEnabled = isKpisExpanded;
+  const isProductSelected = selectedProductId !== undefined;
+  const isProductDataEnabled =
+    isProductChartExpanded || isQuantityTableExpanded || (isKpisExpanded && isProductSelected);
+  const isCounterDataEnabled = !isProductSelected && (isCounterChartExpanded || isCounterTableExpanded);
+  const isOverviewDataEnabled = isKpisExpanded && !isProductSelected;
   const isOrdersDataEnabled = isOrdersExpanded && canViewOrders;
+  const canShowForecast = currentNode.event != null && !isProductSelected;
 
-  const { data: availableDates } = useGetAvailableDatesQuery(
-    { nodeId: currentNode.id, subnodeId: selectedSubnodeId },
-    {
-      ...statsQueryOptions(pollingIntervalMs, shouldLoadAvailableDates),
-      skip: !shouldLoadAvailableDates,
-    }
-  );
-  const { data: tills } = useListTillsQuery(
-    { nodeId: effectiveFilterNodeId },
-    {
-      ...statsQueryOptions(pollingIntervalMs, isFiltersExpanded || isOrdersDataEnabled),
-      skip: !isFiltersExpanded && !isOrdersDataEnabled,
-    }
-  );
-  const { data: products } = useListProductsQuery(
-    { nodeId: effectiveFilterNodeId },
-    {
-      ...statsQueryOptions(pollingIntervalMs, isFiltersExpanded || isProductDataEnabled),
-      skip: !isFiltersExpanded && !isProductDataEnabled,
-    }
-  );
-  const { data: prediction, isLoading: isPredictionLoading } = useGetRevenuePredictionQuery(
+  const datesQuery = useGetAvailableDatesQuery(
     {
       nodeId: currentNode.id,
-      tillId: selectedTillId,
       subnodeId: selectedSubnodeId,
+      dayMode: eventSettings.daily_end_time ? "event_day" : "calendar_day",
     },
     {
+      ...statsQueryOptions(pollingIntervalMs, isCustomDatePickerOpen),
+      skip: !isCustomDatePickerOpen,
+    }
+  );
+  const tillsQuery = useListTillsQuery({ nodeId: effectiveFilterNodeId }, statsQueryOptions(pollingIntervalMs));
+  const productsQuery = useListProductsQuery({ nodeId: effectiveFilterNodeId }, statsQueryOptions(pollingIntervalMs));
+  const { currentData: tills } = tillsQuery;
+  const { currentData: products } = productsQuery;
+  const predictionQuery = useGetRevenuePredictionQuery(
+    { nodeId: currentNode.id, tillId: selectedTillId, subnodeId: selectedSubnodeId },
+    {
       ...statsQueryOptions(predictionPollingIntervalMs, isPredictionExpanded),
-      skip:
-        currentNode.event == null || !isPredictionEnabled || selectedProductId !== undefined || !isPredictionExpanded,
+      skip: !canShowForecast || !isPredictionEnabled || !isPredictionExpanded,
     }
   );
 
@@ -177,6 +169,7 @@ export const NodeStats: React.FC = () => {
   const clearAllFilterSelections = React.useCallback(() => {
     setDatePreset("all");
     setSelectedDates([]);
+    setIsCustomDatePickerOpen(false);
     setSelectedSubnodeId(undefined);
     setSelectedTillId(undefined);
     setSelectedProductId(undefined);
@@ -192,14 +185,11 @@ export const NodeStats: React.FC = () => {
   };
 
   const summaryTextSx = {
-    fontSize: { xs: "0.7rem", sm: "0.75rem", md: "0.875rem" },
-    fontWeight: 500,
-    textTransform: "uppercase",
-    letterSpacing: { xs: "0.2px", sm: "0.3px", md: "0.5px" },
-    color: "text.secondary",
+    fontSize: "0.9375rem",
+    fontWeight: 600,
   };
   const summarySx = {
-    minHeight: { xs: 40, sm: 46, md: 48 },
+    minHeight: 48,
     px: { xs: 1, sm: 1.5, md: 2 },
     "& .MuiAccordionSummary-content": {
       my: { xs: 0.5, sm: 0.75, md: 1 },
@@ -233,11 +223,42 @@ export const NodeStats: React.FC = () => {
     [dailyEndParts]
   );
 
-  const currentBusinessDayStart = React.useMemo(() => {
-    const now = DateTime.now();
-    const boundaryToday = businessDayStartForDate(now);
-    return now < boundaryToday ? boundaryToday.minus({ days: 1 }) : boundaryToday;
-  }, [businessDayStartForDate]);
+  const getBusinessDayStart = React.useCallback(
+    (now: DateTime) => {
+      const boundary = businessDayStartForDate(now);
+      return now < boundary ? businessDayStartForDate(now.minus({ days: 1 })) : boundary;
+    },
+    [businessDayStartForDate]
+  );
+  const [now, setNow] = React.useState(() => DateTime.now().setZone(eventTimeZone));
+  const currentBusinessDayStart = React.useMemo(() => getBusinessDayStart(now), [getBusinessDayStart, now]);
+
+  React.useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout>;
+    const updateClock = () => {
+      clearTimeout(timeout);
+      const currentTime = DateTime.now().setZone(eventTimeZone);
+      const start = getBusinessDayStart(currentTime);
+      setNow((previous) => (getBusinessDayStart(previous).equals(start) ? previous : currentTime));
+      const nextStart = businessDayStartForDate(start.plus({ days: 1 }));
+      timeout = setTimeout(updateClock, Math.max(1, nextStart.diff(currentTime).as("milliseconds")));
+    };
+    updateClock();
+    window.addEventListener("focus", updateClock);
+    return () => {
+      window.removeEventListener("focus", updateClock);
+      clearTimeout(timeout);
+    };
+  }, [businessDayStartForDate, getBusinessDayStart]);
+
+  const forecastDay = currentBusinessDayStart.toMillis();
+  const previousForecastDay = React.useRef(forecastDay);
+  React.useEffect(() => {
+    if (previousForecastDay.current !== forecastDay) {
+      previousForecastDay.current = forecastDay;
+      if (canShowForecast && isPredictionEnabled && isPredictionExpanded) predictionQuery.refetch();
+    }
+  }, [forecastDay, canShowForecast, isPredictionEnabled, isPredictionExpanded, predictionQuery.refetch]);
 
   const sortedSelectedDates = React.useMemo(() => [...selectedDates].sort(), [selectedDates]);
   const selectedDatesForQuery = React.useMemo(
@@ -254,16 +275,16 @@ export const NodeStats: React.FC = () => {
       return currentBusinessDayStart;
     }
     if (datePreset === "yesterday") {
-      return currentBusinessDayStart.minus({ days: 1 });
+      return businessDayStartForDate(currentBusinessDayStart.minus({ days: 1 }));
     }
     if (datePreset === "last7") {
-      return currentBusinessDayStart.minus({ days: 6 });
+      return businessDayStartForDate(currentBusinessDayStart.minus({ days: 6 }));
     }
     if (sortedSelectedDates.length === 0) {
       return undefined;
     }
 
-    const dt = DateTime.fromISO(sortedSelectedDates[0]);
+    const dt = DateTime.fromISO(sortedSelectedDates[0], { zone: eventTimeZone });
     if (eventSettings.daily_end_time) {
       return businessDayStartForDate(dt);
     }
@@ -274,14 +295,14 @@ export const NodeStats: React.FC = () => {
     if (!fromTimestamp) return undefined;
 
     if (datePreset === "last7") {
-      return fromTimestamp.plus({ days: 7 }).minus({ milliseconds: 1 });
+      return businessDayStartForDate(fromTimestamp.plus({ days: 7 })).minus({ milliseconds: 1 });
     }
     if (datePreset === "custom" && sortedSelectedDates.length > 0) {
-      const lastDate = DateTime.fromISO(sortedSelectedDates[sortedSelectedDates.length - 1]);
+      const lastDate = DateTime.fromISO(sortedSelectedDates[sortedSelectedDates.length - 1], { zone: eventTimeZone });
       const lastRangeStart = eventSettings.daily_end_time ? businessDayStartForDate(lastDate) : lastDate.startOf("day");
-      return lastRangeStart.plus({ days: 1 }).minus({ milliseconds: 1 });
+      return businessDayStartForDate(lastRangeStart.plus({ days: 1 })).minus({ milliseconds: 1 });
     }
-    return fromTimestamp.plus({ days: 1 }).minus({ milliseconds: 1 });
+    return businessDayStartForDate(fromTimestamp.plus({ days: 1 })).minus({ milliseconds: 1 });
   }, [fromTimestamp, datePreset, sortedSelectedDates, eventSettings.daily_end_time, businessDayStartForDate]);
 
   const sharedStatsArgs = React.useMemo(
@@ -295,59 +316,53 @@ export const NodeStats: React.FC = () => {
     }),
     [currentNode.id, fromTimestamp, selectedDatesForQuery, selectedTillId, selectedSubnodeId, toTimestamp]
   );
-  const { data: overview, isLoading: isOverviewLoading } = useGetDashboardOverviewQuery(sharedStatsArgs, {
+  const overviewQuery = useGetDashboardOverviewQuery(sharedStatsArgs, {
     ...statsQueryOptions(pollingIntervalMs, isOverviewDataEnabled),
     skip: !isOverviewDataEnabled,
   });
-  const { data: paymentMethods, isLoading: isPaymentMethodsLoading } = useGetPaymentMethodStatsQuery(sharedStatsArgs, {
+  const paymentMethodsQuery = useGetPaymentMethodStatsQuery(sharedStatsArgs, {
     ...statsQueryOptions(pollingIntervalMs, isOverviewDataEnabled),
     skip: !isOverviewDataEnabled,
   });
-  const { data: productStats, isLoading: isProductStatsLoading } = useGetProductStatsQuery(sharedStatsArgs, {
+  const productStatsQuery = useGetProductStatsQuery(sharedStatsArgs, {
     ...statsQueryOptions(pollingIntervalMs, isProductDataEnabled),
     skip: !isProductDataEnabled,
   });
-  const { data: revenueByCounter, isLoading: isRevenueByCounterLoading } = useGetRevenueByCounterQuery(
-    sharedStatsArgs,
-    {
-      ...statsQueryOptions(pollingIntervalMs, isCounterDataEnabled),
-      skip: !isCounterDataEnabled,
-    }
-  );
+  const counterStatsQuery = useGetRevenueByCounterQuery(sharedStatsArgs, {
+    ...statsQueryOptions(pollingIntervalMs, isCounterDataEnabled),
+    skip: !isCounterDataEnabled,
+  });
 
   const selectedSubnodeName = React.useMemo(
     () => subnodeOptions.find((node) => node.id === selectedSubnodeId)?.name,
     [subnodeOptions, selectedSubnodeId]
   );
 
-  const selectedTillName = React.useMemo(
-    () => (selectedTillId !== undefined ? tills?.entities[selectedTillId]?.name : undefined),
-    [selectedTillId, tills]
+  const hasNonDateFilters = selectedSubnodeId !== undefined || selectedTillId !== undefined || isProductSelected;
+  const formatDateTime = (date: DateTime) =>
+    date
+      .setLocale(i18n.language)
+      .toLocaleString(dailyEndParts.second ? DateTime.DATETIME_MED_WITH_SECONDS : DateTime.DATETIME_MED);
+  const cutoff = DateTime.fromObject(dailyEndParts, { zone: "UTC", locale: i18n.language }).toLocaleString(
+    dailyEndParts.second ? DateTime.TIME_WITH_SECONDS : DateTime.TIME_SIMPLE
   );
-
-  const selectedProductName = React.useMemo(
-    () => (selectedProductId !== undefined ? products?.entities[selectedProductId]?.name : undefined),
-    [selectedProductId, products]
-  );
-
-  const dateFilterLabel = React.useMemo(() => {
-    if (datePreset === "today") return t("overview.today");
-    if (datePreset === "yesterday") return t("overview.yesterday");
-    if (datePreset === "last7") return t("overview.last7Days");
-    if (datePreset === "custom" && sortedSelectedDates.length === 1) {
-      return DateTime.fromISO(sortedSelectedDates[0]).toLocaleString(DateTime.DATE_MED);
-    }
-    if (datePreset === "custom" && sortedSelectedDates.length > 1) {
-      return t("overview.selectedDatesCount", { count: sortedSelectedDates.length });
-    }
-    return undefined;
-  }, [datePreset, sortedSelectedDates, t]);
-
-  const hasActiveFilters =
-    dateFilterLabel !== undefined ||
-    selectedSubnodeId !== undefined ||
-    selectedTillId !== undefined ||
-    selectedProductId !== undefined;
+  const reportingWindow =
+    selectedDatesForQuery && selectedDatesForQuery.length > 1
+      ? t("overview.selectedBusinessDates", {
+          dates: selectedDatesForQuery
+            .map((date) => DateTime.fromISO(date).setLocale(i18n.language).toLocaleString(DateTime.DATE_MED))
+            .join(", "),
+          cutoff,
+        })
+      : fromTimestamp && toTimestamp
+        ? t("overview.reportingWindow", {
+            start: formatDateTime(fromTimestamp),
+            end: formatDateTime(toTimestamp.plus({ milliseconds: 1 })),
+          })
+        : t("overview.fullReportingWindow", { cutoff });
+  const primaryQuery = isProductSelected ? productStatsQuery : overviewQuery;
+  const loading = (query: { isFetching: boolean; currentData?: unknown }) =>
+    query.isFetching && query.currentData === undefined;
 
   if (!canViewNodeStats && !canAdminNode) {
     return <Navigate to="/" />;
@@ -367,325 +382,184 @@ export const NodeStats: React.FC = () => {
   return (
     <Grid container spacing={{ xs: 0.75, sm: 1, md: 1.5 }}>
       <Grid size={12}>
-        <Accordion
-          expanded={expandedSections.filters}
-          onChange={handleSectionToggle("filters")}
-          disableGutters
-          sx={sectionSx}
-        >
-          <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={summarySx}>
-            <Typography sx={summaryTextSx}>{t("overview.dashboardFilters")}</Typography>
-          </AccordionSummary>
-          <AccordionDetails sx={{ p: { xs: 1, sm: 1.5, md: 2 } }}>
-            <Stack direction="column" spacing={{ xs: 1, sm: 1.5, md: 2 }}>
-              <Grid container spacing={{ xs: 1, sm: 1.5 }} alignItems="center">
-                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                  <FormControl size="small" fullWidth>
-                    <InputLabel id="date-select-label" shrink>
-                      {t("overview.filterDate")}
-                    </InputLabel>
-                    <Select
-                      labelId="date-select-label"
-                      id="date-select"
-                      multiple
-                      value={selectedDates}
-                      label={t("overview.filterDate")}
-                      onChange={(e) => {
-                        const value = [...(e.target.value as string[])].sort();
-                        if (value.length === 0) {
-                          setDatePreset("all");
-                          setSelectedDates([]);
-                          return;
-                        }
-                        setSelectedDates(value);
-                        setDatePreset("custom");
-                      }}
-                      displayEmpty
-                      notched
-                      renderValue={(selected) => {
-                        const values = selected as string[];
-                        if (values.length === 0) {
-                          if (datePreset === "today") {
-                            return <em>{t("overview.today")}</em>;
-                          }
-                          if (datePreset === "yesterday") {
-                            return <em>{t("overview.yesterday")}</em>;
-                          }
-                          if (datePreset === "last7") {
-                            return <em>{t("overview.last7Days")}</em>;
-                          }
-                          return <em>{t("overview.allDates")}</em>;
-                        }
-                        if (values.length === 1) {
-                          return DateTime.fromISO(values[0]).toLocaleString(DateTime.DATE_MED);
-                        }
-                        return t("overview.selectedDatesCount", { count: values.length });
-                      }}
-                    >
-                      {availableDates && availableDates.length > 0 ? (
-                        availableDates.map((date) => (
-                          <MenuItem key={date} value={date}>
-                            <Checkbox checked={selectedDates.includes(date)} size="small" />
-                            <ListItemText primary={DateTime.fromISO(date).toLocaleString(DateTime.DATE_MED)} />
-                          </MenuItem>
-                        ))
-                      ) : (
-                        <MenuItem disabled>{t("overview.noDatesAvailable")}</MenuItem>
-                      )}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                  <FormControl size="small" fullWidth>
-                    <InputLabel id="subnode-select-label" shrink>
-                      {t("overview.filterSubnode")}
-                    </InputLabel>
-                    <Select
-                      labelId="subnode-select-label"
-                      id="subnode-select"
-                      value={selectedSubnodeId ?? ""}
-                      label={t("overview.filterSubnode")}
-                      onChange={(e) => {
-                        const val = e.target.value as string | number;
-                        setSelectedSubnodeId(val === "" ? undefined : (val as number));
-                        setSelectedTillId(undefined);
-                        setSelectedProductId(undefined);
-                      }}
-                      displayEmpty
-                      notched
-                    >
-                      <MenuItem value="">
-                        <em>{t("overview.allSubnodes")}</em>
-                      </MenuItem>
-                      {subnodeOptions.map((option) => (
-                        <MenuItem key={option.id} value={option.id}>
-                          {`${"  ".repeat(Math.max(0, option.depth - 1))}${option.name}`}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid size={{ xs: 6, sm: 3, md: 2 }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    startIcon={<RefreshIcon />}
-                    onClick={handleManualRefresh}
-                    fullWidth
-                    sx={{ height: 40 }}
-                  >
-                    {t("refresh")}
-                  </Button>
-                </Grid>
-                <Grid size={{ xs: 6, sm: 3, md: 2 }}>
-                  <Button
-                    size="small"
-                    variant={showAdvancedFilters ? "contained" : "outlined"}
-                    onClick={() => setShowAdvancedFilters((prev) => !prev)}
-                    fullWidth
-                    sx={{ height: 40 }}
-                  >
-                    {showAdvancedFilters ? t("overview.hideAdvancedFilters") : t("overview.advancedFilters")}
-                  </Button>
-                </Grid>
-              </Grid>
-
-              <Grid container spacing={{ xs: 1, sm: 1.5 }} alignItems="center">
-                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <FormControl size="small" fullWidth>
-                      <InputLabel id="polling-select-label" shrink>
-                        {t("overview.pollingInterval")}
-                      </InputLabel>
-                      <Select
-                        labelId="polling-select-label"
-                        id="polling-select"
-                        value={pollingIntervalMs}
-                        label={t("overview.pollingInterval")}
-                        onChange={(e) => dispatch(setStatsPollingInterval(Number(e.target.value)))}
-                        notched
-                      >
-                        <MenuItem value={0}>
-                          <em>{t("overview.pollingOff")}</em>
-                        </MenuItem>
-                        <MenuItem value={30000}>30s</MenuItem>
-                        <MenuItem value={60000}>1min</MenuItem>
-                        <MenuItem value={300000}>5min</MenuItem>
-                        <MenuItem value={1800000}>30min</MenuItem>
-                      </Select>
-                    </FormControl>
-                    <Tooltip
-                      title={isPredictionEnabled ? t("overview.disablePrediction") : t("overview.enablePrediction")}
-                    >
-                      <IconButton
-                        size="small"
-                        onClick={() => setIsPredictionEnabled((prev) => !prev)}
-                        aria-label={
-                          isPredictionEnabled ? t("overview.disablePrediction") : t("overview.enablePrediction")
-                        }
-                        sx={{
-                          width: 40,
-                          height: 40,
-                          border: (theme) =>
-                            `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.2)"}`,
-                          color: isPredictionEnabled ? "#42A5F5" : "text.secondary",
-                        }}
-                      >
-                        <AutoGraphIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                </Grid>
-              </Grid>
-
-              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
-                <Chip
-                  label={t("overview.allDates")}
-                  color={datePreset === "all" ? "primary" : "default"}
-                  size="small"
+        <Stack spacing={1.5} sx={{ mb: 1 }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            justifyContent="space-between"
+            useFlexGap
+            flexWrap="wrap"
+          >
+            <Typography component="h1" variant="h5">
+              {t("overview.statisticsTitle")}
+            </Typography>
+            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+              <Button startIcon={<RefreshIcon />} onClick={handleManualRefresh} sx={{ minHeight: 44 }}>
+                {t("refresh")}
+              </Button>
+              {canViewOrders && (
+                <Button
+                  sx={{ minHeight: 44 }}
                   onClick={() => {
-                    setDatePreset("all");
-                    setSelectedDates([]);
+                    dispatch(setStatsSectionExpanded({ section: "orders", expanded: true }));
+                    ordersSummaryRef.current?.focus();
                   }}
-                />
-                <Chip
-                  label={t("overview.today")}
-                  color={datePreset === "today" ? "primary" : "default"}
-                  size="small"
-                  onClick={() => {
-                    setDatePreset("today");
-                    setSelectedDates([]);
-                  }}
-                />
-                <Chip
-                  label={t("overview.yesterday")}
-                  color={datePreset === "yesterday" ? "primary" : "default"}
-                  size="small"
-                  onClick={() => {
-                    setDatePreset("yesterday");
-                    setSelectedDates([]);
-                  }}
-                />
-                <Chip
-                  label={t("overview.last7Days")}
-                  color={datePreset === "last7" ? "primary" : "default"}
-                  size="small"
-                  onClick={() => {
-                    setDatePreset("last7");
-                    setSelectedDates([]);
-                  }}
-                />
-              </Stack>
-
-              {showAdvancedFilters && (
-                <Grid container spacing={{ xs: 1, sm: 1.5 }} alignItems="center">
-                  <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                    <FormControl size="small" fullWidth>
-                      <InputLabel id="till-select-label" shrink>
-                        {t("overview.filterTill")}
-                      </InputLabel>
-                      <Select
-                        labelId="till-select-label"
-                        id="till-select"
-                        value={selectedTillId ?? ""}
-                        label={t("overview.filterTill")}
-                        onChange={(e) => {
-                          const val = e.target.value as string | number;
-                          setSelectedTillId(val === "" ? undefined : (val as number));
-                        }}
-                        displayEmpty
-                        notched
-                      >
-                        <MenuItem value="">
-                          <em>{t("overview.allTills")}</em>
-                        </MenuItem>
-                        {tills &&
-                          tills.ids.map((id) => (
-                            <MenuItem key={id} value={id}>
-                              {tills.entities[id]?.name}
-                            </MenuItem>
-                          ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                    <FormControl size="small" fullWidth>
-                      <InputLabel id="product-select-label" shrink>
-                        {t("overview.filterProduct")}
-                      </InputLabel>
-                      <Select
-                        labelId="product-select-label"
-                        id="product-select"
-                        value={selectedProductId ?? ""}
-                        label={t("overview.filterProduct")}
-                        onChange={(e) => {
-                          const val = e.target.value as string | number;
-                          setSelectedProductId(val === "" ? undefined : (val as number));
-                        }}
-                        displayEmpty
-                        notched
-                      >
-                        <MenuItem value="">
-                          <em>{t("overview.allProducts")}</em>
-                        </MenuItem>
-                        {products &&
-                          products.ids.map((id) => (
-                            <MenuItem key={id} value={id}>
-                              {products.entities[id]?.name}
-                            </MenuItem>
-                          ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                </Grid>
-              )}
-
-              {hasActiveFilters && (
-                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
-                  {dateFilterLabel && (
-                    <Chip
-                      size="small"
-                      label={`${t("overview.filterDate")}: ${dateFilterLabel}`}
-                      onDelete={() => {
-                        setDatePreset("all");
-                        setSelectedDates([]);
-                      }}
-                    />
-                  )}
-                  {selectedSubnodeId !== undefined && (
-                    <Chip
-                      size="small"
-                      label={`${t("overview.filterSubnode")}: ${selectedSubnodeName ?? selectedSubnodeId}`}
-                      onDelete={() => {
-                        setSelectedSubnodeId(undefined);
-                        setSelectedTillId(undefined);
-                        setSelectedProductId(undefined);
-                      }}
-                    />
-                  )}
-                  {selectedTillId !== undefined && (
-                    <Chip
-                      size="small"
-                      label={`${t("overview.filterTill")}: ${selectedTillName ?? selectedTillId}`}
-                      onDelete={() => setSelectedTillId(undefined)}
-                    />
-                  )}
-                  {selectedProductId !== undefined && (
-                    <Chip
-                      size="small"
-                      label={`${t("overview.filterProduct")}: ${selectedProductName ?? selectedProductId}`}
-                      onDelete={() => setSelectedProductId(undefined)}
-                    />
-                  )}
-                  <Button size="small" variant="text" onClick={clearAllFilterSelections}>
-                    {t("overview.clearAllFilters")}
-                  </Button>
-                </Stack>
+                >
+                  {t("overview.viewOrders")}
+                </Button>
               )}
             </Stack>
-          </AccordionDetails>
-        </Accordion>
+          </Stack>
+          <Grid container spacing={1}>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <FormControl fullWidth>
+                <InputLabel id="stats-period-label">{t("overview.reportingPeriod")}</InputLabel>
+                <Select
+                  labelId="stats-period-label"
+                  label={t("overview.reportingPeriod")}
+                  value={isCustomDatePickerOpen ? "custom" : datePreset}
+                  onChange={(event) => {
+                    const preset = event.target.value as DatePreset;
+                    setIsCustomDatePickerOpen(preset === "custom");
+                    if (preset !== "custom") {
+                      setDatePreset(preset);
+                      setSelectedDates([]);
+                    }
+                  }}
+                >
+                  <MenuItem value="today">{t("overview.today")}</MenuItem>
+                  <MenuItem value="yesterday">{t("overview.yesterday")}</MenuItem>
+                  <MenuItem value="last7">{t("overview.last7Days")}</MenuItem>
+                  <MenuItem value="all">{t("overview.allDates")}</MenuItem>
+                  <MenuItem value="custom">{t("overview.customDates")}</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 6, sm: 4 }}>
+              <FormControl fullWidth>
+                <InputLabel id="till-select-label" shrink>
+                  {t("overview.filterTill")}
+                </InputLabel>
+                <Select
+                  labelId="till-select-label"
+                  id="till-select"
+                  value={selectedTillId ?? ""}
+                  label={t("overview.filterTill")}
+                  onChange={(e) => {
+                    const val = e.target.value as string | number;
+                    setSelectedTillId(val === "" ? undefined : (val as number));
+                  }}
+                  displayEmpty
+                  notched
+                >
+                  <MenuItem value="">
+                    <em>{t("overview.allTills")}</em>
+                  </MenuItem>
+                  {tills &&
+                    tills.ids.map((id) => (
+                      <MenuItem key={id} value={id} sx={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
+                        {tills.entities[id]?.name}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid size={{ xs: 6, sm: 4 }}>
+              <FormControl fullWidth>
+                <InputLabel id="product-select-label" shrink>
+                  {t("overview.filterProduct")}
+                </InputLabel>
+                <Select
+                  labelId="product-select-label"
+                  id="product-select"
+                  value={selectedProductId ?? ""}
+                  label={t("overview.filterProduct")}
+                  onChange={(e) => {
+                    const val = e.target.value as string | number;
+                    setSelectedProductId(val === "" ? undefined : (val as number));
+                  }}
+                  displayEmpty
+                  notched
+                >
+                  <MenuItem value="">
+                    <em>{t("overview.allProducts")}</em>
+                  </MenuItem>
+                  {products &&
+                    products.ids.map((id) => (
+                      <MenuItem key={id} value={id} sx={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
+                        {products.entities[id]?.name}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+          {tillsQuery.isError && <StatsQueryState query={tillsQuery} />}
+          {productsQuery.isError && <StatsQueryState query={productsQuery} />}
+          {isCustomDatePickerOpen && (
+            <StatsQueryState query={datesQuery}>
+              <FormControl size="small" sx={{ width: { xs: "100%", sm: 320 } }}>
+                <InputLabel id="date-select-label" shrink>
+                  {t("overview.filterDate")}
+                </InputLabel>
+                <Select
+                  labelId="date-select-label"
+                  label={t("overview.filterDate")}
+                  multiple
+                  displayEmpty
+                  notched
+                  value={selectedDates}
+                  renderValue={(dates) =>
+                    dates.length ? t("overview.selectedDatesCount", { count: dates.length }) : t("overview.chooseDates")
+                  }
+                  onChange={(event) => {
+                    const dates = event.target.value as string[];
+                    setSelectedDates(dates);
+                    if (dates.length > 0) setDatePreset("custom");
+                    else if (datePreset === "custom") setDatePreset("all");
+                  }}
+                >
+                  {Array.from(new Set([...(datesQuery.currentData ?? []), ...selectedDates]))
+                    .sort()
+                    .map((date) => (
+                      <MenuItem key={date} value={date}>
+                        <Checkbox checked={selectedDates.includes(date)} size="small" />
+                        <ListItemText
+                          primary={DateTime.fromISO(date).setLocale(i18n.language).toLocaleString(DateTime.DATE_MED)}
+                        />
+                      </MenuItem>
+                    ))}
+                  {datesQuery.currentData?.length === 0 && (
+                    <MenuItem disabled>{t("overview.noDatesAvailable")}</MenuItem>
+                  )}
+                </Select>
+              </FormControl>
+            </StatsQueryState>
+          )}
+          <Typography variant="body2" color="text.secondary">
+            {reportingWindow}
+          </Typography>
+          {hasNonDateFilters && (
+            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
+              {selectedSubnodeId !== undefined && (
+                <Chip
+                  size="small"
+                  label={`${t("overview.filterSubnode")}: ${selectedSubnodeName ?? selectedSubnodeId}`}
+                  onDelete={() => {
+                    setSelectedSubnodeId(undefined);
+                    setSelectedTillId(undefined);
+                    setSelectedProductId(undefined);
+                  }}
+                />
+              )}
+              <Button size="small" variant="text" onClick={clearAllFilterSelections}>
+                {t("overview.clearAllFilters")}
+              </Button>
+            </Stack>
+          )}
+        </Stack>
       </Grid>
       <Grid size={12}>
         <Accordion
@@ -698,25 +572,108 @@ export const NodeStats: React.FC = () => {
             <Typography sx={summaryTextSx}>{t("overview.overviewMetrics")}</Typography>
           </AccordionSummary>
           <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>
-            <DashboardKPIs
-              enabled={isKpisExpanded}
-              productId={selectedProductId}
-              prediction={isPredictionEnabled ? prediction : undefined}
-              isPredictionLoading={isPredictionEnabled ? isPredictionLoading : false}
-              isLoading={
-                isOverviewLoading ||
-                isPaymentMethodsLoading ||
-                (selectedProductId !== undefined && isProductStatsLoading)
-              }
-              overview={overview}
-              paymentMethods={paymentMethods}
-              productStats={productStats}
-            />
+            {isKpisExpanded && (
+              <Stack spacing={2}>
+                <StatsQueryState query={primaryQuery} showLastUpdated>
+                  <DashboardKPIs
+                    productId={selectedProductId}
+                    isLoading={loading(primaryQuery)}
+                    overview={overviewQuery.currentData}
+                    productStats={productStatsQuery.currentData}
+                  />
+                </StatsQueryState>
+                {!isProductSelected && (
+                  <StatsQueryState query={paymentMethodsQuery}>
+                    <PaymentMethodTotals data={paymentMethodsQuery.currentData} />
+                  </StatsQueryState>
+                )}
+              </Stack>
+            )}
+          </AccordionDetails>
+        </Accordion>
+      </Grid>
+      <Grid size={12}>
+        <Accordion expanded={isFiltersExpanded} onChange={handleSectionToggle("filters")} disableGutters sx={sectionSx}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={summarySx}>
+            <Typography sx={summaryTextSx}>{t("overview.moreStatsSettings")}</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Grid container spacing={2} alignItems="center">
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel id="subnode-select-label" shrink>
+                    {t("overview.filterSubnode")}
+                  </InputLabel>
+                  <Select
+                    labelId="subnode-select-label"
+                    id="subnode-select"
+                    value={selectedSubnodeId ?? ""}
+                    label={t("overview.filterSubnode")}
+                    onChange={(e) => {
+                      const val = e.target.value as string | number;
+                      setSelectedSubnodeId(val === "" ? undefined : (val as number));
+                      setSelectedTillId(undefined);
+                      setSelectedProductId(undefined);
+                    }}
+                    displayEmpty
+                    notched
+                  >
+                    <MenuItem value="">
+                      <em>{t("overview.allSubnodes")}</em>
+                    </MenuItem>
+                    {subnodeOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {`${"  ".repeat(Math.max(0, option.depth - 1))}${option.name}`}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel id="polling-select-label" shrink>
+                    {t("overview.pollingInterval")}
+                  </InputLabel>
+                  <Select
+                    labelId="polling-select-label"
+                    id="polling-select"
+                    value={pollingIntervalMs}
+                    label={t("overview.pollingInterval")}
+                    onChange={(e) => dispatch(setStatsPollingInterval(Number(e.target.value)))}
+                    notched
+                  >
+                    <MenuItem value={0}>
+                      <em>{t("overview.pollingOff")}</em>
+                    </MenuItem>
+                    <MenuItem value={30000}>30s</MenuItem>
+                    <MenuItem value={60000}>1min</MenuItem>
+                    <MenuItem value={300000}>5min</MenuItem>
+                    <MenuItem value={1800000}>30min</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              {canShowForecast && (
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Button
+                    startIcon={<AutoGraphIcon />}
+                    sx={{ minHeight: 44 }}
+                    onClick={() => {
+                      setIsPredictionEnabled(!isPredictionEnabled);
+                      if (!isPredictionEnabled)
+                        dispatch(setStatsSectionExpanded({ section: "prediction", expanded: true }));
+                    }}
+                  >
+                    {isPredictionEnabled ? t("overview.disablePrediction") : t("overview.enablePrediction")}
+                  </Button>
+                </Grid>
+              )}
+            </Grid>
           </AccordionDetails>
         </Accordion>
       </Grid>
       {/* Revenue prediction chart - only show when no product filter is active */}
-      {isPredictionEnabled && selectedProductId === undefined && prediction && (
+      {isPredictionEnabled && canShowForecast && (
         <Grid size={12}>
           <Accordion
             expanded={expandedSections.prediction}
@@ -728,7 +685,19 @@ export const NodeStats: React.FC = () => {
               <Typography sx={summaryTextSx}>{t("overview.revenuePredictionChart")}</Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>
-              <RevenuePredictionChart prediction={prediction} isLoading={isPredictionLoading} />
+              {isPredictionExpanded && (
+                <StatsQueryState query={predictionQuery} showLastUpdated>
+                  <Typography variant="body2" color="text.secondary">
+                    {t("overview.forecastScope")}
+                  </Typography>
+                  {predictionQuery.currentData && (
+                    <>
+                      <ForecastMetrics prediction={predictionQuery.currentData} />
+                      <RevenuePredictionChart prediction={predictionQuery.currentData} />
+                    </>
+                  )}
+                </StatsQueryState>
+              )}
             </AccordionDetails>
           </Accordion>
         </Grid>
@@ -746,14 +715,16 @@ export const NodeStats: React.FC = () => {
               <Typography sx={summaryTextSx}>{t("overview.revenuePerCounterChart")}</Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>
-              <RevenueByCounterChart
-                tillId={selectedTillId}
-                enabled={isCounterChartExpanded}
-                isLoading={isRevenueByCounterLoading}
-                data={revenueByCounter}
-                onBarClick={(tillId) => setSelectedTillId(tillId)}
-                onClearFilter={() => setSelectedTillId(undefined)}
-              />
+              <StatsQueryState query={counterStatsQuery} enabled={isCounterChartExpanded} showLastUpdated>
+                <RevenueByCounterChart
+                  tillId={selectedTillId}
+                  enabled={isCounterChartExpanded}
+                  isLoading={loading(counterStatsQuery)}
+                  data={counterStatsQuery.currentData}
+                  onBarClick={(tillId) => setSelectedTillId(tillId)}
+                  onClearFilter={() => setSelectedTillId(undefined)}
+                />
+              </StatsQueryState>
             </AccordionDetails>
           </Accordion>
         </Grid>
@@ -769,14 +740,16 @@ export const NodeStats: React.FC = () => {
             <Typography sx={summaryTextSx}>{t("overview.revenuePerProduct")}</Typography>
           </AccordionSummary>
           <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>
-            <RevenueByProductChart
-              enabled={isProductChartExpanded}
-              productId={selectedProductId}
-              isLoading={isProductStatsLoading}
-              data={productStats}
-              onProductClick={(productId) => setSelectedProductId(productId)}
-              onClearFilter={() => setSelectedProductId(undefined)}
-            />
+            <StatsQueryState query={productStatsQuery} enabled={isProductChartExpanded} showLastUpdated>
+              <RevenueByProductChart
+                enabled={isProductChartExpanded}
+                productId={selectedProductId}
+                isLoading={loading(productStatsQuery)}
+                data={productStatsQuery.currentData}
+                onProductClick={(productId) => setSelectedProductId(productId)}
+                onClearFilter={() => setSelectedProductId(undefined)}
+              />
+            </StatsQueryState>
           </AccordionDetails>
         </Accordion>
       </Grid>
@@ -791,12 +764,14 @@ export const NodeStats: React.FC = () => {
             <Typography sx={summaryTextSx}>{t("overview.quantitiesPerProduct")}</Typography>
           </AccordionSummary>
           <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>
-            <QuantitiesByProductTable
-              enabled={isQuantityTableExpanded}
-              productId={selectedProductId}
-              isLoading={isProductStatsLoading}
-              data={productStats}
-            />
+            <StatsQueryState query={productStatsQuery} enabled={isQuantityTableExpanded} showLastUpdated>
+              <QuantitiesByProductTable
+                enabled={isQuantityTableExpanded}
+                productId={selectedProductId}
+                isLoading={loading(productStatsQuery)}
+                data={productStatsQuery.currentData}
+              />
+            </StatsQueryState>
           </AccordionDetails>
         </Accordion>
       </Grid>
@@ -813,14 +788,16 @@ export const NodeStats: React.FC = () => {
               <Typography sx={summaryTextSx}>{t("overview.revenuePerCounterTable")}</Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>
-              <RevenueByCounterTable
-                fromTimestamp={fromTimestamp}
-                toTimestamp={toTimestamp}
-                selectedDates={selectedDatesForQuery}
-                enabled={isCounterTableExpanded}
-                isLoading={isRevenueByCounterLoading}
-                data={revenueByCounter}
-              />
+              <StatsQueryState query={counterStatsQuery} enabled={isCounterTableExpanded} showLastUpdated>
+                <RevenueByCounterTable
+                  fromTimestamp={fromTimestamp}
+                  toTimestamp={toTimestamp}
+                  selectedDates={selectedDatesForQuery}
+                  enabled={isCounterTableExpanded}
+                  isLoading={loading(counterStatsQuery)}
+                  data={counterStatsQuery.currentData}
+                />
+              </StatsQueryState>
             </AccordionDetails>
           </Accordion>
         </Grid>
@@ -833,7 +810,7 @@ export const NodeStats: React.FC = () => {
             disableGutters
             sx={sectionSx}
           >
-            <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={summarySx}>
+            <AccordionSummary component="button" ref={ordersSummaryRef} expandIcon={<ExpandMoreIcon />} sx={summarySx}>
               <Typography sx={summaryTextSx}>{t("overview.orders")}</Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ p: { xs: 0.75, sm: 1, md: 1.5 } }}>

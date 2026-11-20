@@ -6,8 +6,8 @@ jest.mock("@/hooks", () => ({
 }));
 
 jest.mock("@/components", () => ({
-  BarChart: ({ data }: { data: Array<{ id: string; value: number }> }) => (
-    <div data-testid="bar-chart">{data.map((item) => `${item.id}:${item.value}`).join("|")}</div>
+  BarChart: ({ data }: { data: Array<{ category: string; value: number }> }) => (
+    <div data-testid="bar-chart">{data.map((item) => `${item.category}:${item.value}`).join("|")}</div>
   ),
 }));
 
@@ -32,7 +32,7 @@ jest.mock("react-i18next", () => ({
 const { RevenueByProductChart } = require("./RevenueByProductChart");
 
 describe("RevenueByProductChart", () => {
-  test("renders from injected shared product stats", () => {
+  test("shows only the selected product from shared product stats", () => {
     render(
       <RevenueByProductChart
         enabled={true}
@@ -44,6 +44,6 @@ describe("RevenueByProductChart", () => {
       />
     );
 
-    expect(screen.getByTestId("bar-chart").textContent).toContain("Water:12.5|Cup:-2");
+    expect(screen.getByTestId("bar-chart").textContent).toBe("Water:12.5");
   });
 });

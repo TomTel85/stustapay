@@ -1947,7 +1947,7 @@ class OrderService(OfflineOrderMixin, Service[Config]):
             start_param_index=len(params) + 1,
             selected_date_ranges=get_selected_date_ranges(
                 TimeseriesStatsQuery(from_time=None, to_time=None, selected_dates=selected_dates),
-                event,
+                event.daily_end_time,
             ),
         )
         if selected_date_filter:

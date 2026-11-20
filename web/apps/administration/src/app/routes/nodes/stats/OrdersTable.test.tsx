@@ -67,6 +67,7 @@ jest.mock("@mui/material", () => {
 
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
+    i18n: { language: "en" },
     t: (key: string, options?: Record<string, unknown>) => {
       if (key === "overview.showMore") {
         return `Show ${options?.count} more`;
@@ -112,7 +113,7 @@ describe("OrdersTable", () => {
     mockUseCurrentUserHasPrivilege.mockReset();
 
     mockUseListTillsQuery.mockReturnValue({
-      data: {
+      currentData: {
         ids: [11],
         entities: {
           11: { id: 11, name: "Main Till" },
@@ -124,8 +125,8 @@ describe("OrdersTable", () => {
   test("does not query or render orders when the user lacks order permissions", async () => {
     mockUseCurrentUserHasPrivilege.mockReturnValue(false);
     mockUseListOrdersFilteredQuery.mockReturnValue({
-      data: makeNormalizedOrders(1, 1),
-      isLoading: false,
+      currentData: makeNormalizedOrders(1, 1),
+      isFetching: false,
       fulfilledTimeStamp: 1,
     });
 
@@ -146,8 +147,8 @@ describe("OrdersTable", () => {
   test("skips querying when the orders section is collapsed", () => {
     mockUseCurrentUserHasPrivilege.mockReturnValue(true);
     mockUseListOrdersFilteredQuery.mockReturnValue({
-      data: makeNormalizedOrders(1, 1),
-      isLoading: false,
+      currentData: makeNormalizedOrders(1, 1),
+      isFetching: false,
       fulfilledTimeStamp: 1,
     });
 
@@ -167,8 +168,8 @@ describe("OrdersTable", () => {
   test("can transition from expanded to collapsed without throwing", async () => {
     mockUseCurrentUserHasPrivilege.mockReturnValue(true);
     mockUseListOrdersFilteredQuery.mockReturnValue({
-      data: makeNormalizedOrders(1, 2),
-      isLoading: false,
+      currentData: makeNormalizedOrders(1, 2),
+      isFetching: false,
       fulfilledTimeStamp: 1,
     });
 
@@ -195,31 +196,31 @@ describe("OrdersTable", () => {
       (queryArg: { offset?: number | null; tillId?: number | null; selectedDates?: string[] | null }) => {
         if (queryArg.selectedDates?.join(",") === "2026-01-03,2026-01-05") {
           return {
-            data: makeNormalizedOrders(401, 401, 11),
-            isLoading: false,
+            currentData: makeNormalizedOrders(401, 401, 11),
+            isFetching: false,
             fulfilledTimeStamp: 8000,
           };
         }
 
         if (queryArg.tillId === 7) {
           return {
-            data: makeNormalizedOrders(301, 301, 7),
-            isLoading: false,
+            currentData: makeNormalizedOrders(301, 301, 7),
+            isFetching: false,
             fulfilledTimeStamp: 7000,
           };
         }
 
         if ((queryArg.offset ?? 0) === 50) {
           return {
-            data: makeNormalizedOrders(51, 100),
-            isLoading: false,
+            currentData: makeNormalizedOrders(51, 100),
+            isFetching: false,
             fulfilledTimeStamp: 1050,
           };
         }
 
         return {
-          data: makeNormalizedOrders(1, 50),
-          isLoading: false,
+          currentData: makeNormalizedOrders(1, 50),
+          isFetching: false,
           fulfilledTimeStamp: 1000,
         };
       }

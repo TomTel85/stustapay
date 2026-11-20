@@ -12,7 +12,7 @@ interface UiState {
 }
 
 const defaultStatsExpandedSections: Record<string, boolean> = {
-  filters: true,
+  filters: false,
   kpis: true,
   prediction: true,
   counterChart: true,

@@ -64,30 +64,17 @@ export const RevenueByCounterChart: React.FC<RevenueByCounterChartProps> = ({
     handleMenuClose();
   };
 
-  // Create a map of till_name to till_id for bar click handling
-  // Must be called before any early returns (Rules of Hooks)
-  const tillNameToIdMap = React.useMemo(() => {
-    if (!data || !data.counters) return new Map<string, number>();
-    const map = new Map<string, number>();
-    data.counters.forEach((counter) => {
-      const name = counter.till_name || String(counter.till_id);
-      map.set(name, counter.till_id);
-    });
-    return map;
-  }, [data?.counters]);
-
   // Filter and sort the data
   // Must be called before any early returns (Rules of Hooks)
   const chartData: BarChartData[] = React.useMemo(() => {
     if (!data || !data.counters) return [];
-    
-    const filtered = data.counters.filter(
-      (counter) => counter.revenue != null && !isNaN(counter.revenue)
-    );
+
+    const filtered = data.counters.filter((counter) => counter.revenue != null && !isNaN(counter.revenue));
 
     // Map to chart data format
     const mapped = filtered.map((counter) => ({
-      id: counter.till_name || String(counter.till_id),
+      id: String(counter.till_id),
+      category: counter.till_name || String(counter.till_id),
       value: Number(counter.revenue),
     }));
 
@@ -100,15 +87,15 @@ export const RevenueByCounterChart: React.FC<RevenueByCounterChartProps> = ({
         mapped.sort((a, b) => a.value - b.value);
         break;
       case "name-asc":
-        mapped.sort((a, b) => a.id.localeCompare(b.id));
+        mapped.sort((a, b) => a.category.localeCompare(b.category));
         break;
       case "name-desc":
-        mapped.sort((a, b) => b.id.localeCompare(a.id));
+        mapped.sort((a, b) => b.category.localeCompare(a.category));
         break;
     }
 
     return mapped;
-  }, [data?.counters, sortOption]);
+  }, [data, sortOption]);
 
   const chartHeight = React.useMemo(() => {
     if (isSmallMobile) {
@@ -120,17 +107,7 @@ export const RevenueByCounterChart: React.FC<RevenueByCounterChartProps> = ({
     return 250;
   }, [chartData.length, isMobile, isSmallMobile]);
 
-  const handleBarClick = React.useCallback(
-    (barData: BarChartData) => {
-      if (onBarClick) {
-        const clickedTillId = tillNameToIdMap.get(barData.id);
-        if (clickedTillId !== undefined) {
-          onBarClick(clickedTillId);
-        }
-      }
-    },
-    [onBarClick, tillNameToIdMap]
-  );
+  const handleBarClick = (barData: BarChartData) => onBarClick?.(Number(barData.id));
 
   if (!enabled) {
     return null;
@@ -142,7 +119,8 @@ export const RevenueByCounterChart: React.FC<RevenueByCounterChartProps> = ({
         sx={{
           backgroundColor: (theme) =>
             theme.palette.mode === "dark" ? "rgba(26, 27, 30, 0.8)" : "rgba(255, 255, 255, 0.9)",
-          border: (theme) => `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
+          border: (theme) =>
+            `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
           boxShadow: "none",
         }}
       >
@@ -159,7 +137,8 @@ export const RevenueByCounterChart: React.FC<RevenueByCounterChartProps> = ({
         sx={{
           backgroundColor: (theme) =>
             theme.palette.mode === "dark" ? "rgba(26, 27, 30, 0.8)" : "rgba(255, 255, 255, 0.9)",
-          border: (theme) => `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
+          border: (theme) =>
+            `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
           boxShadow: "none",
         }}
       >
@@ -178,7 +157,8 @@ export const RevenueByCounterChart: React.FC<RevenueByCounterChartProps> = ({
         sx={{
           backgroundColor: (theme) =>
             theme.palette.mode === "dark" ? "rgba(26, 27, 30, 0.8)" : "rgba(255, 255, 255, 0.9)",
-          border: (theme) => `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
+          border: (theme) =>
+            `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
           boxShadow: "none",
         }}
       >
@@ -196,7 +176,8 @@ export const RevenueByCounterChart: React.FC<RevenueByCounterChartProps> = ({
       sx={{
         backgroundColor: (theme) =>
           theme.palette.mode === "dark" ? "rgba(26, 27, 30, 0.8)" : "rgba(255, 255, 255, 0.9)",
-        border: (theme) => `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
+        border: (theme) =>
+          `1px solid ${theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
         boxShadow: "none",
       }}
     >
@@ -219,6 +200,7 @@ export const RevenueByCounterChart: React.FC<RevenueByCounterChartProps> = ({
             )}
             <IconButton
               size="small"
+              aria-label={t("overview.sortBy")}
               onClick={handleMenuOpen}
               sx={{
                 color: "text.secondary",
@@ -247,25 +229,41 @@ export const RevenueByCounterChart: React.FC<RevenueByCounterChartProps> = ({
               </MenuItem>
               <MenuItem onClick={() => handleSortChange("revenue-desc")}>
                 <ListItemIcon>
-                  {sortOption === "revenue-desc" ? <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} /> : <TrendingUpIcon fontSize="small" />}
+                  {sortOption === "revenue-desc" ? (
+                    <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} />
+                  ) : (
+                    <TrendingUpIcon fontSize="small" />
+                  )}
                 </ListItemIcon>
                 <ListItemText>{t("overview.revenueDescending")}</ListItemText>
               </MenuItem>
               <MenuItem onClick={() => handleSortChange("revenue-asc")}>
                 <ListItemIcon>
-                  {sortOption === "revenue-asc" ? <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} /> : <TrendingUpIcon fontSize="small" />}
+                  {sortOption === "revenue-asc" ? (
+                    <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} />
+                  ) : (
+                    <TrendingUpIcon fontSize="small" />
+                  )}
                 </ListItemIcon>
                 <ListItemText>{t("overview.revenueAscending")}</ListItemText>
               </MenuItem>
               <MenuItem onClick={() => handleSortChange("name-asc")}>
                 <ListItemIcon>
-                  {sortOption === "name-asc" ? <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} /> : <SortByAlphaIcon fontSize="small" />}
+                  {sortOption === "name-asc" ? (
+                    <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} />
+                  ) : (
+                    <SortByAlphaIcon fontSize="small" />
+                  )}
                 </ListItemIcon>
                 <ListItemText>{t("overview.nameAscending")}</ListItemText>
               </MenuItem>
               <MenuItem onClick={() => handleSortChange("name-desc")}>
                 <ListItemIcon>
-                  {sortOption === "name-desc" ? <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} /> : <SortByAlphaIcon fontSize="small" />}
+                  {sortOption === "name-desc" ? (
+                    <CheckIcon fontSize="small" sx={{ color: "#73BF69" }} />
+                  ) : (
+                    <SortByAlphaIcon fontSize="small" />
+                  )}
                 </ListItemIcon>
                 <ListItemText>{t("overview.nameDescending")}</ListItemText>
               </MenuItem>
