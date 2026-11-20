@@ -38,6 +38,7 @@ const Metrics: React.FC<{ items: Metric[]; headline?: boolean }> = ({ items, hea
           sx={{
             m: 0,
             mt: "auto",
+            color: (theme) => (theme.palette.mode === "dark" ? "#73BF69" : theme.palette.success.main),
             fontWeight: 700,
             fontSize: headline ? { xs: "1.375rem", sm: "1.75rem" } : { xs: "1.25rem", sm: "1.5rem" },
             lineHeight: 1.2,
