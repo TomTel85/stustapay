@@ -12,18 +12,35 @@ import { useTranslation } from "react-i18next";
 type Metric = { label: string; value: string };
 
 const Metrics: React.FC<{ items: Metric[]; headline?: boolean }> = ({ items, headline = false }) => (
-  <Grid component="dl" container spacing={2} sx={{ m: 0 }}>
+  <Grid component="dl" container spacing={{ xs: 1, sm: 1.5 }} sx={{ m: 0 }}>
     {items.map(({ label, value }) => (
-      <Grid component="div" key={label} size={{ xs: 6, md: headline ? 6 : 3 }} sx={{ minWidth: 0 }}>
-        <Typography component="dt" variant="body2" color="text.secondary">
+      <Grid
+        component="div"
+        key={label}
+        size={{ xs: 6, md: headline ? 12 / items.length : 3 }}
+        sx={{
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 0.5,
+          p: { xs: 1.25, sm: 1.75 },
+          bgcolor: "background.default",
+          border: 1,
+          borderColor: "divider",
+          borderRadius: 1,
+        }}
+      >
+        <Typography component="dt" variant="body2" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
           {label}
         </Typography>
         <Typography
           component="dd"
           sx={{
             m: 0,
-            fontWeight: 600,
-            fontSize: headline ? { xs: "1.375rem", md: "1.75rem" } : "1.125rem",
+            mt: "auto",
+            fontWeight: 700,
+            fontSize: headline ? { xs: "1.375rem", sm: "1.75rem" } : { xs: "1.25rem", sm: "1.5rem" },
+            lineHeight: 1.2,
             fontVariantNumeric: "tabular-nums",
             overflowWrap: "anywhere",
           }}
@@ -77,28 +94,28 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({ productId, isLoadi
         items={[
           { label: t("overview.totalRevenue"), value: formatCurrency(overview.total_revenue) },
           { label: t("overview.guestsWithOrders"), value: formatCount(overview.guests_with_orders) },
+          ...(currentNode.event != null
+            ? [{ label: t("overview.guestsPaidOut"), value: formatCount(overview.guests_paid_out) }]
+            : []),
         ]}
       />
       {currentNode.event != null && (
-        <>
-          <Metrics items={[{ label: t("overview.guestsPaidOut"), value: formatCount(overview.guests_paid_out) }]} />
-          <Box sx={{ borderTop: 1, borderColor: "divider", pt: 2 }}>
-            <Typography component="h3" variant="subtitle2">
-              {t("overview.currentBalances")}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              {t("overview.currentBalancesScope")}
-            </Typography>
-            <Metrics
-              items={[
-                { label: t("overview.totalGuestCredit"), value: formatCurrency(overview.total_guest_credit) },
-                { label: t("overview.guestsWithCredit"), value: formatCount(overview.guests_with_credit) },
-                { label: t("overview.onlineDonation"), value: formatCurrency(overview.online_donation) },
-                { label: t("overview.onlineForPayout"), value: formatCurrency(overview.online_for_payout) },
-              ]}
-            />
-          </Box>
-        </>
+        <Box sx={{ borderTop: 1, borderColor: "divider", pt: 2 }}>
+          <Typography component="h3" variant="subtitle2">
+            {t("overview.currentBalances")}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            {t("overview.currentBalancesScope")}
+          </Typography>
+          <Metrics
+            items={[
+              { label: t("overview.totalGuestCredit"), value: formatCurrency(overview.total_guest_credit) },
+              { label: t("overview.guestsWithCredit"), value: formatCount(overview.guests_with_credit) },
+              { label: t("overview.onlineDonation"), value: formatCurrency(overview.online_donation) },
+              { label: t("overview.onlineForPayout"), value: formatCurrency(overview.online_for_payout) },
+            ]}
+          />
+        </Box>
       )}
     </Stack>
   );

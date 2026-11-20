@@ -181,6 +181,27 @@ describe("NodeStats", () => {
     jest.useRealTimers();
   });
 
+  test("starts with more filters collapsed on every visit, even with an old saved preference", () => {
+    mockUiState.statsExpandedSections.filters = true;
+    const visit = () =>
+      render(
+        <MemoryRouter initialEntries={["/node/5/stats"]}>
+          <NodeStats />
+        </MemoryRouter>
+      );
+    const filters = () => screen.getByRole("button", { name: "overview.moreStatsSettings" });
+
+    const firstVisit = visit();
+    expect(filters().getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(filters());
+    expect(filters().getAttribute("aria-expanded")).toBe("true");
+    expect(mockDispatch).not.toHaveBeenCalled();
+
+    firstVisit.unmount();
+    visit();
+    expect(filters().getAttribute("aria-expanded")).toBe("false");
+  });
+
   test("initializes event pages to the current business day and skips collapsed section queries", () => {
     render(
       <MemoryRouter initialEntries={["/node/5/stats"]}>

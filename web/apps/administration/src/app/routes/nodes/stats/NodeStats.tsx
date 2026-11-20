@@ -55,15 +55,7 @@ import { RevenuePredictionChart } from "./RevenuePredictionChart";
 import { StatsQueryState } from "./StatsQueryState";
 import { statsQueryOptions } from "./queryOptions";
 
-type SectionKey =
-  | "filters"
-  | "kpis"
-  | "prediction"
-  | "counterChart"
-  | "productChart"
-  | "quantityTable"
-  | "counterTable"
-  | "orders";
+type SectionKey = "kpis" | "prediction" | "counterChart" | "productChart" | "quantityTable" | "counterTable" | "orders";
 
 const eventTimeZone = "Europe/Berlin";
 
@@ -90,7 +82,6 @@ export const NodeStats: React.FC = () => {
   const predictionPollingIntervalMs = pollingIntervalMs > 0 ? Math.max(pollingIntervalMs, 300000) : 0;
 
   const effectiveFilterNodeId = selectedSubnodeId ?? currentNode.id;
-  const isFiltersExpanded = expandedSections.filters;
   const isKpisExpanded = expandedSections.kpis;
   const isPredictionExpanded = expandedSections.prediction;
   const isCounterChartExpanded = expandedSections.counterChart;
@@ -593,7 +584,7 @@ export const NodeStats: React.FC = () => {
         </Accordion>
       </Grid>
       <Grid size={12}>
-        <Accordion expanded={isFiltersExpanded} onChange={handleSectionToggle("filters")} disableGutters sx={sectionSx}>
+        <Accordion key={currentNode.id} disableGutters sx={sectionSx}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={summarySx}>
             <Typography sx={summaryTextSx}>{t("overview.moreStatsSettings")}</Typography>
           </AccordionSummary>
