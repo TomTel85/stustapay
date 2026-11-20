@@ -34,6 +34,7 @@ export function UserRoleUpdateForm<T extends UserRoleUpdate>(props: UserRoleUpda
       <FormCheckbox name="is_privileged" label={t("userRole.isPrivileged")} formik={props} />
 
       <PrivilegeSelect
+        disableCloseOnSelect
         options={availablePrivileges}
         label={t("userRole.privileges")}
         value={values.privileges}

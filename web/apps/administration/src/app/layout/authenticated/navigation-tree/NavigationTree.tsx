@@ -4,7 +4,6 @@ import { nodeUrlBaseRegex } from "@/app/routes";
 import {
   extendExpandedNodes,
   selectExpandedNodes,
-  selectSelectedNodes,
   setExpandedNodes,
   setSelectedNodes,
   useAppDispatch,
@@ -19,6 +18,7 @@ import {
 } from "@mui/icons-material";
 import { SimpleTreeView } from "@mui/x-tree-view";
 import { alpha } from "@mui/material/styles";
+import { Box, Typography } from "@mui/material";
 import * as React from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -32,26 +32,11 @@ const getNavigationTreeItemLabel = (node: Node) => {
   return FolderIcon;
 };
 
-const computeMenuIds = (node: NodeSeenByUser) => {
-  let ids = [`/node/${node.id}`];
-  for (const menuEntry of nodeMenuEntryDefinitions) {
-    if (isMenuEntryValidAtNode(menuEntry, node)) {
-      const id = menuEntry.route(node);
-      ids.push(id);
-    }
-  }
-  for (const child of node.children) {
-    ids = [...ids, ...computeMenuIds(child)];
-  }
-  return ids;
-};
-
 export const NavigationTree: React.FC = () => {
   const { t } = useTranslation();
   const tree = useTreeForCurrentUser();
   const location = useLocation();
   const expanded = useAppSelector(selectExpandedNodes);
-  const selected = useAppSelector(selectSelectedNodes);
   const dispatch = useAppDispatch();
 
   const setExpanded = React.useCallback(
@@ -72,34 +57,28 @@ export const NavigationTree: React.FC = () => {
     setExpanded(itemIds);
   };
 
-  const handleSelect = (event: React.SyntheticEvent | null, itemId: string | null) => {
-    setSelected(itemId);
-  };
-
-  const menuIds = React.useMemo(() => {
-    const result = computeMenuIds(tree);
-    result.sort().reverse();
-    return result;
-  }, [tree]);
+  const match = location.pathname.match(nodeUrlBaseRegex);
+  const currentNode = match ? findNode(Number(match[1]), tree) : undefined;
+  const workspaceId = currentNode ? `/node/${currentNode.id}` : null;
+  const menuIds = currentNode?.computed_forbidden_objects_at_node
+    ? nodeMenuEntryDefinitions
+        .filter((entry) => isMenuEntryValidAtNode(entry, currentNode))
+        .map((entry) => entry.route(currentNode))
+    : [];
+  const selected = currentNode
+    ? ([...menuIds, `/node/${currentNode.id}`]
+        .sort((a, b) => b.length - a.length)
+        .find((id) => location.pathname === id || location.pathname.startsWith(`${id}/`)) ?? null)
+    : null;
 
   React.useEffect(() => {
-    const match = location.pathname.match(nodeUrlBaseRegex);
-    if (match) {
-      const nodeId = match[0];
-      const node = findNode(Number(match[1]), tree);
-      if (!node) {
-        return;
-      }
-      const firstMatchingMenuId = menuIds.find((val) => location.pathname.startsWith(val));
-      if (firstMatchingMenuId) {
-        setSelected(firstMatchingMenuId);
-      } else {
-        setSelected(null);
-      }
-
-      dispatch(extendExpandedNodes([nodeId, ...node.parent_ids.map((parent) => `/node/${parent}`)]));
+    setSelected(selected);
+    if (currentNode) {
+      dispatch(
+        extendExpandedNodes([`/node/${currentNode.id}`, ...currentNode.parent_ids.map((parent) => `/node/${parent}`)])
+      );
     }
-  }, [location, tree, setSelected, dispatch, menuIds]);
+  }, [currentNode, selected, setSelected, dispatch]);
 
   const renderTree = (node: NodeSeenByUser) => (
     <NavigationTreeItem
@@ -110,41 +89,54 @@ export const NavigationTree: React.FC = () => {
       labelIcon={getNavigationTreeItemLabel(node)}
       suffixIcon={node.read_only ? EditOffIcon : undefined}
     >
-      <NodeMenu node={node} />
       {node.children.map((node) => renderTree(node))}
     </NavigationTreeItem>
   );
 
   return (
-    <SimpleTreeView
-      aria-label="navigation tree"
-      slots={{ collapseIcon: ExpandMoreIcon, expandIcon: ChevronRightIcon }}
-      multiSelect={false}
-      expandedItems={expanded}
-      selectedItems={selected}
-      onExpandedItemsChange={handleToggle}
-      onSelectedItemsChange={handleSelect}
-      sx={(theme) => ({
-        flexGrow: 1,
-        overflowX: "auto",
-        px: 1,
-        pb: 2,
-        "& .MuiTreeItem-content": {
-          borderRadius: 1,
-          minHeight: 42,
-          my: 0.25,
-          color: "text.secondary",
-          "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.06) },
-          "&.Mui-selected, &.Mui-selected:hover, &.Mui-selected.Mui-focused": {
-            bgcolor: alpha(theme.palette.primary.main, 0.12),
-            color: "primary.main",
-            "& .MuiTypography-root": { fontWeight: 700 },
+    <Box>
+      <Typography component="h2" variant="subtitle2" sx={{ px: 2, pt: 2, pb: 1 }}>
+        {t("portal.workspaces")}
+      </Typography>
+      <SimpleTreeView
+        aria-label={t("portal.workspaces")}
+        slots={{ collapseIcon: ExpandMoreIcon, expandIcon: ChevronRightIcon }}
+        multiSelect={false}
+        expandedItems={expanded}
+        selectedItems={workspaceId}
+        onExpandedItemsChange={handleToggle}
+        sx={(theme) => ({
+          flexGrow: 1,
+          overflowX: "auto",
+          overflowY: "auto",
+          maxHeight: "35vh",
+          px: 1,
+          pb: 2,
+          "& .MuiTreeItem-content": {
+            borderRadius: 1,
+            minHeight: 42,
+            my: 0.25,
+            color: "text.secondary",
+            "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.06) },
+            "&.Mui-selected, &.Mui-selected:hover, &.Mui-selected.Mui-focused": {
+              bgcolor: alpha(theme.palette.primary.main, 0.12),
+              color: "primary.main",
+              "& .MuiTypography-root": { fontWeight: 700 },
+            },
           },
-        },
-        "& .MuiTreeItem-groupTransition": { ml: 1.5, pl: 1, borderLeft: 1, borderColor: "divider" },
-      })}
-    >
-      {renderTree(tree)}
-    </SimpleTreeView>
+          "& .MuiTreeItem-groupTransition": { ml: 1.5, pl: 1, borderLeft: 1, borderColor: "divider" },
+        })}
+      >
+        {renderTree(tree)}
+      </SimpleTreeView>
+      {currentNode && (
+        <>
+          <Typography component="h2" variant="subtitle2" sx={{ px: 2, pt: 1, pb: 1, overflowWrap: "anywhere" }}>
+            {t("portal.tasksInWorkspace", { workspace: t(currentNode.name) })}
+          </Typography>
+          <NodeMenu node={currentNode} />
+        </>
+      )}
+    </Box>
   );
 };

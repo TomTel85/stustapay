@@ -1,6 +1,5 @@
 import { useNode } from "@/api/nodes";
 import { CashierRoutes, UserRoleRoutes, UserRoutes, UserToRoleRoutes } from "@/app/routes";
-import { Person as PersonIcon } from "@mui/icons-material";
 import { Box, Tab, Tabs } from "@mui/material";
 import { Loading } from "@stustapay/components";
 import * as React from "react";
@@ -48,14 +47,16 @@ export const UserPageLayout: React.FC = () => {
         variant="scrollable"
         scrollButtons="auto"
         allowScrollButtonsMobile
-        sx={{ borderBottom: 1, borderColor: "divider" }}
+        sx={{
+          borderBottom: 1,
+          borderColor: "divider",
+          "& .MuiTab-root": { minWidth: { xs: "auto", sm: 90 }, px: { xs: 1.5, sm: 2 } },
+        }}
         aria-label={t("users")}
       >
         <Tab
           label={t("user.users")}
           component={RouterLink}
-          icon={<PersonIcon />}
-          iconPosition="start"
           value={UserRoutes.list(node.id)}
           to={UserRoutes.list(node.id)}
         />

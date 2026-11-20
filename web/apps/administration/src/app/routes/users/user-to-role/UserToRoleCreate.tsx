@@ -63,7 +63,7 @@ export const UserToRoleCreate: React.FC = withPrivilegeGuard(UserToRoleRoutes.pr
       title={t("userToRole.create", { node: currentNode.name })}
       initialValues={initialValues}
       validationSchema={NewUserToRoleSchema}
-      submitLabel={t("add")}
+      submitLabel={t("user.assignRoles")}
       successRoute={UserToRoleRoutes.list()}
       onSubmit={(u) => createUserToRole({ nodeId: currentNode.id, newUserToRoles: u })}
       form={UserToRoleCreateForm}

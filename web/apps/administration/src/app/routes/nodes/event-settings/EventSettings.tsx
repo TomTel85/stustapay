@@ -85,6 +85,8 @@ export const EventSettings: React.FC = () => {
               orientation={isSmallScreen ? "horizontal" : "vertical"}
               variant={isSmallScreen ? "scrollable" : "standard"}
               scrollButtons={isSmallScreen ? "auto" : false}
+              allowScrollButtonsMobile
+              sx={{ "& .MuiTabs-scrollButtons": { width: 44, minHeight: 44 } }}
             >
               <Tab label={t("common.node")} value="node" />
               <Tab label={t("settings.general.tabLabel")} value="general" />

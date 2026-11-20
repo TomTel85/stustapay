@@ -28,6 +28,7 @@ export function UserRoleForm<T extends NewUserRole>(props: UserRoleFormProps<T>)
       <FormCheckbox label={t("userRole.isPrivileged")} name="is_privileged" formik={props} />
 
       <PrivilegeSelect
+        disableCloseOnSelect
         options={availablePrivileges}
         label={t("userRole.privileges")}
         value={values.privileges}

@@ -1,7 +1,7 @@
 import { TreeItem, TreeItemProps } from "@mui/x-tree-view";
 import * as React from "react";
 import { Box, SvgIconProps, Typography, useTheme } from "@mui/material";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 
 declare module "react" {
   interface CSSProperties {
@@ -24,6 +24,7 @@ export interface NavigationTreeItemProps extends TreeItemProps {
 
 export const NavigationTreeItem: React.FC<NavigationTreeItemProps> = React.memo((props) => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const {
     to,
     bgColor,
@@ -70,6 +71,21 @@ export const NavigationTreeItem: React.FC<NavigationTreeItemProps> = React.memo(
       }
       style={styleProps}
       {...other}
+      onKeyDown={(event) => {
+        other.onKeyDown?.(event);
+        if (
+          !event.defaultPrevented &&
+          event.target instanceof Element &&
+          event.target.closest('[role="treeitem"]') === event.currentTarget &&
+          event.key === "Enter" &&
+          to &&
+          !other.disabled
+        ) {
+          event.preventDefault();
+          (event as React.KeyboardEvent & { defaultMuiPrevented: boolean }).defaultMuiPrevented = true;
+          navigate(to);
+        }
+      }}
     />
   );
 });

@@ -1,3 +1,5 @@
+import { api } from "@/api";
+import i18n from "@/i18n";
 import { isRejectedWithValue } from "@reduxjs/toolkit";
 import type { MiddlewareAPI, Middleware } from "@reduxjs/toolkit";
 import { toast } from "react-toastify";
@@ -9,7 +11,7 @@ const ErrorSchema = z.object({
   data: z.object({ id: z.string(), type: z.string(), message: z.string() }),
 });
 
-export const errorMiddleware: Middleware = (api: MiddlewareAPI) => (next) => (action) => {
+export const errorMiddleware: Middleware = (store: MiddlewareAPI) => (next) => (action) => {
   // RTK Query uses `createAsyncThunk` from redux-toolkit under the hood, so we"re able to utilize these matchers!
   if (isRejectedWithValue(action)) {
     const parsed = ErrorSchema.safeParse(action.payload);
@@ -18,10 +20,13 @@ export const errorMiddleware: Middleware = (api: MiddlewareAPI) => (next) => (ac
       console.error(msg);
       toast.error(msg);
       if (parsed.data.status === 401) {
-        api.dispatch(forceLogout());
+        store.dispatch(forceLogout());
       }
     } else {
       console.error("unable to parse error payload", action);
+      if (api.endpoints.deleteUser.matchRejected(action)) {
+        toast.error(i18n.t("deleteUserFailed"));
+      }
     }
   }
 

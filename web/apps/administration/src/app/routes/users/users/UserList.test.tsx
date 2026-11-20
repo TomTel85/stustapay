@@ -1,10 +1,15 @@
 import * as React from "react";
 import { render, screen } from "@testing-library/react";
+import { TextDecoder, TextEncoder } from "util";
+
+Object.assign(globalThis, { TextEncoder, TextDecoder });
 
 const mockUsersQuery = jest.fn();
 const mockUseUserRoleAssignments = jest.fn();
 const mockRows = [
   { id: 10, login: "alex", display_name: "Alex", email: "alex@example.com", description: "", node_id: 5 },
+  { id: 11, login: "child-user", display_name: "Child User", email: "", description: "", node_id: 6 },
+  { id: 12, login: "parent-user", display_name: "Parent User", email: "", description: "", node_id: 1 },
 ];
 
 jest.mock("@/api", () => ({
@@ -20,7 +25,7 @@ jest.mock("@/components", () => ({
   ListLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 jest.mock("@/hooks", () => ({
-  useCurrentNode: () => ({ currentNode: { id: 5, name: "Current" } }),
+  useCurrentNode: () => ({ currentNode: { id: 5, name: "Current", parent_ids: [1] } }),
   useCurrentUserHasPrivilege: () => false,
   useCurrentUserHasPrivilegeAtNode: () => () => false,
   useRenderNode: () => ({ dataGridNodeColumn: { field: "node_id", headerName: "node" } }),
@@ -60,6 +65,7 @@ jest.mock("../roleAssignments", () => ({
 }));
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
+    i18n: { resolvedLanguage: "en" },
     t: (key: string, values?: { role: string; node: string }) =>
       key === "userToRole.inheritedFrom" ? `${values?.role} (from ${values?.node})` : key,
   }),
@@ -97,16 +103,24 @@ describe("UserList role summary", () => {
     expect(screen.getByText("Local; Inherited (from Root)")).toBeTruthy();
   });
 
-  test("shows an error instead of silently treating failed role data as empty", () => {
-    mockUseUserRoleAssignments.mockReturnValue({ byUser: new Map(), isLoading: false, error: new Error("failed") });
+  test("opens child-owned users at their workspace and inherited users at the current workspace", () => {
     render(<UserList />);
-    expect(screen.getByRole("alert").textContent).toBe("common.loadingError");
+    expect(screen.getByRole("link", { name: "alex" }).getAttribute("href")).toBe("/node/5/users/10");
+    expect(screen.getByRole("link", { name: "child-user" }).getAttribute("href")).toBe("/node/6/users/11");
+    expect(screen.getByRole("link", { name: "parent-user" }).getAttribute("href")).toBe("/node/5/users/12");
   });
 
-  test("waits for role data before rendering the user grid", () => {
+  test("shows an error instead of silently treating failed role data as empty", () => {
+    mockUseUserRoleAssignments.mockReturnValue({ byUser: new Map(), isLoading: true, error: new Error("failed") });
+    render(<UserList />);
+    expect(screen.getByRole("alert").textContent).toBe("userToRole.loadError");
+    expect(screen.getByRole("link", { name: "alex" })).toBeTruthy();
+  });
+
+  test("keeps the user grid usable while role data loads", () => {
     mockUseUserRoleAssignments.mockReturnValue({ byUser: new Map(), isLoading: true, error: undefined });
     render(<UserList />);
-    expect(screen.getByText("loading")).toBeTruthy();
-    expect(screen.queryByText("user.roles")).toBeNull();
+    expect(screen.getByRole("link", { name: "alex" })).toBeTruthy();
+    expect(screen.getAllByText("userToRole.loadingRoles")).toHaveLength(mockRows.length);
   });
 });

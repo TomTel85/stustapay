@@ -47,7 +47,8 @@ describe("EventPageLayout", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("tab", { name: "Payouts" })).toBeTruthy();
+    expect(screen.getByRole("tablist", { name: "portal.workspace" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "payoutRun.payoutRuns" })).toBeTruthy();
   });
 
   test("hides payouts tab when payout routes are not accessible", () => {
@@ -60,7 +61,7 @@ describe("EventPageLayout", () => {
       </MemoryRouter>
     );
 
-    expect(screen.queryByRole("tab", { name: "Payouts" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "payoutRun.payoutRuns" })).toBeNull();
   });
 
   test("shows payouts but hides node admin tabs for payout managers without node administration", () => {
@@ -75,9 +76,9 @@ describe("EventPageLayout", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("tab", { name: "Payouts" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "payoutRun.payoutRuns" })).toBeTruthy();
     expect(screen.queryByRole("tab", { name: "systemAccounts" })).toBeNull();
-    expect(screen.queryByRole("tab", { name: "Tax Rates" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "taxRates" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "dsfinvk" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "nodes.settings" })).toBeNull();
   });

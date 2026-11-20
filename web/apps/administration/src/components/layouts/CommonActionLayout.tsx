@@ -15,7 +15,7 @@ export const CommonActionLayout: React.FC<CommonActionLayoutProps> = ({ title, c
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  const renderedActions = actions?.map(({ hidden, label, icon, onClick, ...props }, index) => {
+  const renderedActions = actions?.map(({ hidden, label, icon, onClick, variant, ...props }, index) => {
     if (hidden) {
       return null;
     }
@@ -24,7 +24,7 @@ export const CommonActionLayout: React.FC<CommonActionLayoutProps> = ({ title, c
       return (
         <Button
           key={label}
-          variant={props.color === "primary" ? "contained" : "outlined"}
+          variant={variant ?? (props.color === "primary" ? "contained" : "outlined")}
           startIcon={icon}
           onClick={onClick}
           {...props}
@@ -59,9 +59,9 @@ export const CommonActionLayout: React.FC<CommonActionLayoutProps> = ({ title, c
             {title}
           </Typography>
         </Stack>
-        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
           {renderedActions}
-        </Stack>
+        </Box>
       </Box>
       {children}
     </Stack>

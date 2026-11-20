@@ -3,14 +3,15 @@ import { UserRoutes, UserTagRoutes } from "@/app/routes";
 import { ListLayout } from "@/components";
 import { useCurrentNode, useCurrentUserHasPrivilege, useCurrentUserHasPrivilegeAtNode, useRenderNode } from "@/hooks";
 import { Delete as DeleteIcon, Edit as EditIcon } from "@mui/icons-material";
-import { Alert, Box, Link } from "@mui/material";
-import { RoleAssignmentSummary, useUserRoleAssignments } from "../roleAssignments";
-import { DataGrid, GridActionsCellItem, GridColDef } from "@stustapay/framework";
+import { Alert, Box, Link, Stack } from "@mui/material";
+import { GridActionsCellItem, GridColDef } from "@stustapay/framework";
 import { Loading } from "@stustapay/components";
 import { useOpenModal } from "@stustapay/modal-provider";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { RoleAssignmentSummary, useUserRoleAssignments } from "../roleAssignments";
+import { UserManagementGrid } from "../UserManagementGrid";
 
 export const UserList: React.FC = () => {
   const { t } = useTranslation();
@@ -37,7 +38,7 @@ export const UserList: React.FC = () => {
     return <Alert severity="error">{t("common.loadingError")}</Alert>;
   }
 
-  if (isLoading || users === undefined || roleAssignments.isLoading) {
+  if (isLoading || users === undefined) {
     return <Loading />;
   }
 
@@ -58,9 +59,18 @@ export const UserList: React.FC = () => {
     {
       field: "login",
       headerName: t("userLogin"),
-      flex: 1,
+      flex: 1.25,
+      minWidth: 140,
       renderCell: (params) => (
-        <Link component={RouterLink} to={UserRoutes.detail(params.row.id, currentNode.id)}>
+        <Link
+          component={RouterLink}
+          to={UserRoutes.detail(
+            params.row.id,
+            currentNode.parent_ids.includes(params.row.node_id) ? currentNode.id : params.row.node_id
+          )}
+          tabIndex={params.tabIndex}
+          sx={{ overflowWrap: "anywhere", fontWeight: 500 }}
+        >
           {params.row.login}
         </Link>
       ),
@@ -69,45 +79,56 @@ export const UserList: React.FC = () => {
       field: "display_name",
       headerName: t("userDisplayName"),
       flex: 1,
-    },
-    {
-      field: "email",
-      headerName: t("userEmail"),
-      flex: 1,
-      renderCell: (params) => params.row.email || t("user.noEmail"),
+      minWidth: 128,
     },
     {
       field: "roles",
       headerName: t("user.roles"),
       flex: 2,
-      minWidth: 220,
+      minWidth: 210,
       valueGetter: (_, user) =>
         (roleAssignments.byUser.get(user.id) ?? []).map((role) => `${role.roleName} ${role.nodeName}`).join("; "),
       renderCell: ({ row }) => (
-        <Box component="span" sx={{ whiteSpace: "normal", py: 1, lineHeight: 1.5 }}>
-          {roleAssignments.error ? t("common.loadingError") : (
+        <Box component="span" sx={{ overflowWrap: "anywhere" }}>
+          {roleAssignments.error ? (
+            t("userToRole.loadError")
+          ) : roleAssignments.isLoading ? (
+            t("userToRole.loadingRoles")
+          ) : (
             <RoleAssignmentSummary assignments={roleAssignments.byUser.get(row.id) ?? []} />
           )}
         </Box>
       ),
     },
     {
+      field: "email",
+      headerName: t("userEmail"),
+      flex: 1.25,
+      minWidth: 150,
+      renderCell: ({ row }) => (
+        <Box component="span" sx={{ overflowWrap: "anywhere", color: row.email ? "text.primary" : "text.secondary" }}>
+          {row.email || t("user.noEmail")}
+        </Box>
+      ),
+    },
+    {
       field: "description",
       headerName: t("userDescription"),
-      flex: 2,
+      flex: 1.25,
+      minWidth: 110,
     },
     {
       field: "user_tag_id",
       headerName: t("user.tagId"),
-      width: 100,
+      width: 125,
       renderCell: (params) =>
         params.row.user_tag_id && (
-          <Link component={RouterLink} to={UserTagRoutes.detail(params.row.user_tag_id)}>
+          <Link component={RouterLink} to={UserTagRoutes.detail(params.row.user_tag_id)} tabIndex={params.tabIndex}>
             {params.row.user_tag_id}
           </Link>
         ),
     },
-    dataGridNodeColumn,
+    { ...dataGridNodeColumn, minWidth: 125, flex: 1 },
   ];
 
   if (canManageUsers) {
@@ -115,7 +136,7 @@ export const UserList: React.FC = () => {
       field: "actions",
       type: "actions",
       headerName: t("actions"),
-      width: 150,
+      width: 100,
       getActions: (params) =>
         canManageUsersAtNode(params.row.node_id)
           ? [
@@ -126,8 +147,7 @@ export const UserList: React.FC = () => {
                 onClick={() => navigate(UserRoutes.edit(params.row.id, params.row.node_id))}
               />,
               <GridActionsCellItem
-                icon={<DeleteIcon />}
-                color="primary"
+                icon={<DeleteIcon color="error" />}
                 label={t("delete")}
                 onClick={() => openConfirmDeleteDialog(params.row.id, params.row.node_id)}
               />,
@@ -138,15 +158,10 @@ export const UserList: React.FC = () => {
 
   return (
     <ListLayout title={t("users")} routes={UserRoutes}>
-      {roleAssignments.error != null && <Alert severity="error">{t("common.loadingError")}</Alert>}
-      <DataGrid
-        autoHeight
-        getRowHeight={() => "auto"}
-        rows={users ?? []}
-        columns={columns}
-        disableRowSelectionOnClick
-        sx={{ p: 1, boxShadow: (theme) => theme.shadows[1] }}
-      />
+      <Stack spacing={1.5}>
+        {roleAssignments.error != null && <Alert severity="error">{t("userToRole.loadError")}</Alert>}
+        <UserManagementGrid rows={users} columns={columns} />
+      </Stack>
     </ListLayout>
   );
 };

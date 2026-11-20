@@ -4,6 +4,7 @@ import { UserRoutes } from "@/app/routes";
 import { EditLayout } from "@/components";
 import { useCurrentNode } from "@/hooks";
 import i18n from "@/i18n";
+import { Alert } from "@mui/material";
 import { Loading } from "@stustapay/components";
 import { FormTextField } from "@stustapay/form-components";
 import { FormikProps } from "formik";
@@ -33,12 +34,14 @@ export const UserUpdateForm = (props: FormikProps<PasswordChange>) => {
         name="new_password"
         label={t("user.changePassword.new_password")}
         type="password"
+        autoComplete="new-password"
         formik={props}
       />
       <FormTextField
         name="new_password_confirm"
         label={t("user.changePassword.new_password_confirm")}
         type="password"
+        autoComplete="new-password"
         formik={props}
       />
     </>
@@ -55,27 +58,39 @@ export const UserPasswordChange: React.FC = withPrivilegeGuard("user_management"
   const { currentNode } = useCurrentNode();
   const { userId } = useParams();
   const [updateUser] = useChangeUserPasswordMutation();
-  const { data: user, isLoading } = useGetUserQuery({ nodeId: currentNode.id, userId: Number(userId) });
+  const { currentData: user, error } = useGetUserQuery({ nodeId: currentNode.id, userId: Number(userId) });
 
-  if (isLoading || !user) {
+  if (error && !user) {
+    return <Alert severity="error">{t("common.loadingError")}</Alert>;
+  }
+
+  if (!user) {
     return <Loading />;
   }
 
   return (
-    <EditLayout
-      title={t("user.changePassword.title")}
-      submitLabel={t("save")}
-      successRoute={UserRoutes.detail(user.id, user.node_id)}
-      initialValues={initialValues}
-      validationSchema={PasswordChangeSchema}
-      onSubmit={(u) =>
-        updateUser({
-          nodeId: user.node_id,
-          userId: user.id,
-          changeUserPasswordPayload: { new_password: u.new_password },
-        })
-      }
-      form={UserUpdateForm}
-    />
+    <>
+      {error && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {t("common.refreshError")}
+        </Alert>
+      )}
+      <EditLayout
+        key={`${currentNode.id}:${userId}`}
+        title={t("user.changePassword.title")}
+        submitLabel={t("save")}
+        successRoute={UserRoutes.detail(user.id, user.node_id)}
+        initialValues={initialValues}
+        validationSchema={PasswordChangeSchema}
+        onSubmit={(u) =>
+          updateUser({
+            nodeId: user.node_id,
+            userId: user.id,
+            changeUserPasswordPayload: { new_password: u.new_password },
+          })
+        }
+        form={UserUpdateForm}
+      />
+    </>
   );
 });

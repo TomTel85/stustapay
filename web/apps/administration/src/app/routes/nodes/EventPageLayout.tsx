@@ -45,9 +45,12 @@ export const EventPageLayout: React.FC<{ node: Node }> = ({ node }) => {
   return (
     <Box>
       <Tabs
-        sx={{ borderBottom: 1, borderColor: "divider" }}
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
+        sx={{ borderBottom: 1, borderColor: "divider", "& .MuiTabs-scrollButtons": { width: 44 } }}
         value={getActiveTab(node.id, location.pathname)}
-        aria-label="Users"
+        aria-label={t("portal.workspace")}
       >
         <Tab
           label={t("nodes.overview")}
@@ -68,7 +71,7 @@ export const EventPageLayout: React.FC<{ node: Node }> = ({ node }) => {
         )}
         {canManageNode && nodeAllowsTaxRates && (
           <Tab
-            label="Tax Rates"
+            label={t("taxRates")}
             component={RouterLink}
             value={TaxRateRoutes.list()}
             icon={<PercentIcon />}
@@ -78,7 +81,7 @@ export const EventPageLayout: React.FC<{ node: Node }> = ({ node }) => {
         )}
         {canViewPayoutRunsAtNode && (
           <Tab
-            label="Payouts"
+            label={t("payoutRun.payoutRuns")}
             component={RouterLink}
             value={`${nodeUrl}/payout-runs`}
             icon={<MoneyIcon />}

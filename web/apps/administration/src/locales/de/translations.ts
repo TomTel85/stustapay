@@ -7,6 +7,8 @@ type NestedPartialAsStrings<T extends object> = {
 export const translations: NestedPartialAsStrings<Translations> = {
   TeamFestlichPay: "teamfestlichPay",
   portal: {
+    workspaces: "Arbeitsbereiche",
+    tasksInWorkspace: "Aufgaben in {{workspace}}",
     administration: "Administration",
     workspace: "Arbeitsbereich",
     closeNavigation: "Navigation schließen",
@@ -64,6 +66,7 @@ export const translations: NestedPartialAsStrings<Translations> = {
     node: "Knoten",
     definedAtNode: "Knoten",
     loadingError: "Fehler beim Laden der Seite",
+    refreshError: "Die Daten konnten nicht aktualisiert werden. Deine ungespeicherten Änderungen sind noch da.",
     configLoadFailed: "Beim Laden der Seitenkonfiguration ist ein Fehler aufgetreten: {{what}}",
     overview: "Übersicht",
     search: "Suche",
@@ -91,6 +94,9 @@ export const translations: NestedPartialAsStrings<Translations> = {
       "Die teamfestlichPay Administration ist aktuell nicht verfügbar. Bitte versuche es später erneut.",
   },
   nodes: {
+    unavailableTitle: "Arbeitsbereich nicht verfügbar",
+    unavailableDescription: "Dieser Arbeitsbereich existiert nicht oder du hast keinen Zugriff darauf.",
+    returnToWorkspace: "Zu deinem Arbeitsbereich",
     overview: "Übersicht",
     reports: "Berichte",
     statistics: "Statistiken",
@@ -1055,6 +1061,8 @@ export const translations: NestedPartialAsStrings<Translations> = {
   userUpdateError: "Fehler beim Aktualisieren des Benutzers: {{what}}",
   deleteUser: "Benutzer löschen",
   deleteUserDescription: "Benutzerlöschung bestätigen",
+  deleteUserFailed:
+    "Die Löschung konnte nicht bestätigt werden. Aktualisiere die Benutzerliste, um zu prüfen, ob der Benutzer noch vorhanden ist.",
   user: {
     user: "Benutzer",
     users: "Benutzer",
@@ -1089,19 +1097,23 @@ export const translations: NestedPartialAsStrings<Translations> = {
   },
   goToLogin: "Zum Login",
   userRole: {
+    notFound: "Diese Rolle wurde nicht gefunden.",
     name: "Name",
     create: "Neue Benutzerrolle erstellen",
-    update: "Benutzerrolle aktualisieren",
-    isPrivileged: "Ist privilegiert",
+    update: "Rolle „{{name}}“ bearbeiten",
+    isPrivileged: "Privilegiert",
     createError: "Fehler beim Erstellen der Benutzerrolle: {{what}}",
     updateError: "Fehler beim Aktualisieren der Benutzerrolle: {{what}}",
     privileges: "Privilegien",
+    privilegeCount: "Anzahl Privilegien",
+    noPrivileges: "Keine Privilegien",
     delete: "Benutzerrolle löschen",
-    deleteDescription: "Benutzerrollenlöschung bestätigen",
+    deleteDescription: "Möchtest du die Rolle „{{name}}“ löschen?",
   },
   userToRole: {
     noRoles: "Keine Rollen zugeordnet",
     loadingRoles: "Rollen werden geladen …",
+    loadError: "Rollenzuordnungen konnten nicht geladen werden.",
     inheritedFrom: "{{role}} · geerbt von {{node}}",
     inheritedAt: "Geerbt von {{node}}",
     localRoles: "Lokale Rollen in {{node}}",

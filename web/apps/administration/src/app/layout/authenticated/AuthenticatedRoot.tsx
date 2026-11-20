@@ -342,9 +342,6 @@ export const AuthenticatedRoot: React.FC = () => {
           </IconButton>
         </DrawerHeader>
         <Divider />
-        <Typography variant="overline" color="text.secondary" sx={{ px: 2.5, pt: 2, pb: 1 }}>
-          {t("portal.workspace")}
-        </Typography>
         {isTreeLoading ? (
           <Loading />
         ) : treeError ? (

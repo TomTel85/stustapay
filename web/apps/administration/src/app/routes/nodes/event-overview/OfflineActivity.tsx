@@ -73,7 +73,7 @@ export const OfflineActivity: React.FC = () => {
 
   return (
     <Stack spacing={2} sx={{ mt: 2 }}>
-      <Typography variant="h6">{t("settings.offline.activityTitle")}</Typography>
+      <Typography variant="h6" component="h2">{t("settings.offline.activityTitle")}</Typography>
       {(reportError || devicesError) && <Alert severity="error">{t("settings.offline.activityLoadFailed")}</Alert>}
       <Accordion disableGutters elevation={1} sx={{ borderRadius: 1, overflow: "hidden", "&:before": { display: "none" } }}>
         <AccordionSummary
@@ -81,7 +81,7 @@ export const OfflineActivity: React.FC = () => {
           id={devicesHeadingId}
           aria-controls={devicesPanelId}
         >
-          <Typography variant="subtitle1" component="h2">{t("settings.offline.deviceStatus")}</Typography>
+          <Typography variant="subtitle1" component="span">{t("settings.offline.deviceStatus")}</Typography>
         </AccordionSummary>
         <AccordionDetails id={devicesPanelId} aria-labelledby={devicesHeadingId} sx={{ p: 2 }}>
           {devices?.length ? (
@@ -108,7 +108,7 @@ export const OfflineActivity: React.FC = () => {
           id={salesHeadingId}
           aria-controls={salesPanelId}
         >
-          <Typography variant="subtitle1" component="h2">{t("settings.offline.importedSales")}</Typography>
+          <Typography variant="subtitle1" component="span">{t("settings.offline.importedSales")}</Typography>
         </AccordionSummary>
         <AccordionDetails id={salesPanelId} aria-labelledby={salesHeadingId} sx={{ p: 2 }}>
           {report?.length ? (

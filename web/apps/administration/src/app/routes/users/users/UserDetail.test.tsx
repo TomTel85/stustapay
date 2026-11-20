@@ -122,7 +122,7 @@ describe("UserDetail role assignment link", () => {
         <UserDetail />
       </MemoryRouter>
     );
-    expect(screen.getByText("common.loadingError")).toBeTruthy();
+    expect(screen.getByText("userToRole.loadError")).toBeTruthy();
     expect(screen.queryByText("userToRole.noRoles")).toBeNull();
   });
 });

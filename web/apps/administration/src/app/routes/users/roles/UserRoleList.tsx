@@ -3,13 +3,14 @@ import { UserRoleRoutes } from "@/app/routes";
 import { ListLayout } from "@/components";
 import { useCurrentNode, useCurrentUserHasPrivilege, useCurrentUserHasPrivilegeAtNode, useRenderNode } from "@/hooks";
 import { Delete as DeleteIcon, Edit as EditIcon } from "@mui/icons-material";
-import { Link } from "@mui/material";
-import { DataGrid, GridActionsCellItem, GridColDef } from "@stustapay/framework";
+import { Alert, Link } from "@mui/material";
+import { GridActionsCellItem, GridColDef } from "@stustapay/framework";
 import { Loading } from "@stustapay/components";
 import { useOpenModal } from "@stustapay/modal-provider";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
+import { UserManagementGrid } from "../UserManagementGrid";
 
 export const UserRoleList: React.FC = () => {
   const { t } = useTranslation();
@@ -19,29 +20,33 @@ export const UserRoleList: React.FC = () => {
   const navigate = useNavigate();
   const openModal = useOpenModal();
 
-  const { userRoles, isLoading } = useListUserRolesQuery(
+  const { userRoles, error } = useListUserRolesQuery(
     { nodeId: currentNode.id },
     {
-      selectFromResult: ({ data, ...rest }) => ({
+      selectFromResult: ({ currentData, ...rest }) => ({
         ...rest,
-        userRoles: data ? selectUserRoleAll(data) : undefined,
+        userRoles: currentData ? selectUserRoleAll(currentData) : undefined,
       }),
     }
   );
   const [deleteUserRole] = useDeleteUserRoleMutation();
   const { dataGridNodeColumn } = useRenderNode();
 
-  if (isLoading) {
+  if (error) {
+    return <Alert severity="error">{t("common.loadingError")}</Alert>;
+  }
+
+  if (!userRoles) {
     return <Loading />;
   }
 
-  const openConfirmDeleteDialog = (userRoleId: number) => {
+  const openConfirmDeleteDialog = (role: UserRole) => {
     openModal({
       type: "confirm",
       title: t("userRole.delete"),
-      content: t("userRole.deleteDescription"),
+      content: t("userRole.deleteDescription", { name: role.name }),
       onConfirm: () => {
-        deleteUserRole({ nodeId: currentNode.id, userRoleId })
+        deleteUserRole({ nodeId: currentNode.id, userRoleId: role.id })
           .unwrap()
           .catch(() => undefined);
       },
@@ -53,23 +58,29 @@ export const UserRoleList: React.FC = () => {
       field: "name",
       headerName: t("userRole.name"),
       renderCell: (params) => (
-        <Link component={RouterLink} to={UserRoleRoutes.detail(params.row.id)}>
+        <Link component={RouterLink} to={UserRoleRoutes.detail(params.row.id)} tabIndex={params.tabIndex}>
           {params.row.name}
         </Link>
       ),
-      minWidth: 200,
+      minWidth: 150,
+      flex: 1.5,
+    },
+    {
+      field: "privileges",
+      headerName: t("userRole.privilegeCount"),
+      type: "number",
+      width: 155,
+      valueGetter: (_, row) => row.privileges.length,
+      getApplyQuickFilterFn: (value: string) => (_count, row) =>
+        row.privileges.some((privilege) => privilege.includes(value.toLowerCase())),
     },
     {
       field: "is_privileged",
       headerName: t("userRole.isPrivileged"),
       type: "boolean",
+      width: 115,
     },
-    {
-      field: "privileges",
-      headerName: t("userPrivileges"),
-      flex: 1,
-    },
-    dataGridNodeColumn,
+    { ...dataGridNodeColumn, flex: 1 },
   ];
 
   if (canManageUsers) {
@@ -77,7 +88,7 @@ export const UserRoleList: React.FC = () => {
       field: "actions",
       type: "actions",
       headerName: t("actions"),
-      width: 150,
+      width: 100,
       getActions: (params) =>
         canManageUsersAtNode(params.row.node_id)
           ? [
@@ -88,10 +99,9 @@ export const UserRoleList: React.FC = () => {
                 onClick={() => navigate(UserRoleRoutes.edit(params.row.id))}
               />,
               <GridActionsCellItem
-                icon={<DeleteIcon />}
-                color="primary"
-                label={t("delete")}
-                onClick={() => openConfirmDeleteDialog(params.row.id)}
+                icon={<DeleteIcon color="error" />}
+                label={t("userRole.delete")}
+                onClick={() => openConfirmDeleteDialog(params.row)}
               />,
             ]
           : [],
@@ -100,13 +110,7 @@ export const UserRoleList: React.FC = () => {
 
   return (
     <ListLayout title={t("userRoles")} routes={UserRoleRoutes}>
-      <DataGrid
-        autoHeight
-        rows={userRoles ?? []}
-        columns={columns}
-        disableRowSelectionOnClick
-        sx={{ p: 1, boxShadow: (theme) => theme.shadows[1] }}
-      />
+      <UserManagementGrid rows={userRoles} columns={columns} />
     </ListLayout>
   );
 };

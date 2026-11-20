@@ -16,7 +16,9 @@ import {
   Smartphone as SmartphoneIcon,
 } from "@mui/icons-material";
 import * as React from "react";
-import { NavigationTreeItem } from "./NavigationTreeItem";
+import { List, ListItemButton, ListItemIcon, ListItemText } from "@mui/material";
+import { Link, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   CustomerRoutes,
   EntryAreaRoutes,
@@ -37,7 +39,6 @@ import {
   hasAnyPrivilege,
   normalizePrivilegeRequirement,
 } from "@/core/privileges";
-import { i18n } from "@/i18n";
 
 type NodeMenuItem = {
   route: (node: NodeSeenByUser) => string;
@@ -55,7 +56,7 @@ const privilegeOf = (privileges: PrivilegeRequirement): Privilege[] => normalize
 export const nodeMenuEntryDefinitions: NodeMenuItem[] = [
   {
     route: (node) => `/node/${node.id}/reports`,
-    label: i18n.t("nodes.reports"),
+    label: "nodes.reports",
     icon: AssessmentIcon,
     additionalRequirements: (node) =>
       (node.event != null || node.event_node_id != null) &&
@@ -63,7 +64,7 @@ export const nodeMenuEntryDefinitions: NodeMenuItem[] = [
   },
   {
     route: (node) => `/node/${node.id}/stats`,
-    label: i18n.t("nodes.statistics"),
+    label: "nodes.statistics",
     icon: LeaderboardIcon,
     additionalRequirements: (node) =>
       (node.event != null || node.event_node_id != null) &&
@@ -71,27 +72,27 @@ export const nodeMenuEntryDefinitions: NodeMenuItem[] = [
   },
   {
     route: (node) => UserRoutes.list(node.id),
-    label: i18n.t("users"),
+    label: "users",
     icon: PersonIcon,
     requiredAnyPrivileges: ["user_management", "node_administration"],
   },
   {
     route: (node) => ProductRoutes.list(node.id),
-    label: i18n.t("products"),
+    label: "products",
     icon: ShoppingCartIcon,
     requiredPrivileges: privilegeOf(ProductRoutes.privilege),
     requiresOneOfObjectType: ["product"],
   },
   {
     route: (node) => TicketRoutes.list(node.id),
-    label: i18n.t("tickets"),
+    label: "tickets",
     icon: ConfirmationNumberIcon,
     requiredPrivileges: privilegeOf(TicketRoutes.privilege),
     requiresOneOfObjectType: ["ticket"],
   },
   {
     route: (node) => EntryAreaRoutes.list(node.id),
-    label: i18n.t("entry.entry"),
+    label: "entry.entry",
     icon: MeetingRoomIcon,
     requiresEvent: true,
     requiredPrivileges: ["entry_management"],
@@ -99,28 +100,28 @@ export const nodeMenuEntryDefinitions: NodeMenuItem[] = [
   },
   {
     route: (node) => TerminalRoutes.list(node.id),
-    label: i18n.t("terminal.terminals"),
+    label: "terminal.terminals",
     icon: SmartphoneIcon,
     requiredPrivileges: privilegeOf(TerminalRoutes.privilege),
     requiresOneOfObjectType: ["terminal"],
   },
   {
     route: (node) => MdmRoutes.list(node.id),
-    label: i18n.t("mdm.headwindDevices"),
+    label: "mdm.headwindDevices",
     icon: AndroidIcon,
     requiredPrivileges: ["node_administration"],
     additionalRequirements: (node) => node.id === 0,
   },
   {
     route: (node) => TillRoutes.list(node.id),
-    label: i18n.t("tills"),
+    label: "tills",
     icon: PointOfSaleIcon,
     requiredPrivileges: privilegeOf(TillRoutes.privilege),
     requiresOneOfObjectType: ["till"],
   },
   {
     route: (node) => SumUpTransactionRoutes.list(node.id),
-    label: i18n.t("sumup.sumup"),
+    label: "sumup.sumup",
     icon: PaymentIcon,
     requiresEvent: true,
     requiredPrivileges: ["node_administration"],
@@ -129,14 +130,14 @@ export const nodeMenuEntryDefinitions: NodeMenuItem[] = [
   },
   {
     route: (node) => CustomerRoutes.list(node.id),
-    label: i18n.t("customer.customers"),
+    label: "customer.customers",
     icon: AccountBalanceIcon,
     requiresEvent: true,
     requiredAnyPrivileges: normalizePrivilegeRequirement(CustomerRoutes.privilege),
   },
   {
     route: (node) => PayoutRunRoutes.list(node.id),
-    label: i18n.t("payoutRun.payoutRuns"),
+    label: "payoutRun.payoutRuns",
     icon: MoneyIcon,
     requiresEvent: true,
     requiresOneOfObjectType: ["account"],
@@ -144,7 +145,7 @@ export const nodeMenuEntryDefinitions: NodeMenuItem[] = [
   },
   {
     route: (node) => UserTagRoutes.list(node.id),
-    label: i18n.t("userTag.userTags"),
+    label: "userTag.userTags",
     icon: NfcIcon,
     requiresEvent: true,
     requiresOneOfObjectType: ["user_tag"],
@@ -152,7 +153,7 @@ export const nodeMenuEntryDefinitions: NodeMenuItem[] = [
   },
   {
     route: (node) => TseRoutes.list(node.id),
-    label: i18n.t("tse.tses"),
+    label: "tse.tses",
     icon: ShieldIcon,
     requiresEvent: true,
     requiredPrivileges: ["node_administration"],
@@ -201,6 +202,8 @@ export interface NodeMenuProps {
 }
 
 export const NodeMenu: React.FC<NodeMenuProps> = React.memo(({ node }) => {
+  const { pathname } = useLocation();
+  const { t } = useTranslation();
   if (node.computed_forbidden_objects_at_node === undefined) {
     return null;
   }
@@ -214,16 +217,33 @@ export const NodeMenu: React.FC<NodeMenuProps> = React.memo(({ node }) => {
 
     const id = menuDefinition.route(node);
 
+    const active = pathname === id || pathname.startsWith(`${id}/`);
+
     renderedItems.push(
-      <NavigationTreeItem
+      <ListItemButton
         key={id}
-        itemId={id}
+        component={Link}
         to={id}
-        labelText={menuDefinition.label}
-        labelIcon={menuDefinition.icon}
-      />
+        selected={active}
+        aria-current={active ? "page" : undefined}
+        sx={{ borderRadius: 1, minHeight: 42 }}
+      >
+        <ListItemIcon sx={{ minWidth: 36 }}>
+          <menuDefinition.icon />
+        </ListItemIcon>
+        <ListItemText primary={t(menuDefinition.label)} />
+      </ListItemButton>
     );
   }
 
-  return renderedItems;
+  return (
+    <List
+      component="nav"
+      aria-label={t("portal.tasksInWorkspace", { workspace: t(node.name) })}
+      disablePadding
+      sx={{ px: 1, pb: 2 }}
+    >
+      {renderedItems}
+    </List>
+  );
 });

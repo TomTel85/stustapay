@@ -1,10 +1,7 @@
 import { useNode } from "@/api";
-import {
-  Dashboard as DashboardIcon,
-  Settings as SettingsIcon,
-} from "@mui/icons-material";
-import { Box, Tab, Tabs } from "@mui/material";
-import { Loading } from "@stustapay/components";
+import { useTreeForCurrentUser } from "@/api/nodes";
+import { Dashboard as DashboardIcon, Settings as SettingsIcon } from "@mui/icons-material";
+import { Alert, AlertTitle, Box, Link, Tab, Tabs } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Outlet, Link as RouterLink, useLocation, useParams } from "react-router-dom";
@@ -22,14 +19,18 @@ export const NodePageLayout: React.FC = () => {
   const location = useLocation();
   const { nodeId } = useParams();
   const { node } = useNode({ nodeId: Number(nodeId) });
+  const tree = useTreeForCurrentUser();
 
-  if (!nodeId) {
-    // TODO: return error page / redirect
-    return null;
-  }
-
-  if (!node) {
-    return <Loading />;
+  if (!nodeId || !node) {
+    return (
+      <Alert severity="warning">
+        <AlertTitle>{t("nodes.unavailableTitle")}</AlertTitle>
+        {t("nodes.unavailableDescription")}{" "}
+        <Link component={RouterLink} to={`/node/${tree.id}`}>
+          {t("nodes.returnToWorkspace")}
+        </Link>
+      </Alert>
+    );
   }
 
   if (node.event != null) {
@@ -42,7 +43,7 @@ export const NodePageLayout: React.FC = () => {
       <Tabs
         sx={{ borderBottom: 1, borderColor: "divider" }}
         value={getActiveTab(node.id, location.pathname)}
-        aria-label="Users"
+        aria-label={t("portal.workspace")}
       >
         <Tab
           label={t("nodes.overview")}
