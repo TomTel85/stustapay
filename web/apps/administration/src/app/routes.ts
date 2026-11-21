@@ -86,7 +86,6 @@ export const TransactionRoutes = new RouteBuilder("transactions", "node_administ
 export const TseRoutes = new RouteBuilder("tses", "node_administration", "tse");
 export const PayoutRunRoutes = new RouteBuilder("payout-runs", ["node_administration", "payout_management"], "account");
 export const SumUpTransactionRoutes = new RouteBuilder("sumup", "node_administration");
-export const SumUpCheckoutRoutes = new RouteBuilder("sumup/checkouts", "node_administration");
 export const CustomerRoutes = new RouteBuilder("customers", ["node_administration", "customer_management"], "account");
 export const TerminalRoutes = new RouteBuilder("terminals", "node_administration", "terminal");
 export const MdmRoutes = new RouteBuilder("mdm/devices", "node_administration", "terminal");

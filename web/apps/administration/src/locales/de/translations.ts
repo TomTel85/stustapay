@@ -597,19 +597,15 @@ export const translations: NestedPartialAsStrings<Translations> = {
   },
   sumup: {
     sumup: "SumUp",
-    checkouts: "SumUp Kassen",
     transactions: "Transaktionen",
     noTransactions: "SumUp hat fuer den aktuell verbundenen Haendler keine Transaktionen zurueckgegeben.",
     transactionsLoadFailed: "Laden der SumUp-Transaktionen fehlgeschlagen: {{reason}}",
-    noCheckouts: "SumUp hat fuer die aktuelle Abfrage keine Checkouts zurueckgegeben.",
-    checkoutsLoadFailed: "Laden der SumUp-Checkouts fehlgeschlagen: {{reason}}",
     transaction: {
       product_summary: "Zusammenfassung",
       card_type: "Kartentyp",
       type: "Typ",
     },
     checkout: {
-      reference: "Kassenreferenz",
       amount: "Betrag",
       payment_type: "Zahlungsart",
       status: "Status",

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
 import { CustomerRoutes, OrderRoutes, PayoutRunRoutes } from "@/app/routes";
 import { ErrorPage } from "./ErrorPage";
 import { AuthenticatedRoot, PrivilegeGuard, UnauthenticatedRoot } from "./layout";
@@ -63,7 +63,7 @@ import {
   UserRoleDetail,
   UserToRoleUpdate,
 } from "./routes/users";
-import { SumUpCheckoutList, SumUpPageLayout, SumUpTransactionList, SumUpTransactionDetail } from "./routes/sumup";
+import { SumUpTransactionList, SumUpTransactionDetail } from "./routes/sumup";
 import {
   CustomerDetail,
   CustomerOverview,
@@ -263,7 +263,6 @@ const router = createBrowserRouter([
           },
           {
             path: "sumup",
-            element: <SumUpPageLayout />,
             children: [
               {
                 index: true,
@@ -271,7 +270,7 @@ const router = createBrowserRouter([
               },
               {
                 path: "checkouts",
-                element: <SumUpCheckoutList />,
+                element: <Navigate to=".." replace />,
               },
               {
                 path: ":transactionId",

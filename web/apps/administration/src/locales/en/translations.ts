@@ -597,19 +597,15 @@ export const translations = {
   },
   sumup: {
     sumup: "SumUp",
-    checkouts: "SumUp Checkouts",
     transactions: "Transactions",
     noTransactions: "SumUp returned no transactions for the currently connected merchant.",
     transactionsLoadFailed: "Loading SumUp transactions failed: {{reason}}",
-    noCheckouts: "SumUp returned no checkouts for the current query.",
-    checkoutsLoadFailed: "Loading SumUp checkouts failed: {{reason}}",
     transaction: {
       product_summary: "Summary",
       card_type: "Card Type",
       type: "Type",
     },
     checkout: {
-      reference: "Checkout Reference",
       amount: "Amount",
       payment_type: "Payment Type",
       status: "Status",
